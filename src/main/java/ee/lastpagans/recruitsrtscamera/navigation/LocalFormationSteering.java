@@ -19,7 +19,8 @@ public final class LocalFormationSteering {
             AbstractRecruitEntity recruit,
             Mob mover,
             Vec3 desired,
-            Vec3 slotVelocity
+            Vec3 slotVelocity,
+            double catchUpScale
     ) {
         RecruitSpatialIndex.track(recruit);
         RecruitRuntimeMetrics.LOCAL_STEERING_UPDATES.increment();
@@ -30,7 +31,8 @@ public final class LocalFormationSteering {
                 .add(slotVelocity == null ? Vec3.ZERO : new Vec3(slotVelocity.x, 0.0D, slotVelocity.z))
                 .subtract(new Vec3(current.x * 0.08D, 0.0D, current.z * 0.08D))
                 .add(separation(recruit));
-        double maximum = recruit.getVehicle() == null ? 0.22D : 0.28D;
+        double safeScale = Math.max(1.0D, Math.min(1.55D, catchUpScale));
+        double maximum = (recruit.getVehicle() == null ? 0.22D : 0.28D) * safeScale;
         double horizontal = Math.hypot(requested.x, requested.z);
         if (horizontal > maximum) requested = requested.scale(maximum / horizontal);
 
@@ -48,7 +50,7 @@ public final class LocalFormationSteering {
                 : position.add(error.x / Math.hypot(error.x, error.z) * lookAhead,
                 safe.y - position.y, error.z / Math.hypot(error.x, error.z) * lookAhead);
         mover.getMoveControl().setWantedPosition(target.x, target.y, target.z,
-                recruit.getVehicle() == null ? 1.05D : 1.0D);
+                (recruit.getVehicle() == null ? 1.05D : 1.0D) * safeScale);
     }
 
     private static Vec3 separation(AbstractRecruitEntity recruit) {
