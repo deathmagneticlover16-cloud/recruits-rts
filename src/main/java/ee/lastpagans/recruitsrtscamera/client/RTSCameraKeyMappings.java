@@ -34,8 +34,8 @@ public final class RTSCameraKeyMappings {
             CATEGORY
     );
 
-    public static final KeyMapping FORMATION = new KeyMapping(
-            "key.recruits_rts_camera.formation",
+    public static final KeyMapping SELECTION_GROUP = new KeyMapping(
+            "key.recruits_rts_camera.selection_group",
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_G,
             CATEGORY
@@ -114,7 +114,7 @@ public final class RTSCameraKeyMappings {
         event.register(TOGGLE);
         event.register(CLEAR);
         event.register(MOVEMENT_PACE);
-        event.register(FORMATION);
+        event.register(SELECTION_GROUP);
         event.register(ROTATE);
         event.register(ARMY_PRESET);
         event.register(STRATEGIC_FIRE);
@@ -131,7 +131,7 @@ public final class RTSCameraKeyMappings {
         return TOGGLE.matches(key, scanCode)
                 || CLEAR.matches(key, scanCode)
                 || MOVEMENT_PACE.matches(key, scanCode)
-                || FORMATION.matches(key, scanCode)
+                || SELECTION_GROUP.matches(key, scanCode)
                 || ROTATE.matches(key, scanCode)
                 || ARMY_PRESET.matches(key, scanCode)
                 || STRATEGIC_FIRE.matches(key, scanCode)

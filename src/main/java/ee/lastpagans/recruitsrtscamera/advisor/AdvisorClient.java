@@ -17,12 +17,13 @@ public final class AdvisorClient {
     private static final int PORTRAIT_SIZE = 78;
     private static AdvisorEvent active;
     private static int activeTicks;
+    private static boolean enabled = true;
 
     private AdvisorClient() {
     }
 
     public static void offer(AdvisorEvent event) {
-        if (event == null || !RTSClientConfig.ADVISOR_VOICES_ENABLED.get()) return;
+        if (event == null || !enabled || !RTSClientConfig.ADVISOR_VOICES_ENABLED.get()) return;
         if (active != null && event.priority() > active.priority()) {
             QUEUE.clear();
             active = null;
@@ -60,7 +61,7 @@ public final class AdvisorClient {
      * as a lower-resolution replacement asset.
      */
     public static void render(GuiGraphics graphics) {
-        if (active == null || graphics == null || MC.font == null) return;
+        if (!enabled || active == null || graphics == null || MC.font == null) return;
 
         // Match Commander's GUI-scale normalization: GUI scale 2 and 3 get the same physical
         // advisor size instead of the portrait suddenly growing when Minecraft GUI scale changes.
@@ -111,5 +112,14 @@ public final class AdvisorClient {
         QUEUE.clear();
         active = null;
         activeTicks = 0;
+    }
+
+    public static boolean enabled() {
+        return enabled;
+    }
+
+    public static void toggleEnabled() {
+        enabled = !enabled;
+        if (!enabled) reset();
     }
 }

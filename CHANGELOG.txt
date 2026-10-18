@@ -1,3 +1,17 @@
+Recruits: RTS Camera 0.15.0-server.1
+Stable travel, safe routes and direct formation dragging
+
+- Moving recruits now share the formation route tangent while travelling, preventing ordered facing from fighting movement control and causing constant spinning. Their commanded final facing returns after arrival.
+- Tactical routes reject every fluid-filled standing cell, direct steering refuses one-block drops, and A* strongly prefers level detours around supported pits.
+- Walk is the default for every order. R may temporarily switch an active order to run, while both R-run and double-right-click run reset to walk when the formation arrives.
+- Alt-left-drag translates one or more selected formations with their exact shape, facing, frontage and inter-group spacing intact.
+- The server now sends each formation's remaining obstacle-aware route to its owner. Hover previews begin at the live formation centre, follow that real route and show the destination stencil.
+- Selection bundles use one dynamic coloured frame and one number tab around their visible cards. The bundle menu now uses icon buttons with hover explanations.
+- G now creates the next numbered Selection Group and no longer cycles formations. Command buttons with keybinds use the `<key>` tooltip style.
+- Added an Advisor on/off switch beside Enemy Banners in the top-right settings menu.
+- Network protocol is now rts-camera-150; update clients and server together.
+- Source version and packaging references are 0.15.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.14.0-server.1
 Continuous movement, camera controls and selection bundles
 

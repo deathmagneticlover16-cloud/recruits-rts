@@ -8,6 +8,8 @@ import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
 import ee.lastpagans.recruitsrtscamera.navigation.LocalFormationSteering;
 import ee.lastpagans.recruitsrtscamera.navigation.TacticalTerrainRevisions;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
+import ee.lastpagans.recruitsrtscamera.network.FormationRouteSyncPacket;
+import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitAIScheduler;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
@@ -27,6 +29,7 @@ import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -195,8 +198,10 @@ public final class NativeFormationController {
     public static boolean translate(UUID groupId, Vec3 delta) {
         State state = STATES.get(groupId);
         if (state == null || delta == null) return false;
-        state.center = state.center.add(delta);
-        state.destination = state.destination.add(delta);
+        // A drag is a replacement move order from the formation's live location. Moving
+        // the virtual centre itself would make every slot jump, and translating an older
+        // destination would make an already-moving formation continue beyond the preview.
+        state.destination = state.center.add(delta);
         invalidateRoutes(state);
         return true;
     }
@@ -401,6 +406,7 @@ public final class NativeFormationController {
             state.dispersed = false;
         }
         state.velocity = state.center.subtract(previousCenter);
+        float travelHeading = travelling ? movementHeading(state) : state.heading;
 
         int laggards = 0;
         int index = 0;
@@ -409,7 +415,8 @@ public final class NativeFormationController {
             if (offset == null) continue;
             RecruitRuntimeMetrics.BRAIN_UPDATES.increment();
             float memberHeading = state.facings.getOrDefault(recruit.getUUID(), state.heading);
-            claim(recruit, memberHeading);
+            float controlledHeading = travelling ? travelHeading : memberHeading;
+            claim(recruit, controlledHeading);
             Mob mover = controlledMob(recruit);
             if (mover == null) continue;
             int transitIndex = index++;
@@ -426,7 +433,7 @@ public final class NativeFormationController {
                     : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.20D : 1.0D;
             recruit.setHoldPos(desired);
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
-            boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit, memberHeading,
+            boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit, controlledHeading,
                     state.velocity, catchUpScale);
             if (arrived) {
                 state.locked.add(recruit.getUUID());
@@ -439,6 +446,43 @@ public final class NativeFormationController {
             }
         }
         state.laggards = laggards;
+        if (!travelling) RTSMovementBoostManager.completeMovement(state.groupId);
+        syncRoute(server, state, travelling);
+    }
+
+    private static void syncRoute(MinecraftServer server, State state, boolean travelling) {
+        ServerLevel stateLevel = server.getLevel(state.levelKey);
+        if (stateLevel == null) return;
+        long now = stateLevel.getGameTime();
+        if (state.lastRouteSyncAt != Long.MIN_VALUE && !travelling && !state.lastSyncedMoving) return;
+        if (state.lastRouteSyncAt != Long.MIN_VALUE
+                && travelling == state.lastSyncedMoving && now - state.lastRouteSyncAt < 5L) return;
+        ServerPlayer owner = server.getPlayerList().getPlayer(state.ownerId);
+        if (owner == null || !owner.level().dimension().equals(state.levelKey)) return;
+        List<Vec3> remaining = new ArrayList<>();
+        List<Vec3> points = state.route.points();
+        for (int i = Math.max(0, state.routeIndex); i < points.size() && remaining.size() < 255; i++) {
+            Vec3 point = points.get(i);
+            if (horizontalDistanceSq(state.center, point) > 0.20D * 0.20D) remaining.add(point);
+        }
+        if (travelling && (remaining.isEmpty()
+                || remaining.get(remaining.size() - 1).distanceToSqr(state.destination) > 0.25D)) {
+            remaining.add(state.destination);
+        }
+        RTSCameraNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> owner),
+                new FormationRouteSyncPacket(state.groupId, state.center, state.destination, remaining, travelling));
+        state.lastRouteSyncAt = now;
+        state.lastSyncedMoving = travelling;
+    }
+
+    private static float movementHeading(State state) {
+        Vec3 direction = state.velocity;
+        if (direction.x * direction.x + direction.z * direction.z < 1.0E-6D
+                && state.routeIndex < state.route.points().size()) {
+            direction = state.route.points().get(state.routeIndex).subtract(state.center);
+        }
+        if (direction.x * direction.x + direction.z * direction.z < 1.0E-6D) return state.heading;
+        return (float) Math.toDegrees(Math.atan2(-direction.x, direction.z));
     }
 
     private static boolean constraintImmediatelyAhead(ServerLevel level, Mob mover, State state) {
@@ -829,6 +873,8 @@ public final class NativeFormationController {
         boolean dispersed;
         boolean routePending;
         long nextRouteAt;
+        long lastRouteSyncAt = Long.MIN_VALUE;
+        boolean lastSyncedMoving;
 
         State(UUID groupId, UUID ownerId, ResourceKey<Level> levelKey, FormationKind kind,
               float heading, Vec3 center, Vec3 destination,

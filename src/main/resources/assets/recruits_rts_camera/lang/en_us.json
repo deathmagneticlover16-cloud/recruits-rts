@@ -3,7 +3,7 @@
   "key.recruits_rts_camera.toggle": "Toggle RTS Camera",
   "key.recruits_rts_camera.clear": "Clear RTS Selection",
   "key.recruits_rts_camera.movement_pace": "Toggle Walk / Run",
-  "key.recruits_rts_camera.formation": "Cycle Selected Formation",
+  "key.recruits_rts_camera.selection_group": "Create Selection Group",
   "key.recruits_rts_camera.rotate": "Hold to Rotate Selected Formation",
   "key.recruits_rts_camera.army_preset": "Apply / Cycle Army Deployment Preset",
   "key.recruits_rts_camera.strategic_fire": "Designate Strategic Fire",

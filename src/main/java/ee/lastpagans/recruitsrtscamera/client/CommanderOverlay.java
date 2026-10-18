@@ -3,6 +3,7 @@ package ee.lastpagans.recruitsrtscamera.client;
 import ee.lastpagans.recruitsrtscamera.formation.FormationKind;
 import ee.lastpagans.recruitsrtscamera.formation.ArmyPreset;
 import ee.lastpagans.recruitsrtscamera.config.RTSClientConfig;
+import ee.lastpagans.recruitsrtscamera.advisor.AdvisorClient;
 import ee.lastpagans.recruitsrtscamera.math.ScreenProjection;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -135,7 +136,9 @@ public final class CommanderOverlay {
             return true;
         }
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && action == GLFW.GLFW_PRESS && overSettingsPopup) {
-            toggleEnemyBanners();
+            List<Bounds> rows = settingsChoiceBounds();
+            if (rows.get(0).contains(mouseX, mouseY)) toggleEnemyBanners();
+            else if (rows.get(1).contains(mouseX, mouseY)) AdvisorClient.toggleEnabled();
             return true;
         }
 
@@ -339,15 +342,9 @@ public final class CommanderOverlay {
             Bounds b = hitbox.bounds();
             RTSCommandFacade.UnitCardView view = hitbox.view();
             boolean hovered = b.contains(mouseX, mouseY) && RTSCommandFacade.commandCursor();
-            int bundleSlot = RTSCommandFacade.selectionGroupSlot(view.groupId());
-            int bundleColor = RTSCommandFacade.selectionGroupColor(view.groupId());
 
             // Never draw an opaque selection texture over the user's card artwork.
             // Selection/hover live outside the exact runtime card texture.
-            if (bundleSlot > 0) {
-                drawBorder(graphics, new Bounds(b.x1() - 3, b.y1() - 3, b.x2() + 3, b.y2() + 3), bundleColor);
-                drawBorder(graphics, new Bounds(b.x1() - 2, b.y1() - 2, b.x2() + 2, b.y2() + 2), bundleColor);
-            }
             if (view.selected()) {
                 drawBorder(graphics, new Bounds(b.x1() - 2, b.y1() - 2, b.x2() + 2, b.y2() + 2), 0xFFFFE58A);
                 drawBorder(graphics, new Bounds(b.x1() - 1, b.y1() - 1, b.x2() + 1, b.y2() + 1), GOLD);
@@ -406,16 +403,11 @@ public final class CommanderOverlay {
                 renderFatigueBar(graphics, b.x1() + 5, b.y2() + 4,
                         CARD_WIDTH - 10, view.averageFatigue());
             }
-            if (bundleSlot > 0) {
-                int tabX = b.x1() - 3;
-                int tabY = b.y1() - 13;
-                graphics.fill(tabX, tabY, tabX + 13, b.y1() - 2, bundleColor);
-                drawBorder(graphics, new Bounds(tabX, tabY, tabX + 13, b.y1() - 2), 0xFF171714);
-                String label = RTSCommandFacade.selectionGroupLabel(bundleSlot);
-                graphics.drawString(MC.font, label, tabX + (13 - MC.font.width(label)) / 2, tabY + 1,
-                        0xFFFFFFFF, false);
-            }
         }
+
+        // Draw the shared frame last so selected-card and hover borders cannot erase its
+        // continuous outer edge. The frame and tab occur once for the whole visible bundle.
+        renderSelectionBundleFrames(graphics, hitboxes);
 
         if (layout.pageCount() > 1) {
             renderNavButton(graphics, layout.prevButton(), "<");
@@ -423,6 +415,32 @@ public final class CommanderOverlay {
             String pageText = (page + 1) + "/" + layout.pageCount();
             int px = layout.nextButton().x2() - MC.font.width(pageText);
             graphics.drawString(MC.font, pageText, px, layout.panelY() + 7, MUTED, false);
+        }
+    }
+
+    private static void renderSelectionBundleFrames(GuiGraphics graphics, List<CardHitbox> hitboxes) {
+        java.util.Map<Integer, List<CardHitbox>> bundles = new java.util.LinkedHashMap<>();
+        for (CardHitbox hitbox : hitboxes) {
+            int slot = RTSCommandFacade.selectionGroupSlot(hitbox.view().groupId());
+            if (slot > 0) bundles.computeIfAbsent(slot, ignored -> new ArrayList<>()).add(hitbox);
+        }
+        for (java.util.Map.Entry<Integer, List<CardHitbox>> entry : bundles.entrySet()) {
+            int slot = entry.getKey();
+            List<CardHitbox> cards = entry.getValue();
+            int left = cards.stream().mapToInt(card -> card.bounds().x1()).min().orElse(0);
+            int top = cards.stream().mapToInt(card -> card.bounds().y1()).min().orElse(0);
+            int right = cards.stream().mapToInt(card -> card.bounds().x2()).max().orElse(0);
+            int bottom = cards.stream().mapToInt(card -> card.bounds().y2()).max().orElse(0);
+            int color = RTSCommandFacade.selectionGroupColor(cards.get(0).view().groupId());
+            drawBorder(graphics, new Bounds(left - 3, top - 3, right + 3, bottom + 3), color);
+            drawBorder(graphics, new Bounds(left - 2, top - 2, right + 2, bottom + 2), color);
+            int tabX = left - 3;
+            int tabY = top - 13;
+            graphics.fill(tabX, tabY, tabX + 13, top - 2, color);
+            drawBorder(graphics, new Bounds(tabX, tabY, tabX + 13, top - 2), 0xFF171714);
+            String label = RTSCommandFacade.selectionGroupLabel(slot);
+            graphics.drawString(MC.font, label, tabX + (13 - MC.font.width(label)) / 2, tabY + 1,
+                    0xFFFFFFFF, false);
         }
     }
 
@@ -565,8 +583,8 @@ public final class CommanderOverlay {
     }
 
     private static Bounds selectionPopupBounds(Layout layout) {
-        int width = 142;
-        int height = 39;
+        int width = 45;
+        int height = 24;
         int x1 = layout.selectionGroupButton().x1();
         int y2 = layout.selectionGroupButton().y1();
         return new Bounds(x1, y2 - height, x1 + width, y2);
@@ -575,8 +593,8 @@ public final class CommanderOverlay {
     private static List<Bounds> selectionChoiceBounds(Layout layout) {
         Bounds popup = selectionPopupBounds(layout);
         return List.of(
-                new Bounds(popup.x1() + 3, popup.y1() + 3, popup.x2() - 3, popup.y1() + 19),
-                new Bounds(popup.x1() + 3, popup.y1() + 20, popup.x2() - 3, popup.y2() - 3)
+                new Bounds(popup.x1() + 3, popup.y1() + 3, popup.x1() + 21, popup.y2() - 3),
+                new Bounds(popup.x1() + 24, popup.y1() + 3, popup.x2() - 3, popup.y2() - 3)
         );
     }
 
@@ -585,15 +603,25 @@ public final class CommanderOverlay {
         graphics.fill(popup.x1(), popup.y1(), popup.x2(), popup.y2(), 0xEE181816);
         drawBorder(graphics, popup, GOLD);
         List<Bounds> choices = selectionChoiceBounds(layout);
-        String[] labels = {"Make Selection Group", "Add hotkey to Group"};
         for (int i = 0; i < choices.size(); i++) {
             Bounds row = choices.get(i);
             boolean enabled = i == 0 ? RTSCommandFacade.selectedGroupCount() > 0
                     : RTSCommandFacade.selectedGroupCount() == 1;
             boolean hovered = enabled && row.contains(guiMouseX(), guiMouseY());
             graphics.fill(row.x1(), row.y1(), row.x2(), row.y2(), hovered ? 0xCC3A3934 : 0xAA24231F);
-            graphics.drawString(MC.font, labels[i], row.x1() + 4, row.y1() + 4,
-                    enabled ? TEXT : 0xFF68645D, false);
+            drawBorder(graphics, row, enabled ? (hovered ? GOLD : 0xFF777166) : 0xFF4D4A43);
+            graphics.renderItem(new net.minecraft.world.item.ItemStack(i == 0
+                    ? net.minecraft.world.item.Items.BUNDLE : net.minecraft.world.item.Items.TRIPWIRE_HOOK),
+                    row.x1() + 1, row.y1() + 1);
+        }
+        if (choices.get(0).contains(guiMouseX(), guiMouseY())) {
+            renderHotkeyTooltip(graphics, RTSCameraKeyMappings.SELECTION_GROUP,
+                    "Bundles the selected groups into the next numbered slot");
+        } else if (choices.get(1).contains(guiMouseX(), guiMouseY())) {
+            renderCommandTooltip(graphics, "Add Hotkey",
+                    RTSCommandFacade.selectedGroupCount() == 1
+                            ? "Assigns one unused key to the selected group."
+                            : "Select exactly one group first.");
         }
     }
 
@@ -604,7 +632,15 @@ public final class CommanderOverlay {
 
     private static Bounds settingsPopupBounds() {
         Bounds button = settingsButtonBounds();
-        return new Bounds(button.x2() - 112, button.y2() + 2, button.x2(), button.y2() + 23);
+        return new Bounds(button.x2() - 112, button.y2() + 2, button.x2(), button.y2() + 44);
+    }
+
+    private static List<Bounds> settingsChoiceBounds() {
+        Bounds popup = settingsPopupBounds();
+        return List.of(
+                new Bounds(popup.x1() + 2, popup.y1() + 2, popup.x2() - 2, popup.y1() + 20),
+                new Bounds(popup.x1() + 2, popup.y1() + 21, popup.x2() - 2, popup.y2() - 2)
+        );
     }
 
     private static void renderSettingsButton(GuiGraphics graphics) {
@@ -617,12 +653,17 @@ public final class CommanderOverlay {
 
     private static void renderSettingsMenu(GuiGraphics graphics) {
         Bounds popup = settingsPopupBounds();
-        boolean hovered = popup.contains(guiMouseX(), guiMouseY());
-        graphics.fill(popup.x1(), popup.y1(), popup.x2(), popup.y2(), hovered ? 0xEE34332F : 0xEE181816);
+        graphics.fill(popup.x1(), popup.y1(), popup.x2(), popup.y2(), 0xEE181816);
         drawBorder(graphics, popup, 0xFF8F825C);
+        List<Bounds> rows = settingsChoiceBounds();
+        for (Bounds row : rows) if (row.contains(guiMouseX(), guiMouseY()))
+            graphics.fill(row.x1(), row.y1(), row.x2(), row.y2(), 0xCC34332F);
         String label = "Enemy Banners: " + (enemyBannersVisible() ? "ON" : "OFF");
-        graphics.drawString(MC.font, label, popup.x1() + 5, popup.y1() + 6,
+        graphics.drawString(MC.font, label, rows.get(0).x1() + 3, rows.get(0).y1() + 5,
                 enemyBannersVisible() ? GOLD : MUTED, false);
+        String advisor = "Advisor: " + (AdvisorClient.enabled() ? "ON" : "OFF");
+        graphics.drawString(MC.font, advisor, rows.get(1).x1() + 3, rows.get(1).y1() + 5,
+                AdvisorClient.enabled() ? GOLD : MUTED, false);
     }
 
     private static void renderFormationMenu(GuiGraphics graphics, Layout layout) {
@@ -779,15 +820,16 @@ public final class CommanderOverlay {
         int mx = guiMouseX();
         int my = guiMouseY();
         if (layout.paceButton().contains(mx, my)) {
-            renderCommandTooltip(graphics, running ? "Run" : "Walk",
-                    "Toggle the selected groups' current and next movement pace (R).");
+            renderHotkeyTooltip(graphics, RTSCameraKeyMappings.MOVEMENT_PACE,
+                    "Toggles the selected group(s) between walk and run");
         } else if (layout.formationButton().contains(mx, my)) {
-            renderCommandTooltip(graphics, "Army Presets",
-                    formationMenuOpen ? "Close the army preset menu." : "Arrange selected groups as a combined army.");
+            renderHotkeyTooltip(graphics, RTSCameraKeyMappings.ARMY_PRESET,
+                    "Opens or applies Army Presets");
         } else if (layout.selectionGroupButton().contains(mx, my)) {
-            renderCommandTooltip(graphics, "Selection Groups", "Create a numbered bundle or assign one group a hotkey.");
+            renderHotkeyTooltip(graphics, RTSCameraKeyMappings.SELECTION_GROUP,
+                    "Creates a numbered Selection Group");
         } else if (layout.haltButton().contains(mx, my)) {
-            renderCommandTooltip(graphics, "Halt", "Stop the selected groups immediately.");
+            renderHotkeyTooltip(graphics, RTSCameraKeyMappings.HALT, "Halts the selected group(s)");
         } else if (layout.aggressionButton().contains(mx, my)) {
             renderCommandTooltip(graphics, aggressive ? "Aggressive" : "Neutral",
                     aggressive ? "Actively seek and engage enemies." : "Defend and respond without hunting targets.");
@@ -799,9 +841,10 @@ public final class CommanderOverlay {
             renderCommandTooltip(graphics, loose ? "Loose Spacing: ON" : "Loose Spacing",
                     "Toggle wider spacing for preset formations.");
         } else if (ranged && layout.fireControlButton().contains(mx, my)) {
-            renderCommandTooltip(graphics, fireAtWill ? "Fire At Will" : "Hold Fire",
-                    fireAtWill ? "Order weapon-bearing groups to hold fire."
-                            : "Let weapon-bearing groups fire at will.");
+            renderHotkeyTooltip(graphics,
+                    fireAtWill ? RTSCameraKeyMappings.HOLD_FIRE : RTSCameraKeyMappings.FIRE_AT_WILL,
+                    fireAtWill ? "Orders weapon-bearing groups to hold fire"
+                            : "Allows weapon-bearing groups to fire at will");
         } else if (rangedMajority && layout.skirmishButton().contains(mx, my)) {
             renderCommandTooltip(graphics, skirmishing ? "Skirmish: ON" : "Skirmish",
                     skirmishing ? "Order ranged-majority groups to stand and fight."
@@ -883,6 +926,23 @@ public final class CommanderOverlay {
         drawBorder(graphics, new Bounds(x, y, x + width, y + height), 0xFF8F825C);
         graphics.drawString(MC.font, title, x + 5, y + 4, GOLD, false);
         graphics.drawString(MC.font, description, x + 5, y + 14, TEXT, false);
+    }
+
+    private static void renderHotkeyTooltip(
+            GuiGraphics graphics, net.minecraft.client.KeyMapping mapping, String description
+    ) {
+        String line = "<" + hotkey(mapping) + "> " + description;
+        int width = MC.font.width(line) + 10;
+        int height = 16;
+        int x = Math.max(4, Math.min(guiMouseX() + 8, virtualGuiWidth() - width - 4));
+        int y = Math.max(4, guiMouseY() - height - 8);
+        graphics.fill(x, y, x + width, y + height, 0xEE11110F);
+        drawBorder(graphics, new Bounds(x, y, x + width, y + height), 0xFF8F825C);
+        graphics.drawString(MC.font, line, x + 5, y + 4, TEXT, false);
+    }
+
+    private static String hotkey(net.minecraft.client.KeyMapping mapping) {
+        return mapping == null ? "?" : mapping.getTranslatedKeyMessage().getString();
     }
 
     private static void renderSelectedLabel(GuiGraphics graphics, Layout layout) {

@@ -6,7 +6,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class RTSCameraNetwork {
-    private static final String PROTOCOL = "rts-camera-140";
+    private static final String PROTOCOL = "rts-camera-150";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(RecruitsRTSCameraMod.MOD_ID, "main"),
@@ -24,6 +24,7 @@ public final class RTSCameraNetwork {
         CHANNEL.registerMessage(id++, HastyMoveGroupsPacket.class, HastyMoveGroupsPacket::encode, HastyMoveGroupsPacket::decode, HastyMoveGroupsPacket::handle);
         CHANNEL.registerMessage(id++, SlowMoveGroupsPacket.class, SlowMoveGroupsPacket::encode, SlowMoveGroupsPacket::decode, SlowMoveGroupsPacket::handle);
         CHANNEL.registerMessage(id++, MovementPacePacket.class, MovementPacePacket::encode, MovementPacePacket::decode, MovementPacePacket::handle);
+        CHANNEL.registerMessage(id++, TranslateGroupsPacket.class, TranslateGroupsPacket::encode, TranslateGroupsPacket::decode, TranslateGroupsPacket::handle);
         CHANNEL.registerMessage(id++, AttackGroupsPacket.class, AttackGroupsPacket::encode, AttackGroupsPacket::decode, AttackGroupsPacket::handle);
         CHANNEL.registerMessage(id++, SetFormationPacket.class, SetFormationPacket::encode, SetFormationPacket::decode, SetFormationPacket::handle);
         CHANNEL.registerMessage(id++, FrontageGroupsPacket.class, FrontageGroupsPacket::encode, FrontageGroupsPacket::decode, FrontageGroupsPacket::handle);
@@ -37,6 +38,8 @@ public final class RTSCameraNetwork {
         CHANNEL.registerMessage(id++, FormationSpacingPacket.class, FormationSpacingPacket::encode, FormationSpacingPacket::decode, FormationSpacingPacket::handle);
         CHANNEL.registerMessage(id++, PermissionSyncPacket.class, PermissionSyncPacket::encode, PermissionSyncPacket::decode, PermissionSyncPacket::handle);
         CHANNEL.registerMessage(id++, FormationStateSyncPacket.class, FormationStateSyncPacket::encode, FormationStateSyncPacket::decode, FormationStateSyncPacket::handle);
+        CHANNEL.registerMessage(id++, FormationRouteSyncPacket.class, FormationRouteSyncPacket::encode, FormationRouteSyncPacket::decode, FormationRouteSyncPacket::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id++, BodyguardCommandPacket.class, BodyguardCommandPacket::encode, BodyguardCommandPacket::decode, BodyguardCommandPacket::handle);
         CHANNEL.registerMessage(id++, BodyguardSyncPacket.class, BodyguardSyncPacket::encode, BodyguardSyncPacket::decode, BodyguardSyncPacket::handle);
         CHANNEL.registerMessage(id++, BodyguardFollowCommandPacket.class, BodyguardFollowCommandPacket::encode, BodyguardFollowCommandPacket::decode, BodyguardFollowCommandPacket::handle);

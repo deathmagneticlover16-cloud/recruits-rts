@@ -27,6 +27,7 @@ import ee.lastpagans.recruitsrtscamera.network.RouteGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.StrategicFirePacket;
 import ee.lastpagans.recruitsrtscamera.network.FireControlPacket;
 import ee.lastpagans.recruitsrtscamera.network.MovementPacePacket;
+import ee.lastpagans.recruitsrtscamera.network.TranslateGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.SetFormationPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.network.RTSModeStatePacket;
@@ -102,6 +103,7 @@ public final class RTSCameraController {
     private static double middlePanReturnX;
     private static double middlePanReturnY;
     private static boolean draggingSelection;
+    private static boolean draggingTranslation;
     private static boolean draggingFrontage;
     private static boolean draggingCustom;
     private static boolean rotatingFormation;
@@ -122,6 +124,8 @@ public final class RTSCameraController {
     private static double selectionStartY;
     private static double selectionCurrentX;
     private static double selectionCurrentY;
+    private static Vec3 translationStartGround;
+    private static Vec3 translationCurrentGround;
     private static double frontageStartX;
     private static double frontageStartY;
     private static double frontageCurrentX;
@@ -359,11 +363,15 @@ public final class RTSCameraController {
     }
 
     static boolean commanderHasCancelablePlanning() {
-        return draggingFrontage || draggingCustom || rotatingFormation || routeMode || !ROUTE_POINTS.isEmpty();
+        return draggingFrontage || draggingCustom || draggingTranslation
+                || rotatingFormation || routeMode || !ROUTE_POINTS.isEmpty();
     }
 
     static void commanderCancelPlanning() {
         draggingSelection = false;
+        draggingTranslation = false;
+        translationStartGround = null;
+        translationCurrentGround = null;
         draggingFrontage = false;
         frontageStartGround = null;
         draggingCustom = false;
@@ -404,7 +412,7 @@ public final class RTSCameraController {
         CapturedCommand command = null;
         if (RTSCameraKeyMappings.CLEAR.matches(key, scanCode)) command = CapturedCommand.CLEAR;
         else if (RTSCameraKeyMappings.MOVEMENT_PACE.matches(key, scanCode)) command = CapturedCommand.MOVEMENT_PACE;
-        else if (RTSCameraKeyMappings.FORMATION.matches(key, scanCode)) command = CapturedCommand.FORMATION;
+        else if (RTSCameraKeyMappings.SELECTION_GROUP.matches(key, scanCode)) command = CapturedCommand.SELECTION_GROUP;
         else if (RTSCameraKeyMappings.ROTATE.matches(key, scanCode)) command = CapturedCommand.ROTATE;
         else if (RTSCameraKeyMappings.ARMY_PRESET.matches(key, scanCode)) command = CapturedCommand.ARMY_PRESET;
         else if (RTSCameraKeyMappings.STRATEGIC_FIRE.matches(key, scanCode)) command = CapturedCommand.STRATEGIC_FIRE;
@@ -445,7 +453,7 @@ public final class RTSCameraController {
         }
         if (commands.contains(CapturedCommand.CLEAR)) clearSelection();
         if (commands.contains(CapturedCommand.MOVEMENT_PACE)) commanderToggleMovementPace();
-        if (commands.contains(CapturedCommand.FORMATION)) cycleFormation();
+        if (commands.contains(CapturedCommand.SELECTION_GROUP)) RTSCommandFacade.makeSelectionGroup();
         if (commands.contains(CapturedCommand.ARMY_PRESET)) applyArmyPreset();
         if (commands.contains(CapturedCommand.STRATEGIC_FIRE)) designateStrategicFire();
         if (commands.contains(CapturedCommand.HOLD_FIRE)) sendFireControl(FireControlPacket.Mode.HOLD_FIRE);
@@ -480,8 +488,8 @@ public final class RTSCameraController {
         while (RTSCameraKeyMappings.MOVEMENT_PACE.consumeClick()) {
             commanderToggleMovementPace();
         }
-        while (RTSCameraKeyMappings.FORMATION.consumeClick()) {
-            cycleFormation();
+        while (RTSCameraKeyMappings.SELECTION_GROUP.consumeClick()) {
+            RTSCommandFacade.makeSelectionGroup();
         }
         while (RTSCameraKeyMappings.ARMY_PRESET.consumeClick()) {
             applyArmyPreset();
@@ -564,7 +572,8 @@ public final class RTSCameraController {
         updateCursorPosition();
 
         boolean rotateDown = capturedRotateDown || RTSCameraKeyMappings.ROTATE.isDown();
-        if (commandCursor && !routeMode && !draggingSelection && !draggingFrontage && !draggingCustom) {
+        if (commandCursor && !routeMode && !draggingSelection && !draggingTranslation
+                && !draggingFrontage && !draggingCustom) {
             if (rotateDown && !rotateKeyWasDown) {
                 beginRotation();
             }
@@ -582,6 +591,10 @@ public final class RTSCameraController {
         if (draggingSelection) {
             selectionCurrentX = cursorX;
             selectionCurrentY = cursorY;
+        }
+        if (draggingTranslation) {
+            GroundHit hit = raycastGroundHit(cursorX, cursorY);
+            if (hit != null) translationCurrentGround = hit.location();
         }
         if (draggingFrontage) {
             frontageCurrentX = cursorX;
@@ -645,6 +658,9 @@ public final class RTSCameraController {
         middleMousePanning = false;
         CommanderOverlay.reset();
         draggingSelection = false;
+        draggingTranslation = false;
+        translationStartGround = null;
+        translationCurrentGround = null;
         draggingFrontage = false;
         draggingCustom = false;
         rotatingFormation = false;
@@ -684,6 +700,9 @@ public final class RTSCameraController {
         middleMousePanning = false;
         CommanderOverlay.reset();
         draggingSelection = false;
+        draggingTranslation = false;
+        translationStartGround = null;
+        translationCurrentGround = null;
         draggingFrontage = false;
         draggingCustom = false;
         rotatingFormation = false;
@@ -755,6 +774,9 @@ public final class RTSCameraController {
                 middlePanReturnY = MC.mouseHandler.ypos();
                 middleMousePanning = true;
                 draggingSelection = false;
+                draggingTranslation = false;
+                translationStartGround = null;
+                translationCurrentGround = null;
                 draggingFrontage = false;
                 draggingCustom = false;
                 MC.mouseHandler.grabMouse();
@@ -774,6 +796,9 @@ public final class RTSCameraController {
         // becoming box selections, moves or attacks behind the HUD.
         if (CommanderOverlay.handleMouseButton(button, action, modifiers)) {
             draggingSelection = false;
+            draggingTranslation = false;
+            translationStartGround = null;
+            translationCurrentGround = null;
             draggingFrontage = false;
             draggingCustom = false;
             return true;
@@ -785,10 +810,15 @@ public final class RTSCameraController {
 
         if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) {
             if (action == GLFW.GLFW_PRESS) {
+                if ((modifiers & GLFW.GLFW_MOD_ALT) != 0 && beginTranslationDrag()) {
+                    return true;
+                }
                 draggingSelection = true;
                 selectionAdditive = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
                 selectionStartX = selectionCurrentX = cursorX;
                 selectionStartY = selectionCurrentY = cursorY;
+            } else if (action == GLFW.GLFW_RELEASE && draggingTranslation) {
+                finishTranslationDrag();
             } else if (action == GLFW.GLFW_RELEASE && draggingSelection) {
                 draggingSelection = false;
                 selectionCurrentX = cursorX;
@@ -853,6 +883,45 @@ public final class RTSCameraController {
         }
 
         return false;
+    }
+
+    private static boolean beginTranslationDrag() {
+        if (hoveredFriendlyGroupId != null && !SELECTED_GROUPS.contains(hoveredFriendlyGroupId)) {
+            commanderSelectGroup(hoveredFriendlyGroupId, false);
+        }
+        if (SELECTED_GROUPS.isEmpty()) {
+            setStatus("Select a formation before Alt-dragging it.");
+            return false;
+        }
+        GroundHit hit = raycastGroundHit(cursorX, cursorY);
+        if (hit == null) {
+            setStatus("Alt-drag must begin over valid terrain.");
+            return false;
+        }
+        draggingSelection = false;
+        draggingTranslation = true;
+        translationStartGround = hit.location();
+        translationCurrentGround = hit.location();
+        return true;
+    }
+
+    private static void finishTranslationDrag() {
+        draggingTranslation = false;
+        GroundHit hit = raycastGroundHit(cursorX, cursorY);
+        if (hit != null) translationCurrentGround = hit.location();
+        if (translationStartGround == null || translationCurrentGround == null) return;
+        Vec3 delta = translationCurrentGround.subtract(translationStartGround);
+        if (delta.x * delta.x + delta.z * delta.z < 0.20D * 0.20D) {
+            translationStartGround = null;
+            translationCurrentGround = null;
+            return;
+        }
+        LOCAL_RUNNING_GROUPS.removeAll(SELECTED_GROUPS);
+        RTSCameraNetwork.CHANNEL.sendToServer(new TranslateGroupsPacket(new ArrayList<>(SELECTED_GROUPS), delta));
+        rememberTranslationOrderPreview(delta);
+        setStatus("Formation translation ordered for " + SELECTED_GROUPS.size() + " group(s).");
+        translationStartGround = null;
+        translationCurrentGround = null;
     }
 
     public static boolean handleMouseScroll(double scrollDelta) {
@@ -1561,7 +1630,8 @@ public final class RTSCameraController {
     }
 
     private static void updateHover() {
-        if (!commandCursor || draggingSelection || draggingFrontage || draggingCustom || rotatingFormation) {
+        if (!commandCursor || draggingSelection || draggingTranslation
+                || draggingFrontage || draggingCustom || rotatingFormation) {
             hoveredRecruit = null;
             hoveredFriendlyGroupId = null;
             hoveredTarget = null;
@@ -2129,7 +2199,9 @@ public final class RTSCameraController {
 
         int guiCursorX = toGuiX(cursorX);
         int guiCursorY = toGuiY(cursorY);
-        if (!CommanderOverlay.isMouseOver() && isAttackableTarget(hoveredTarget) && !routeMode && !draggingSelection && !draggingFrontage && !draggingCustom && !rotatingFormation) {
+        if (!CommanderOverlay.isMouseOver() && isAttackableTarget(hoveredTarget) && !routeMode
+                && !draggingSelection && !draggingTranslation && !draggingFrontage
+                && !draggingCustom && !rotatingFormation) {
             if (selectedAttackPrefersRangedTargeting()) {
                 drawRangedTargetCursor(graphics, guiCursorX + 9, guiCursorY + 9);
             } else {
@@ -2191,7 +2263,11 @@ public final class RTSCameraController {
                     toGuiX(last.screenX()) + 4, toGuiY(last.screenY()) + 4, 0xFFFFE0A3);
         }
 
-        if (!routeMode && !draggingFrontage && !draggingCustom && !rotatingFormation) {
+        if (draggingTranslation) {
+            renderTranslationPreview(graphics);
+        }
+
+        if (!routeMode && !draggingTranslation && !draggingFrontage && !draggingCustom && !rotatingFormation) {
             renderCurrentOrderPreviews(graphics);
         }
 
@@ -2271,7 +2347,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.14.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2294,7 +2370,7 @@ public final class RTSCameraController {
                         + keyName(RTSCameraKeyMappings.MOVEMENT_PACE) + " walk/run",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
-        drawHudLine(graphics, "Formation: " + keyName(RTSCameraKeyMappings.FORMATION) + " preset · "
+        drawHudLine(graphics, "Groups: " + keyName(RTSCameraKeyMappings.SELECTION_GROUP) + " create bundle · "
                         + keyName(RTSCameraKeyMappings.ROTATE) + " rotate · "
                         + keyName(RTSCameraKeyMappings.ARMY_PRESET) + " army " + armyPresetTool.displayName(),
                 textX, y, textWidth, 0xFFB8B8B8);
@@ -2549,6 +2625,40 @@ public final class RTSCameraController {
         }
     }
 
+    private static void rememberTranslationOrderPreview(Vec3 delta) {
+        if (delta == null) return;
+        Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
+        Map<UUID, Vec3> centers = clientGroupCenters(groups);
+        long now = System.currentTimeMillis();
+        for (Map.Entry<UUID, Vec3> entry : centers.entrySet()) {
+            Vec3 destination = entry.getValue().add(delta);
+            CURRENT_ORDER_PREVIEWS.put(entry.getKey(), new CurrentOrderPreview(
+                    List.of(destination), destination, null, null, now));
+        }
+    }
+
+    public static void applyFormationRouteSync(UUID groupId, Vec3 serverCenter, Vec3 destination,
+                                               List<Vec3> waypoints, boolean moving) {
+        if (groupId == null) return;
+        if (!moving) {
+            LOCAL_RUNNING_GROUPS.remove(groupId);
+            CURRENT_ORDER_PREVIEWS.remove(groupId);
+            return;
+        }
+        if (destination == null || waypoints == null) return;
+        CurrentOrderPreview previous = CURRENT_ORDER_PREVIEWS.get(groupId);
+        Vec3 frontageStart = previous == null ? null : previous.frontageStart();
+        Vec3 frontageEnd = previous == null ? null : previous.frontageEnd();
+        List<Vec3> remaining = new ArrayList<>();
+        Vec3 liveStart = serverCenter == null ? Vec3.ZERO : serverCenter;
+        for (Vec3 point : waypoints) {
+            if (point != null && point.distanceToSqr(liveStart) > 0.20D * 0.20D) remaining.add(point);
+        }
+        if (remaining.isEmpty()) remaining.add(destination);
+        CURRENT_ORDER_PREVIEWS.put(groupId, new CurrentOrderPreview(
+                List.copyOf(remaining), destination, frontageStart, frontageEnd, System.currentTimeMillis()));
+    }
+
     private static void rememberFrontageOrderPreview(Vec3 start, Vec3 end) {
         if (start == null || end == null) return;
         Vec3 midpoint = start.add(end).scale(0.5D);
@@ -2593,13 +2703,16 @@ public final class RTSCameraController {
     }
 
     private static void renderCurrentOrderPreviews(GuiGraphics graphics) {
-        if (SELECTED_GROUPS.isEmpty() || CURRENT_ORDER_PREVIEWS.isEmpty()) return;
+        if (CURRENT_ORDER_PREVIEWS.isEmpty()) return;
+        Set<UUID> visible = new LinkedHashSet<>(SELECTED_GROUPS);
+        if (hoveredFriendlyGroupId != null) visible.add(hoveredFriendlyGroupId);
+        if (visible.isEmpty()) return;
         ScreenProjection.CameraSpec camera = cameraSpec();
         if (camera == null) return;
-        Map<UUID, List<AbstractRecruitEntity>> loaded = selectedLoadedGroups();
+        Map<UUID, List<AbstractRecruitEntity>> loaded = loadedGroups(visible);
         long now = System.currentTimeMillis();
 
-        for (UUID groupId : List.copyOf(SELECTED_GROUPS)) {
+        for (UUID groupId : List.copyOf(visible)) {
             CurrentOrderPreview preview = CURRENT_ORDER_PREVIEWS.get(groupId);
             List<AbstractRecruitEntity> recruits = loaded.get(groupId);
             if (preview == null || recruits == null || recruits.isEmpty()) continue;
@@ -2628,6 +2741,26 @@ public final class RTSCameraController {
                 if (drawn++ >= 192) break;
                 Vec3 source = visualUnitPosition(recruit);
                 drawYellowWorldPoint(graphics, camera, source.x + dx, source.y + dy + 0.15D, source.z + dz, false);
+            }
+        }
+    }
+
+    private static void renderTranslationPreview(GuiGraphics graphics) {
+        if (translationStartGround == null || translationCurrentGround == null) return;
+        Vec3 delta = translationCurrentGround.subtract(translationStartGround);
+        ScreenProjection.CameraSpec camera = cameraSpec();
+        if (camera == null) return;
+        Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
+        Map<UUID, Vec3> centers = clientGroupCenters(groups);
+        Vec3 armyCenter = averageCenters(centers.values());
+        if (armyCenter != null) drawWorldPathSegment(graphics, camera, armyCenter, armyCenter.add(delta));
+        int drawn = 0;
+        for (List<AbstractRecruitEntity> recruits : groups.values()) {
+            for (AbstractRecruitEntity recruit : recruits) {
+                if (drawn++ >= 384) return;
+                Vec3 source = visualUnitPosition(recruit);
+                drawYellowWorldPoint(graphics, camera,
+                        source.x + delta.x, source.y + delta.y + 0.15D, source.z + delta.z, false);
             }
         }
     }
@@ -2731,8 +2864,12 @@ public final class RTSCameraController {
     }
 
     private static Map<UUID, List<AbstractRecruitEntity>> selectedLoadedGroups() {
+        return loadedGroups(SELECTED_GROUPS);
+    }
+
+    private static Map<UUID, List<AbstractRecruitEntity>> loadedGroups(Collection<UUID> groupIds) {
         Map<UUID, List<AbstractRecruitEntity>> groups = new LinkedHashMap<>();
-        for (UUID id : SELECTED_GROUPS) {
+        for (UUID id : groupIds) {
             groups.put(id, new ArrayList<>());
         }
         for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
@@ -3279,7 +3416,7 @@ public final class RTSCameraController {
         TOGGLE,
         CLEAR,
         MOVEMENT_PACE,
-        FORMATION,
+        SELECTION_GROUP,
         ROTATE,
         ARMY_PRESET,
         STRATEGIC_FIRE,

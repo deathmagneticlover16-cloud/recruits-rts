@@ -163,7 +163,10 @@ public final class TacticalPathfinder {
             Cell cell = nearestCell(level, mover, probe, 0, 2);
             if (cell == null) return false;
             double change = cell.position.y - previousY;
-            if (!cell.climbable && (change > MAX_STEP_UP || change < -MAX_DROP)) return false;
+            // Direct steering must never interpret the first block down into a pit as a
+            // clear straight route. A* may still choose a supported descent when it is
+            // genuinely required, but it can then prefer a level detour around the hole.
+            if (!cell.climbable && (change > MAX_STEP_UP || change < -0.60D)) return false;
             previousY = cell.position.y;
         }
         return true;
@@ -334,6 +337,7 @@ public final class TacticalPathfinder {
         if (chosen == null) return null;
         Vec3 feet = new Vec3(floor.getX() + chosen.minX, floor.getY() + chosen.maxY,
                 floor.getZ() + chosen.minZ);
+        if (!dryAt(level, mover, feet)) return null;
         if (!collisionFree(level, mover, feet)) return null;
         BlockPos key = new BlockPos(floor.getX(), (int) Math.floor(feet.y + 1.0E-4D), floor.getZ());
         return new Cell(key, feet, false);
@@ -349,6 +353,24 @@ public final class TacticalPathfinder {
 
     private static boolean collisionFree(ServerLevel level, Mob mover, Vec3 feet) {
         return level.noCollision(mover, destinationBox(mover, feet).deflate(0.025D));
+    }
+
+    private static boolean dryAt(ServerLevel level, Mob mover, Vec3 feet) {
+        AABB box = destinationBox(mover, feet).deflate(0.05D);
+        int minX = (int) Math.floor(box.minX);
+        int maxX = (int) Math.floor(box.maxX - 1.0E-5D);
+        int minY = (int) Math.floor(box.minY);
+        int maxY = (int) Math.floor(box.maxY - 1.0E-5D);
+        int minZ = (int) Math.floor(box.minZ);
+        int maxZ = (int) Math.floor(box.maxZ - 1.0E-5D);
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    if (!level.getFluidState(new BlockPos(x, y, z)).isEmpty()) return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static AABB destinationBox(Mob mover, Vec3 feet) {
@@ -409,8 +431,10 @@ public final class TacticalPathfinder {
         double dx = a.position.x - b.position.x;
         double dy = a.position.y - b.position.y;
         double dz = a.position.z - b.position.z;
+        double descentPenalty = !a.climbable && !b.climbable && dy > 0.60D ? 7.0D * dy : 0.0D;
         return Math.sqrt(dx * dx + dz * dz)
-                + Math.abs(dy) * (a.climbable || b.climbable ? 1.1D : 1.8D);
+                + Math.abs(dy) * (a.climbable || b.climbable ? 1.1D : 1.8D)
+                + descentPenalty;
     }
 
     private static double heuristic(Cell a, Cell b) {

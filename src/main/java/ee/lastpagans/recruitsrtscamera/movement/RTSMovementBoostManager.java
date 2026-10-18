@@ -776,6 +776,16 @@ public final class RTSMovementBoostManager {
         return state != null && (state.mode == GroupMode.HASTY_INFANTRY || state.mode == GroupMode.HASTY_CAVALRY);
     }
 
+    /** Restore the default walk state after an order has settled at its destination. */
+    public static void completeMovement(UUID groupId) {
+        if (groupId == null || !ACTIVE_GROUPS.containsKey(groupId)) return;
+        ACTIVE_GROUPS.remove(groupId);
+        ACTIVE_ORDERS.remove(groupId);
+        for (Map.Entry<UUID, BoostState> entry : List.copyOf(ACTIVE.entrySet())) {
+            if (groupId.equals(entry.getValue().groupId)) stop(entry.getKey(), entry.getValue());
+        }
+    }
+
     /** Stable per-tick anchor step, read before the formation calculates member slots. */
     public static double formationCenterStep(UUID groupId, double baseStep) {
         GroupBoostState state = groupId == null ? null : ACTIVE_GROUPS.get(groupId);
