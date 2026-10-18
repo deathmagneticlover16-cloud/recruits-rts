@@ -5,9 +5,7 @@ import java.util.Locale;
 /**
  * Loader-agnostic formation vocabulary used by RTS Camera.
  *
- * Keep this enum independent from Better Formations so future formation sources
- * (dragged frontage, custom-drawn slots, other formation engines) can produce the
- * same internal plan without becoming coupled to a specific addon API.
+ * Shared vocabulary for preset, dragged-frontage, and custom formation planners.
  */
 public enum FormationKind {
     MARCH,

@@ -1,7 +1,6 @@
 package ee.lastpagans.recruitsrtscamera.formation;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
 import ee.lastpagans.recruitsrtscamera.persistence.RTSFormationSavedData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -26,7 +25,7 @@ public final class FormationService {
         if (state != null) {
             return state.preferred();
         }
-        FormationKind external = FormationKind.fromExternalName(BetterFormationsCompat.currentShape(groupId));
+        FormationKind external = FormationKind.fromExternalName(FormationRuntime.currentShape(groupId));
         return external == null ? FormationKind.MARCH : external;
     }
 
@@ -35,7 +34,7 @@ public final class FormationService {
         if (state != null) {
             return state.mode() == FormationMode.CUSTOM ? state.preferred() : state.active();
         }
-        FormationKind external = FormationKind.fromExternalName(BetterFormationsCompat.currentShape(groupId));
+        FormationKind external = FormationKind.fromExternalName(FormationRuntime.currentShape(groupId));
         return external == null ? FormationKind.MARCH : external;
     }
 
@@ -63,7 +62,7 @@ public final class FormationService {
         FormationPlan plan = FormationPlanner.movePreserved(
                 groupId, destination, kind, facingYaw, spacing, ranks
         );
-        return BetterFormationsCompat.executePlan(sender, recruits, plan);
+        return FormationRuntime.executePlan(sender, recruits, plan);
     }
 
     public static boolean move(
@@ -103,7 +102,7 @@ public final class FormationService {
         FormationPlan plan = FormationPlanner.frontage(
                 groupId, destination, width, facingYaw, ranks, spacing
         );
-        return BetterFormationsCompat.executePlan(sender, recruits, plan);
+        return FormationRuntime.executePlan(sender, recruits, plan);
     }
 
     public static boolean rotatePreserved(
@@ -137,7 +136,7 @@ public final class FormationService {
         FormationPlan plan = FormationPlanner.movePreserved(
                 groupId, destination, kind, newYaw, spacing, ranks
         );
-        return BetterFormationsCompat.executePlan(sender, recruits, plan);
+        return FormationRuntime.executePlan(sender, recruits, plan);
     }
 
     public static float currentFacing(
@@ -153,7 +152,7 @@ public final class FormationService {
         return FormationRotationMath.normalizeYaw(averageFormationYaw(recruits, fallback));
     }
 
-    /** Persist a facing update even when a group is being moved by an optional non-BF controller. */
+    /** Persist a facing update even when a group is being moved by an optional non-runtime controller. */
     public static void rememberFacing(ServerLevel level, UUID groupId, float facingYaw) {
         if (level == null || groupId == null || !Float.isFinite(facingYaw)) {
             return;
@@ -200,7 +199,7 @@ public final class FormationService {
         FormationPlan plan = FormationPlanner.movePreserved(
                 groupId, destination, kind, desiredYaw, spacing, ranks
         );
-        return BetterFormationsCompat.executePlan(sender, recruits, plan);
+        return FormationRuntime.executePlan(sender, recruits, plan);
     }
 
     public static CustomFormationExecutor.Result custom(
@@ -232,7 +231,7 @@ public final class FormationService {
         ));
         Vec3 destination = averageCenter(recruits);
         FormationPlan plan = FormationPlanner.movePreserved(groupId, destination, kind, facingYaw, spacing, 0);
-        return BetterFormationsCompat.executePlan(sender, recruits, plan);
+        return FormationRuntime.executePlan(sender, recruits, plan);
     }
 
     /**
@@ -267,7 +266,7 @@ public final class FormationService {
         FormationPlan plan = FormationPlanner.movePreserved(
                 groupId, averageCenter(recruits), kind, facingYaw, safeSpacing, ranks
         );
-        return BetterFormationsCompat.executePlan(sender, recruits, plan);
+        return FormationRuntime.executePlan(sender, recruits, plan);
     }
 
     private static Vec3 averageCenter(List<AbstractRecruitEntity> recruits) {

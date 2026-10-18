@@ -8,7 +8,7 @@ import com.talhanation.recruits.world.RecruitsGroupsSaveData;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.advisor.AdvisorEvent;
 import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
+import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.combat.RTSGroupAttackManager;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
@@ -16,6 +16,7 @@ import ee.lastpagans.recruitsrtscamera.network.AdvisorEventPacket;
 import ee.lastpagans.recruitsrtscamera.network.BattleStateSyncPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import ee.lastpagans.recruitsrtscamera.server.BodyguardManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -164,8 +165,8 @@ public final class BattleMechanicsManager {
         if (!BodyguardManager.isRtsActive(player) && BodyguardManager.getBodyguard(player) == null) return;
         ServerLevel level = player.serverLevel();
         Set<UUID> shockedGroups = new HashSet<>();
-        for (Entity entity : level.getAllEntities()) {
-            if (entity instanceof AbstractRecruitEntity recruit && recruit.isAlive()
+        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+            if (recruit.isAlive()
                     && player.getUUID().equals(recruit.getOwnerUUID()) && recruit.getGroup() != null) {
                 shockedGroups.add(recruit.getGroup());
             }
@@ -179,8 +180,8 @@ public final class BattleMechanicsManager {
     private static Map<UUID, GroupRuntime> collectAndUpdateFatigue(MinecraftServer server) {
         Map<UUID, GroupRuntime> groups = new HashMap<>();
         for (ServerLevel level : server.getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof AbstractRecruitEntity recruit) || !recruit.isAlive()
+            for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+                if (!recruit.isAlive()
                         || recruit.getGroup() == null || recruit.getOwnerUUID() == null || RoutedGroupManager.isRouting(recruit)) {
                     continue;
                 }
@@ -192,7 +193,7 @@ public final class BattleMechanicsManager {
             }
         }
         for (GroupRuntime group : groups.values()) {
-            BetterFormationsCompat.repairGroundSlots(group.level, group.groupId, group.members);
+            FormationRuntime.repairGroundSlots(group.level, group.groupId, group.members);
         }
         return groups;
     }
@@ -467,8 +468,8 @@ public final class BattleMechanicsManager {
         ServerLevel level = player.serverLevel();
         double radiusSq = BODYGUARD_GUARD_RADIUS * BODYGUARD_GUARD_RADIUS;
         List<AbstractRecruitEntity> defenders = new ArrayList<>();
-        for (Entity entity : level.getAllEntities()) {
-            if (!(entity instanceof AbstractRecruitEntity recruit) || !recruit.isAlive()
+        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+            if (!recruit.isAlive()
                     || !player.getUUID().equals(recruit.getOwnerUUID())
                     || !groupId.equals(recruit.getGroup()) || recruit.isAlliedTo(attacker)
                     || recruit.distanceToSqr(player) > radiusSq) {
@@ -499,8 +500,8 @@ public final class BattleMechanicsManager {
         if (level == null || bearer == null || attacker == null || bearer.getGroup() == null) return;
         double radiusSq = STANDARD_GUARD_RADIUS * STANDARD_GUARD_RADIUS;
         List<AbstractRecruitEntity> defenders = new ArrayList<>();
-        for (Entity entity : level.getAllEntities()) {
-            if (!(entity instanceof AbstractRecruitEntity recruit) || recruit == bearer || !recruit.isAlive()
+        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+            if (recruit == bearer || !recruit.isAlive()
                     || !bearer.getGroup().equals(recruit.getGroup()) || recruit.isAlliedTo(attacker)
                     || recruit.distanceToSqr(bearer) > radiusSq) {
                 continue;
@@ -548,8 +549,8 @@ public final class BattleMechanicsManager {
         if (delta < 0.0F && groupHasMoraleItem(level, groupId)) {
             effectiveDelta *= 0.80F;
         }
-        for (Entity entity : level.getAllEntities()) {
-            if (entity instanceof AbstractRecruitEntity recruit && recruit.isAlive()
+        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+            if (recruit.isAlive()
                     && groupId.equals(recruit.getGroup())) {
                 recruit.setMoral(Math.max(0.0F, Math.min(100.0F, recruit.getMorale() + effectiveDelta)));
             }
@@ -566,8 +567,8 @@ public final class BattleMechanicsManager {
     }
 
     private static boolean groupHasMoraleItem(ServerLevel level, UUID groupId) {
-        for (Entity entity : level.getAllEntities()) {
-            if (entity instanceof AbstractRecruitEntity recruit && recruit.isAlive()
+        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+            if (recruit.isAlive()
                     && groupId.equals(recruit.getGroup())
                     && (recruit.getMainHandItem().is(RTSTags.MORALE_ITEMS)
                     || recruit.getOffhandItem().is(RTSTags.MORALE_ITEMS))) {

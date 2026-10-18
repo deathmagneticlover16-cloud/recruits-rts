@@ -11,7 +11,7 @@ import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.api.RoutedDesertersEvent;
 import ee.lastpagans.recruitsrtscamera.combat.RTSGroupAttackManager;
 import ee.lastpagans.recruitsrtscamera.combat.ThrowableWeaponManager;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
+import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.formation.CustomFormationExecutor;
 import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
@@ -88,7 +88,7 @@ public final class RoutedGroupManager {
         RTSRoutingSavedData.get(level).begin(groupId, ownerId, members, direction);
         RTSMovementBoostManager.cancelForcedOrders(List.of(groupId));
         RTSGroupAttackManager.cancel(List.of(groupId));
-        BetterFormationsCompat.haltFormation(groupId);
+        FormationRuntime.haltFormation(groupId);
         CustomFormationExecutor.releaseForAttack(groupId, loaded);
         for (AbstractRecruitEntity recruit : loaded) enforce(recruit);
 

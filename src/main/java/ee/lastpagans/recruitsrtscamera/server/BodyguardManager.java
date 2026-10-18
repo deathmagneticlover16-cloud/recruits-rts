@@ -3,7 +3,7 @@ package ee.lastpagans.recruitsrtscamera.server;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.world.RecruitsGroup;
 import com.talhanation.recruits.world.RecruitsGroupsSaveData;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
+import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.compat.TerrainSurfaceResolver;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.network.BodyguardCarryPacket;
@@ -70,7 +70,7 @@ public final class BodyguardManager {
         clearFollowRuntime(player.getUUID());
         if (!enabled && !isRtsActive(player)) {
             UUID groupId = getBodyguard(player);
-            if (groupId != null) BetterFormationsCompat.clearCommanderReservation(groupId);
+            if (groupId != null) FormationRuntime.clearCommanderReservation(groupId);
         }
         sync(player);
     }
@@ -85,7 +85,7 @@ public final class BodyguardManager {
         if (groupId == null) {
             player.getPersistentData().remove(DATA_KEY);
             player.getPersistentData().remove(FOLLOW_KEY);
-            if (oldGroup != null) BetterFormationsCompat.clearCommanderReservation(oldGroup);
+            if (oldGroup != null) FormationRuntime.clearCommanderReservation(oldGroup);
             clearRuntime(player.getUUID());
             sync(player);
             return true;
@@ -94,7 +94,7 @@ public final class BodyguardManager {
         if (group == null) return false;
         Vec3 center = groupCenter(player.serverLevel(), group);
         if (center == null || center.distanceToSqr(player.position()) > ASSIGN_RANGE_SQ) return false;
-        if (oldGroup != null && !oldGroup.equals(groupId)) BetterFormationsCompat.clearCommanderReservation(oldGroup);
+        if (oldGroup != null && !oldGroup.equals(groupId)) FormationRuntime.clearCommanderReservation(oldGroup);
         player.getPersistentData().putUUID(DATA_KEY, groupId);
         player.getPersistentData().putBoolean(FOLLOW_KEY, false);
         clearRuntime(player.getUUID());
@@ -122,7 +122,7 @@ public final class BodyguardManager {
             RTS_ACTIVE.remove(id);
             ATTACH_BLOCKED.remove(id);
             LAST_TARGET.remove(id);
-            if (groupId != null && !followsPlayer(player)) BetterFormationsCompat.clearCommanderReservation(groupId);
+            if (groupId != null && !followsPlayer(player)) FormationRuntime.clearCommanderReservation(groupId);
         }
     }
 
@@ -155,7 +155,7 @@ public final class BodyguardManager {
             LAST_TARGET.remove(player.getUUID());
         }
 
-        Vec3 target = BetterFormationsCompat.commanderSlot(level, player, groupId);
+        Vec3 target = FormationRuntime.commanderSlot(level, player, groupId);
         if (target == null) {
             target = LAST_TARGET.get(player.getUUID());
             if (target == null) {
@@ -191,7 +191,7 @@ public final class BodyguardManager {
             player.move(MoverType.SELF, move);
         }
 
-        Float heading = BetterFormationsCompat.formationHeading(groupId);
+        Float heading = FormationRuntime.formationHeading(groupId);
         if (heading != null && Float.isFinite(heading)) {
             player.setYRot(heading);
             player.setYHeadRot(heading);
@@ -216,9 +216,9 @@ public final class BodyguardManager {
         if (recruits.isEmpty()) return;
         FormationService.rememberFacing(player.serverLevel(), group.getUUID(), player.getYRot());
         if (FormationService.movePreserved(player, group.getUUID(), recruits, player.position())) {
-            Vec3 slot = BetterFormationsCompat.commanderSlot(player.serverLevel(), player, group.getUUID());
+            Vec3 slot = FormationRuntime.commanderSlot(player.serverLevel(), player, group.getUUID());
             if (slot != null) {
-                BetterFormationsCompat.translateFormation(group.getUUID(), player.position().subtract(slot));
+                FormationRuntime.translateFormation(group.getUUID(), player.position().subtract(slot));
             }
             LAST_FOLLOW_PLAYER_POS.put(playerId, player.position());
             LAST_FOLLOW_YAW.put(playerId, player.getYRot());
@@ -255,7 +255,7 @@ public final class BodyguardManager {
         RTS_ACTIVE.remove(player.getUUID());
         clearRuntime(player.getUUID());
         UUID groupId = getBodyguard(player);
-        if (groupId != null) BetterFormationsCompat.clearCommanderReservation(groupId);
+        if (groupId != null) FormationRuntime.clearCommanderReservation(groupId);
     }
 
     public static void sync(ServerPlayer player) {

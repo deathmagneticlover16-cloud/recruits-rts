@@ -9,7 +9,7 @@ displayName="${mod_name}"
 authors="Last Pagans"
 logoFile="icon.png"
 description='''
-Point-and-click RTS camera and battlefield command layer for Villager Recruits using Freecam. Includes optional Better Formations, Siege Weapons artillery, and Small Ships Captain/fleet support when those mods are present.
+Point-and-click RTS camera, native formation runtime, and battlefield command layer for Villager Recruits using Freecam. Includes optional Siege Weapons artillery and Small Ships Captain/fleet support when those mods are present.
 '''
 
 [[dependencies.${mod_id}]]
@@ -39,13 +39,6 @@ mandatory=true
 versionRange="[1.2.1,)"
 ordering="AFTER"
 side="CLIENT"
-
-[[dependencies.${mod_id}]]
-modId="betterformations"
-mandatory=false
-versionRange="[1.0.3,)"
-ordering="AFTER"
-side="BOTH"
 
 [[dependencies.${mod_id}]]
 modId="siegeweapons"

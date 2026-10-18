@@ -58,7 +58,7 @@ public final class SiegeWeaponsCompat {
         return attachedEngineers(recruits).size();
     }
 
-    /** Manned artillery pieces which must bypass infantry/Better Formations movement. */
+    /** Manned artillery pieces which must bypass infantry and native formation movement. */
     public static List<SiegeEngineerEntity> attachedEngineers(List<AbstractRecruitEntity> recruits) {
         if (!isAvailable() || recruits == null || recruits.isEmpty()) {
             return List.of();
@@ -73,7 +73,7 @@ public final class SiegeWeaponsCompat {
     }
 
     /**
-     * Recruits which can still be handed to Better Formations. A mounted siege engineer
+     * Recruits which can still be handed to the native formation runtime. A mounted siege engineer
      * is removed because the siege controller, not ordinary recruit navigation, owns its motion.
      */
     public static List<AbstractRecruitEntity> withoutAttachedArtillery(List<AbstractRecruitEntity> recruits) {

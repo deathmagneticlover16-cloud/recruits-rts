@@ -10,7 +10,7 @@ import com.talhanation.recruits.util.RecruitCommanderUtil;
 import com.talhanation.recruits.world.RecruitsGroup;
 import com.talhanation.recruits.world.RecruitsGroupsSaveData;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
+import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
@@ -394,7 +394,7 @@ public final class RTSGroupAttackManager {
             List<AbstractRecruitEntity> recruits
     ) {
         RTSMovementBoostManager.cancelForcedOrders(List.of(groupId));
-        BetterFormationsCompat.releaseForAttack(sender, groupId);
+        FormationRuntime.releaseForAttack(sender, groupId);
         FormationService.releaseCustomForAttack(sender, groupId, recruits);
         RecruitCommanderUtil.setRecruitsClearTargets(recruits);
         for (AbstractRecruitEntity recruit : recruits) {

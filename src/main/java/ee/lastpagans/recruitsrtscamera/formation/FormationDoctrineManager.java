@@ -4,9 +4,9 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -40,11 +40,7 @@ public final class FormationDoctrineManager {
         }
 
         for (ServerLevel level : server.getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                if (entity instanceof AbstractRecruitEntity recruit) {
-                    refresh(level, recruit);
-                }
-            }
+            for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) refresh(level, recruit);
         }
     }
 

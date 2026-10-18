@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * Dependency-free frontage planning math. This class intentionally knows nothing
- * about Minecraft, Recruits, or Better Formations so it can be regression tested
+ * about Minecraft, Recruits, or the native formation runtime so it can be regression tested
  * without launching the game.
  */
 public final class FrontageMath {
@@ -20,7 +20,7 @@ public final class FrontageMath {
         if (dx * dx + dz * dz < 1.0E-8D) {
             return 0.0F;
         }
-        // Better Formations derives forward = (-sin(yaw), 0, cos(yaw)) and its
+        // The native formation runtime derives forward = (-sin(yaw), 0, cos(yaw)) and its
         // right vector from that. This yaw makes the drag A->B become formation-right.
         float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) + 180.0F;
         yaw %= 360.0F;
@@ -83,8 +83,8 @@ public final class FrontageMath {
     }
 
     /**
-     * Chooses Better Formations line ranks + spacing that best approximate a target width.
-     * Better Formations uses columns = ceil(count / ranks), with horizontal step
+     * Chooses line ranks and spacing that best approximate a target width.
+     * The native formation runtime uses columns = ceil(count / ranks), with horizontal step
      * max(1.0, 1.02 * spacing), so we mirror that exact public behaviour here.
      */
     public static LineFit bestLineFit(int troopCount, double targetWidth) {

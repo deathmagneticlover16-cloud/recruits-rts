@@ -1,6 +1,18 @@
 Recruits: RTS Camera 0.12.0-server.1
 Combat and tactical orders expansion
 
+NATIVE FORMATION / NAVIGATION REWRITE
+- Better Formations is no longer required or bundled. Presets, frontage, freehand formations, routes, slot assignment, laggard tracking, formation pacing and commander slots now use the built-in formation runtime.
+- Native Recruits formation buttons also enter the built-in runtime. Existing Better Formations line-rank preferences migrate automatically, and `/recruitsformation ranks <1-20>` changes native line depth.
+- Added an event-maintained RecruitRuntimeRegistry, orthogonal transient recruit brain states, explicit RTS movement authority, dirty flags and a budgeted global AI scheduler.
+- Added collision-shape tactical A*. It resolves real support surfaces instead of heightmaps, rejects unsupported air over holes, centers waypoints on slabs/stairs/modded collision shapes, and creates explicit vertical ladder links.
+- Routes containing stairs, ladders, ledges, bridges or narrow corridors switch to dispersed column transit. The group reforms into its assigned slots only after clearing the constrained route.
+- Routine slot correction uses damped local steering and a recruit spatial grid. Individual A* is reserved for obstructed/stuck recovery, while terrain-region revisions invalidate only affected routes.
+- Native follow, hold, move, wander, protect, dodge, dismount, mounted-charge and upkeep movement goals are gated while RTS formation authority is active.
+- Projectile awareness is event-driven. A hostile projectile corridor or impact wakes the group; recruits with available shields raise them and face horizontal fire. Overhead interception retains its existing damage rules.
+- Stuck cavalry no longer teleports or receives raw stride movement. Recovery invalidates the route and schedules a new legal path.
+- Added `/recruitsperf stats`, `ai`, `navigation`, `scheduler`, and `resetstats` for runtime state, goal gating, local steering, paths, queues and projectile counters. Rendering LOD is intentionally unchanged.
+
 NEW CONTROLS
 - Sword button: arm Charge, then right-click an enemy troop or its banner. Click again or Halt to cancel the cursor. Charge orders skip the normal formation staging delay; foot melee troops get +20% movement for eight seconds. Mounted melee uses the committed cavalry pass and existing measured impact damage. Charge does not switch archers out of ranged mode; choose Melee first when appropriate.
 - Book button: open Tactics & Abilities. Choose Skirmish ON/OFF, Ranged/Melee/Native weapon choice, Mount/Dismount, FRONT/UP/AUTO/Native shields, Second Wind, Hold the Line or War Cry.
@@ -53,7 +65,7 @@ RETAINED / BOUNDARIES
 
 VALIDATION / BUILD
 - Java 17 compiled CavalryManeuver, TacticalMath, TacticalSettings and ChargeMomentum with their standalone tests: 44 new tactical checks plus 19 existing momentum checks passed.
-- All 114 main Java files passed Java 17 syntax parsing. Native methods/fields and the new UseShield mixin target were checked in the bundled Recruits JAR. Bundled dependency ZIP CRC checks passed.
-- Full Forge compile was attempted but stopped before compilation: Gradle could not download gradle-8.1.1-bin.zip (Network is unreachable). No full semantic Forge compile, client/server launch, UI render or in-game combat pass is claimed.
+- All main Java files passed Java 17 syntax parsing. All nine dependency-free test suites pass, including 35 formation-slot checks with a 1,200-unit assignment case and the existing tactical, custom-formation, frontage, artillery, cavalry and projection suites. Native formation and goal method descriptors were checked against the bundled Recruits JAR.
+- The full Forge build is intentionally left to the packager. No full semantic Forge compile, client/server launch, UI render or in-game combat pass is claimed.
 - Run BUILD.bat or gradlew.bat clean build with Java 17. Expected output: build/libs/recruits-rts-camera-0.12.0-server.1.jar. Replace the previous addon on clients and server.
 - First game checks: charge and kill the assigned defender mid-pass; cancel with Halt; ranged/melee/hold-fire combinations; foot and mounted skirmishing; dismount/remount; shield overhead/frontal/rear/piercing hits; ability cooldown after reload; 100v100 target spread; routing plus reload and campaign event.

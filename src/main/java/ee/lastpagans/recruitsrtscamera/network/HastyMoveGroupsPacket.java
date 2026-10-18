@@ -26,7 +26,7 @@ import java.util.function.Supplier;
 
 /**
  * Double-RMB hasty movement. Unlike 0.4.1, this is still a formation-preserving
- * translation order: group spacing, Better Formations shape, frontage depth, and
+ * translation order: group spacing, native formation runtime shape, frontage depth, and
  * custom freehand slots are retained. The difference is only travel pace/cohesion.
  */
 public record HastyMoveGroupsPacket(List<UUID> groupIds, BlockPos target) {

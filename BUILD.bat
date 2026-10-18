@@ -9,11 +9,6 @@ if not exist "libs\freecam.jar" (
   echo Missing libs\freecam.jar
   exit /b 1
 )
-if not exist "libs\betterformations.jar" (
-  echo Missing libs\betterformations.jar
-  exit /b 1
-)
-
 call gradlew.bat clean build
 if errorlevel 1 exit /b %errorlevel%
 

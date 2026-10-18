@@ -8,6 +8,7 @@ import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -56,8 +57,8 @@ public final class CavalryCombatManager {
         if (server == null) return;
         Set<UUID> seen = new HashSet<>();
         for (ServerLevel level : server.getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                if (!(entity instanceof AbstractRecruitEntity rider) || !rider.isAlive()
+            for (AbstractRecruitEntity rider : RecruitRuntimeRegistry.loaded(level)) {
+                if (!rider.isAlive()
                         || rider.getOwnerUUID() == null || !isMounted(rider) || RoutedGroupManager.isRouting(rider)) continue;
                 UUID id = rider.getUUID();
                 Mob mount = (Mob) rider.getVehicle();
@@ -68,7 +69,7 @@ public final class CavalryCombatManager {
                     state = new RiderState(mount, level);
                     RIDERS.put(id, state);
                 }
-                // BF formation pacing already has a separate attribute/stride pass. Do not
+                // runtime formation pacing already has a separate attribute/stride pass. Do not
                 // multiply it a second time. Outside formations this affects native horse AI.
                 double speed = rider.getShouldMovePos() || rider.getShouldHoldPos()
                         || RTSMovementBoostManager.isSlowMarchActive(rider.getGroup())

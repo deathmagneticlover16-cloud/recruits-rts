@@ -9,7 +9,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.List;
 import java.util.UUID;
 
-/** Pure planning helpers. No Better Formations calls belong here. */
+/** Pure planning helpers. Runtime movement calls do not belong here. */
 public final class FormationPlanner {
     private FormationPlanner() {
     }

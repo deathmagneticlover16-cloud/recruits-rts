@@ -1354,10 +1354,6 @@ public final class RTSCameraController {
             setStatus("Select at least one group before changing formation.");
             return;
         }
-        if (!net.minecraftforge.fml.ModList.get().isLoaded("betterformations")) {
-            setStatus("Better Formations is not installed; preset formation control is unavailable.");
-            return;
-        }
 
         FormationKind common = null;
         boolean mixed = false;
@@ -1395,10 +1391,6 @@ public final class RTSCameraController {
         }
         if (SELECTED_GROUPS.isEmpty()) {
             setStatus("Select at least one group before changing formation.");
-            return;
-        }
-        if (!net.minecraftforge.fml.ModList.get().isLoaded("betterformations")) {
-            setStatus("Better Formations is not installed; preset formation control is unavailable.");
             return;
         }
         formationTool = kind;

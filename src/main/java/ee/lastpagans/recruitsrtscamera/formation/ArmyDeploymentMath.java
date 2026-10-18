@@ -10,7 +10,7 @@ import java.util.Map;
  * Dependency-free planner for high-level army presets.
  *
  * It only moves group centres. Each group's internal formation remains owned by
- * FormationService / Better Formations / the custom-formation registry.
+ * FormationService, the native formation runtime, or the custom-formation registry.
  */
 public final class ArmyDeploymentMath {
     private static final double ROW_GAP = 3.0D;
@@ -41,7 +41,7 @@ public final class ArmyDeploymentMath {
 
     /**
      * Plan group-centre destinations around one army centre and one shared facing.
-     * Minecraft yaw convention matches Better Formations: forward=(-sin(yaw), cos(yaw)).
+     * Minecraft yaw convention matches the native formation runtime: forward=(-sin(yaw), cos(yaw)).
      */
     public static Map<String, Target> plan(
             ArmyPreset preset,

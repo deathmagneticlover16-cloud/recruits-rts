@@ -122,7 +122,7 @@ public record SetFormationPacket(List<UUID> groupIds, FormationKind kind) {
         } else if (appliedGroups == 0) {
             sender.displayClientMessage(Component.literal(
                     "Formation preference set to " + packet.kind.displayName()
-                            + ", but Better Formations did not apply it."
+                            + ", but the tactical formation runtime could not apply it."
             ), true);
         } else {
             sender.displayClientMessage(Component.literal(

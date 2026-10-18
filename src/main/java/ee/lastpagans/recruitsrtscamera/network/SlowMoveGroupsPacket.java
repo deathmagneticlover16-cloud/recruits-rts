@@ -137,7 +137,7 @@ public record SlowMoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
                     sender.serverLevel(), groupId, recruits, sender.getYRot()
             );
 
-            // Manned siege engineers cannot be driven reliably by Better Formations.
+            // Manned siege engineers cannot be driven reliably by the native formation runtime.
             // Give every gun its own native Recruits move-pos instead, arranged in a
             // wide battery line around this group's translated RTS destination.
             SiegeWeaponsCompat.BatteryOrder battery = SiegeWeaponsCompat.commandBatteryLine(
@@ -158,7 +158,7 @@ public record SlowMoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
                         customGroups++;
                     }
                 } else {
-                    // Better Formations remains optional. Even native fallback receives each
+                    // The formation runtime can be disabled. Native fallback still receives each
                     // group's translated centre, so selected groups no longer stack on one block.
                     RecruitCommanderUtil.setRecruitsMove(formationRecruits, surface);
                 }

@@ -8,7 +8,7 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.CaptainEntity;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import com.talhanation.recruits.util.RecruitCommanderUtil;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
+import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.server.ServerPacketGuard;
@@ -67,7 +67,7 @@ public record HaltGroupsPacket(List<UUID> groupIds) {
         RTSMovementBoostManager.cancelForcedOrders(packet.groupIds);
         int stopped = 0;
         for (Map.Entry<UUID, List<AbstractRecruitEntity>> entry : groups.entrySet()) {
-            BetterFormationsCompat.haltFormation(entry.getKey());
+            FormationRuntime.haltFormation(entry.getKey());
             List<AbstractRecruitEntity> recruits = entry.getValue();
             RecruitCommanderUtil.setRecruitsClearTargets(recruits);
             for (AbstractRecruitEntity recruit : recruits) {

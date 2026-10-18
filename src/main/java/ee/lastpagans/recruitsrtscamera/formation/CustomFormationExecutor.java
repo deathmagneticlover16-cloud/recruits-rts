@@ -1,12 +1,11 @@
 package ee.lastpagans.recruitsrtscamera.formation;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
-import com.talhanation.recruits.util.FormationUtils;
 import com.talhanation.recruits.util.RecruitCommanderUtil;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
-import net.minecraft.core.BlockPos;
+import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -23,8 +22,8 @@ public final class CustomFormationExecutor {
 
     /**
      * Divide one drawn stroke into contiguous group sections and assign every recruit a
-     * deterministic hold slot. Better Formations is deliberately released here because
-     * arbitrary curves are outside its preset shape model.
+     * deterministic hold slot. The native runtime owns those arbitrary slots so custom
+     * formations receive the same routing, collision checks, and recovery as preset shapes.
      */
     public static Result deploy(
             ServerPlayer sender,
@@ -112,27 +111,31 @@ public final class CustomFormationExecutor {
                     .comparingDouble((AbstractRecruitEntity recruit) -> recruit.getX() * sortX + recruit.getZ() * sortZ)
                     .thenComparing(recruit -> recruit.getUUID().toString()));
 
-            BetterFormationsCompat.releaseForAttack(sender, groupId);
             RecruitCommanderUtil.setRecruitsClearTargets(orderedRecruits);
 
             List<PlacedSlot> placed = new ArrayList<>(slots.size());
             for (int i = 0; i < slots.size(); i++) {
                 CustomFormationMath.Slot slot = slots.get(i);
-                BlockPos surface = FormationUtils.getPositionOrSurface(
-                        level,
-                        BlockPos.containing(slot.x(), averageY, slot.z())
-                );
-                Vec3 position = new Vec3(slot.x(), surface.getY(), slot.z());
-                placed.add(new PlacedSlot(orderedRecruits.get(i), position, slot.facingYaw()));
+                AbstractRecruitEntity recruit = orderedRecruits.get(i);
+                Vec3 position = safeSlot(level, recruit, new Vec3(slot.x(), averageY, slot.z()));
+                if (position == null) {
+                    placed.clear();
+                    break;
+                }
+                placed.add(new PlacedSlot(recruit, position, slot.facingYaw()));
             }
+            if (placed.size() != slots.size()) continue;
 
             double centerX = placed.stream().mapToDouble(value -> value.position().x).average().orElse(0.0D);
             double centerZ = placed.stream().mapToDouble(value -> value.position().z).average().orElse(0.0D);
             Map<UUID, CustomFormationRegistry.RelativeSlot> memory = new LinkedHashMap<>();
+            Map<UUID, Vec3> runtimeSlots = new LinkedHashMap<>();
+            Map<UUID, Float> runtimeFacings = new LinkedHashMap<>();
 
             for (PlacedSlot placedSlot : placed) {
                 AbstractRecruitEntity recruit = placedSlot.recruit();
-                applyHoldSlot(recruit, placedSlot.position(), placedSlot.facingYaw());
+                runtimeSlots.put(recruit.getUUID(), placedSlot.position());
+                runtimeFacings.put(recruit.getUUID(), placedSlot.facingYaw());
                 memory.put(
                         recruit.getUUID(),
                         new CustomFormationRegistry.RelativeSlot(
@@ -141,10 +144,12 @@ public final class CustomFormationExecutor {
                                 placedSlot.facingYaw()
                         )
                 );
-                appliedRecruits++;
             }
+            if (!NativeFormationController.executeSlots(
+                    sender, groupId, orderedRecruits, runtimeSlots, runtimeFacings)) continue;
             CustomFormationRegistry.put(level, groupId, new CustomFormationRegistry.GroupState(memory, ranks));
             FormationService.markCustom(level, groupId);
+            appliedRecruits += placed.size();
             appliedGroups++;
         }
 
@@ -158,10 +163,11 @@ public final class CustomFormationExecutor {
             List<AbstractRecruitEntity> recruits,
             Vec3 newGroupCenter
     ) {
-        CustomFormationRegistry.GroupState state = CustomFormationRegistry.get(sender.serverLevel(), groupId);
-        if (sender == null || state == null || recruits == null || recruits.isEmpty() || newGroupCenter == null) {
+        if (sender == null || recruits == null || recruits.isEmpty() || newGroupCenter == null) {
             return false;
         }
+        CustomFormationRegistry.GroupState state = CustomFormationRegistry.get(sender.serverLevel(), groupId);
+        if (state == null) return false;
 
         // Casualties are fine: surviving recruits keep their remembered slots. A newly
         // added recruit has no deterministic slot in the old shape, so abandon that stale
@@ -173,21 +179,19 @@ public final class CustomFormationExecutor {
             }
         }
 
-        BetterFormationsCompat.releaseForAttack(sender, groupId);
         RecruitCommanderUtil.setRecruitsClearTargets(recruits);
-        int matched = 0;
+        Map<UUID, Vec3> runtimeSlots = new LinkedHashMap<>();
+        Map<UUID, Float> runtimeFacings = new LinkedHashMap<>();
         for (AbstractRecruitEntity recruit : recruits) {
             CustomFormationRegistry.RelativeSlot relative = state.slots().get(recruit.getUUID());
             double x = newGroupCenter.x + relative.dx();
             double z = newGroupCenter.z + relative.dz();
-            BlockPos surface = FormationUtils.getPositionOrSurface(
-                    sender.serverLevel(),
-                    BlockPos.containing(x, newGroupCenter.y, z)
-            );
-            applyHoldSlot(recruit, new Vec3(x, surface.getY(), z), relative.facingYaw());
-            matched++;
+            Vec3 position = safeSlot(sender.serverLevel(), recruit, new Vec3(x, newGroupCenter.y, z));
+            if (position == null) return false;
+            runtimeSlots.put(recruit.getUUID(), position);
+            runtimeFacings.put(recruit.getUUID(), relative.facingYaw());
         }
-        return matched > 0;
+        return NativeFormationController.executeSlots(sender, groupId, recruits, runtimeSlots, runtimeFacings);
     }
 
     /** Rotate a remembered freehand shape and translate its centre in one deterministic step. */
@@ -198,10 +202,11 @@ public final class CustomFormationExecutor {
             Vec3 newGroupCenter,
             double deltaDegrees
     ) {
-        CustomFormationRegistry.GroupState state = CustomFormationRegistry.get(sender.serverLevel(), groupId);
-        if (sender == null || state == null || recruits == null || recruits.isEmpty() || newGroupCenter == null) {
+        if (sender == null || recruits == null || recruits.isEmpty() || newGroupCenter == null) {
             return false;
         }
+        CustomFormationRegistry.GroupState state = CustomFormationRegistry.get(sender.serverLevel(), groupId);
+        if (state == null) return false;
         for (AbstractRecruitEntity recruit : recruits) {
             if (!state.slots().containsKey(recruit.getUUID())) {
                 CustomFormationRegistry.clear(sender.serverLevel(), groupId);
@@ -209,10 +214,10 @@ public final class CustomFormationExecutor {
             }
         }
 
-        BetterFormationsCompat.releaseForAttack(sender, groupId);
         RecruitCommanderUtil.setRecruitsClearTargets(recruits);
         Map<UUID, CustomFormationRegistry.RelativeSlot> rotatedMemory = new LinkedHashMap<>();
-        int matched = 0;
+        Map<UUID, Vec3> runtimeSlots = new LinkedHashMap<>();
+        Map<UUID, Float> runtimeFacings = new LinkedHashMap<>();
         for (AbstractRecruitEntity recruit : recruits) {
             CustomFormationRegistry.RelativeSlot relative = state.slots().get(recruit.getUUID());
             FormationRotationMath.Point rotated = FormationRotationMath.rotateOffset(
@@ -221,21 +226,21 @@ public final class CustomFormationExecutor {
             double x = newGroupCenter.x + rotated.x();
             double z = newGroupCenter.z + rotated.z();
             float yaw = FormationRotationMath.rotateYaw(relative.facingYaw(), deltaDegrees);
-            BlockPos surface = FormationUtils.getPositionOrSurface(
-                    sender.serverLevel(),
-                    BlockPos.containing(x, newGroupCenter.y, z)
-            );
-            applyHoldSlot(recruit, new Vec3(x, surface.getY(), z), yaw);
+            Vec3 position = safeSlot(sender.serverLevel(), recruit, new Vec3(x, newGroupCenter.y, z));
+            if (position == null) return false;
+            runtimeSlots.put(recruit.getUUID(), position);
+            runtimeFacings.put(recruit.getUUID(), yaw);
             rotatedMemory.put(
                     recruit.getUUID(),
                     new CustomFormationRegistry.RelativeSlot(rotated.x(), rotated.z(), yaw)
             );
-            matched++;
         }
-        if (matched > 0) {
+        boolean applied = NativeFormationController.executeSlots(
+                sender, groupId, recruits, runtimeSlots, runtimeFacings);
+        if (applied) {
             CustomFormationRegistry.put(sender.serverLevel(), groupId, new CustomFormationRegistry.GroupState(rotatedMemory, state.ranks()));
         }
-        return matched > 0;
+        return applied;
     }
 
     /** Let custom-formation recruits fight while retaining the shape memory for the next move. */
@@ -243,6 +248,7 @@ public final class CustomFormationExecutor {
         if (recruits == null || recruits.isEmpty()) {
             return;
         }
+        NativeFormationController.release(recruits.get(0).getServer(), groupId, true);
         for (AbstractRecruitEntity recruit : recruits) {
             recruit.setShouldHoldPos(false);
             recruit.clearHoldPos();
@@ -251,20 +257,13 @@ public final class CustomFormationExecutor {
         }
     }
 
-    private static void applyHoldSlot(AbstractRecruitEntity recruit, Vec3 position, float facingYaw) {
-        recruit.setTarget(null);
-        recruit.setShouldMovePos(false);
-        recruit.clearMovePos();
-        recruit.setHoldPos(position);
-        recruit.setShouldHoldPos(true);
-        recruit.setFollowState(3);
-        recruit.ownerRot = facingYaw;
-        recruit.isInFormation = true;
-        recruit.holdFormation = true;
-    }
-
     private static double projection(CustomFormationMath.Point point, double axisX, double axisZ) {
         return point.x() * axisX + point.z() * axisZ;
+    }
+
+    private static Vec3 safeSlot(ServerLevel level, AbstractRecruitEntity recruit, Vec3 desired) {
+        Mob mover = recruit.getVehicle() instanceof Mob mount ? mount : recruit;
+        return TacticalPathfinder.nearestStandable(level, mover, desired);
     }
 
     private static CustomFormationMath.Point groupCenter2D(List<AbstractRecruitEntity> recruits) {

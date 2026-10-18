@@ -4,9 +4,10 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.HorsemanEntity;
 import com.talhanation.recruits.entities.NomadEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
+import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
+import ee.lastpagans.recruitsrtscamera.formation.NativeFormationController;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -14,13 +15,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
@@ -37,17 +34,13 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * RTS movement pacing.
  *
- * Better Formations moves its
- * formation centre by a fixed 0.2 blocks/tick and directly glides every member by at
- * most 0.3 blocks/tick. Attribute/navigation multipliers alone therefore could never
- * make a mounted formation materially faster. We now accelerate the Better Formations
- * centre for cavalry groups and, after Better Formations has driven the horse, add a
- * collision-aware mounted stride in the same direction so the horses can keep up.
+ * The native formation runtime advances its shared route anchor at a base pace of 0.2
+ * blocks/tick while members use ordinary movement controls. This class adjusts the anchor,
+ * navigation speed, and temporary movement attributes for cavalry, Hasty Move, and Slow March.
  *
  * No permanent entity attributes are changed. Hasty movement remains formation-
- * preserving and keeps the deterministic +/-6% individual pace variation. Rotation
- * orders use a separate damping pass so frontage pivots visibly wheel/reform instead
- * of snapping through Better Formations' normal 0.3-block member glide.
+ * preserving and keeps deterministic +/-6% individual pace variation through navigation
+ * and movement attributes. It never teleports or adds raw entity movement.
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RTSMovementBoostManager {
@@ -58,12 +51,11 @@ public final class RTSMovementBoostManager {
     private static final double HASTY_CAVALRY_NAV_SPEED = 1.62D;
     private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 0.45D;
 
-    // Better Formations centre STEP is 0.2 blocks/tick. These are *additional* steps.
+    // native formation runtime centre STEP is 0.2 blocks/tick. These are *additional* steps.
     private static double regularCavalryExtra() { return RTSServerConfig.CAVALRY_FORMATION_SPEED.get() - 0.2D; }
     private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.04D;   // ~0.24 total
     private static double hastyCavalryExtra() { return RTSServerConfig.CAVALRY_HASTY_SPEED.get() - 0.2D; }
 
-    // Better Formations direct member glide is capped around 0.3 blocks/tick.
     private static final double HASTY_VARIATION = 0.06D;
     private static final double SLOW_MARCH_FACTOR = 0.55D;
     private static final double SLOW_MARCH_NAV_SPEED = 0.68D;
@@ -73,7 +65,6 @@ public final class RTSMovementBoostManager {
     private static final int MAX_HASTY_TICKS = 20 * 50;
     private static final int MAX_SLOW_MARCH_TICKS = 20 * 70;
     private static final int MAX_ROTATION_TICKS = 20 * 20;
-    private static final double ROTATION_REPOSITION_FACTOR = 0.40D;
     private static final double ARRIVAL_DISTANCE_SQ = 1.25D * 1.25D;
     private static final UUID ARMOR_WEIGHT_MODIFIER_ID = UUID.fromString("8d6f7c24-4fe2-4dc7-a36e-79dd83f5fb31");
     private static final int FORCED_ORDER_MAX_TICKS = 20 * 70;
@@ -88,7 +79,7 @@ public final class RTSMovementBoostManager {
     private RTSMovementBoostManager() {
     }
 
-    /** Track mounted members and, when appropriate, the Better Formations group centre. */
+    /** Track mounted members and, when appropriate, the native formation runtime group centre. */
     public static int registerFormationMove(ServerPlayer sender, UUID groupId, List<AbstractRecruitEntity> recruits) {
         if (recruits == null) {
             return 0;
@@ -105,9 +96,8 @@ public final class RTSMovementBoostManager {
                 cavalry++;
                 replaceState(recruit, groupId, Mode.FORMATION_CAVALRY, MAX_FORMATION_TICKS, 1.0D);
             } else {
-                // Better Formations directly glides infantry, bypassing movement-speed
-                // attributes. Track ordinary infantry too so Armor Weight can damp that
-                // direct step instead of being ignored during RTS formation movement.
+                // Track ordinary infantry so order lifetime, external speed modifiers,
+                // and recovery bookkeeping use the same formation movement window.
                 replaceState(recruit, groupId, Mode.FORMATION_INFANTRY, MAX_FORMATION_TICKS, 1.0D);
             }
         }
@@ -136,8 +126,8 @@ public final class RTSMovementBoostManager {
 
     /**
      * Slow March is an explicit orderly movement pace. Unlike Formation Doctrine's passive
-     * modifiers, this is an order-level pace: Better Formations' group centre and direct member
-     * glide are both damped so the whole body visibly advances more slowly.
+     * modifiers, this is an order-level pace: both the shared route anchor and normal member
+     * movement controls advance more slowly.
      */
     public static void registerSlowMove(ServerPlayer sender, UUID groupId, List<AbstractRecruitEntity> recruits) {
         if (recruits == null || recruits.isEmpty()) {
@@ -157,10 +147,8 @@ public final class RTSMovementBoostManager {
     }
 
     /**
-     * Rotation/reorientation deliberately uses a slower visual pace than an ordinary march.
-     * Better Formations directly glides members, so lowering vanilla movement attributes alone
-     * does not solve the snap. We instead remember each controlled body's pre-BF position and
-     * keep only 40% of Better Formations' horizontal step while the group is settling.
+     * Rotation/reorientation remains authoritative until the runtime reports the reassigned
+     * slots settled; ordinary movement controls perform the wheel without position rewinds.
      */
     public static void registerRotationMove(ServerPlayer sender, UUID groupId, List<AbstractRecruitEntity> recruits) {
         if (recruits == null || recruits.isEmpty()) {
@@ -183,40 +171,6 @@ public final class RTSMovementBoostManager {
             ACTIVE_ROTATIONS.put(id, new RotationState(recruit, groupId, MAX_ROTATION_TICKS));
         }
         registerForcedOrder(sender, groupId, recruits);
-    }
-
-    @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public static void captureFormationDrivenPositions(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
-            return;
-        }
-
-        for (Map.Entry<UUID, RotationState> entry : List.copyOf(ACTIVE_ROTATIONS.entrySet())) {
-            RotationState state = entry.getValue();
-            AbstractRecruitEntity recruit = state.recruit;
-            if (recruit == null || !recruit.isAlive() || recruit.isRemoved() || state.remainingTicks <= 0) {
-                ACTIVE_ROTATIONS.remove(entry.getKey(), state);
-                continue;
-            }
-            Entity controlled = controlledEntity(recruit);
-            state.beforeFormationStep = controlled == null || controlled.isRemoved()
-                    ? null
-                    : controlled.position();
-        }
-
-        // Better Formations moves members directly, which previously hid most of the
-        // per-recruit +/-6% Hasty Move variation. Capture the real pre-BF position so
-        // the LOWEST tick pass can preserve a small individual difference in that step.
-        for (BoostState state : List.copyOf(ACTIVE.values())) {
-            if (state == null) {
-                continue;
-            }
-            AbstractRecruitEntity recruit = state.recruit;
-            Entity controlled = controlledEntity(recruit);
-            state.beforeFormationStep = controlled == null || controlled.isRemoved()
-                    ? null
-                    : controlled.position();
-        }
     }
 
     /**
@@ -280,7 +234,7 @@ public final class RTSMovementBoostManager {
     }
 
     private static void registerGroup(UUID groupId, GroupMode mode, int ticks, List<AbstractRecruitEntity> recruits) {
-        Vec3 center = BetterFormationsCompat.formationCenter(groupId);
+        Vec3 center = FormationRuntime.formationCenter(groupId);
         if (center != null) {
             ACTIVE_GROUPS.put(groupId, new GroupBoostState(mode, ticks, center, averageArmorWeightScale(recruits)));
         }
@@ -295,11 +249,11 @@ public final class RTSMovementBoostManager {
         if (sender == null || groupId == null || recruits == null || recruits.isEmpty()) {
             return;
         }
-        Vec3 center = BetterFormationsCompat.formationCenter(groupId);
+        Vec3 center = FormationRuntime.formationCenter(groupId);
         if (center == null) {
             center = averageControlledPosition(recruits);
         }
-        Vec3 destination = BetterFormationsCompat.formationDestination(groupId);
+        Vec3 destination = FormationRuntime.formationDestination(groupId);
         if (destination == null) {
             destination = averageCommandDestination(recruits);
         }
@@ -393,13 +347,6 @@ public final class RTSMovementBoostManager {
                     default -> navigationSpeed = 1.0D;
                 }
                 applySpeed(state, navigationSpeed, selfAttributeAmount, mountAttributeAmount);
-                if (state.mode == Mode.FORMATION_INFANTRY) {
-                    applyArmorWeightInfantryStepDamping(state);
-                } else if (state.mode == Mode.HASTY_INFANTRY) {
-                    applyHastyInfantryStepVariation(state);
-                } else if (state.mode == Mode.SLOW_MARCH) {
-                    applySlowMarchStepDamping(state);
-                }
                 if (state.mode == Mode.FORMATION_CAVALRY || state.mode == Mode.HASTY_CAVALRY
                         || (state.mode == Mode.SLOW_MARCH && isCavalry(recruit))) {
                     maybeRecoverStuckCavalry(state);
@@ -409,9 +356,9 @@ public final class RTSMovementBoostManager {
 
         processForcedOrders();
 
-        // Better Formations also ticks on ServerTickEvent.END at normal priority. LOWEST
-        // therefore sees the centre after BF has decided whether it advanced normally.
-        // Ordinary pace boosts still require real BF progress; only processForcedOrders()
+        // native formation runtime also ticks on ServerTickEvent.END at normal priority. LOWEST
+        // therefore sees the centre after runtime has decided whether it advanced normally.
+        // Ordinary pace boosts still require real runtime progress; only processForcedOrders()
         // above may conservatively break a proven stall for an explicit player RTS order.
         if (!ACTIVE_GROUPS.isEmpty()) {
             for (Map.Entry<UUID, GroupBoostState> entry : List.copyOf(ACTIVE_GROUPS.entrySet())) {
@@ -421,7 +368,7 @@ public final class RTSMovementBoostManager {
                     ACTIVE_GROUPS.remove(groupId, state);
                     continue;
                 }
-                Vec3 current = BetterFormationsCompat.formationCenter(groupId);
+                Vec3 current = FormationRuntime.formationCenter(groupId);
                 if (current == null) {
                     ACTIVE_GROUPS.remove(groupId, state);
                     continue;
@@ -436,14 +383,14 @@ public final class RTSMovementBoostManager {
                                 current.y,
                                 state.lastCenter.z + (current.z - state.lastCenter.z) * factor
                         );
-                        if (BetterFormationsCompat.setFormationCenter(groupId, adjusted)) {
+                        if (FormationRuntime.setFormationCenter(groupId, adjusted)) {
                             state.lastCenter = adjusted;
                         } else {
                             state.lastCenter = current;
                         }
                     } else {
                         // Armor Weight v1.1 is a movement-speed MULTIPLY_TOTAL modifier, but
-                        // Better Formations advances its group centre directly. Scale the real
+                        // native formation runtime advances its group centre directly. Scale the real
                         // centre step first, then scale any Commander-added extra stride too.
                         Vec3 scaledCurrent = current;
                         if (state.externalSpeedScale < 0.999D) {
@@ -452,7 +399,7 @@ public final class RTSMovementBoostManager {
                                     current.y,
                                     state.lastCenter.z + (current.z - state.lastCenter.z) * state.externalSpeedScale
                             );
-                            if (BetterFormationsCompat.setFormationCenter(groupId, adjusted)) {
+                            if (FormationRuntime.setFormationCenter(groupId, adjusted)) {
                                 scaledCurrent = adjusted;
                             }
                         }
@@ -465,7 +412,7 @@ public final class RTSMovementBoostManager {
                         };
                         extra *= state.externalSpeedScale;
                         Vec3 advanced = extra > 1.0E-6D
-                                ? BetterFormationsCompat.advanceFormationCenter(groupId, extra)
+                                ? FormationRuntime.advanceFormationCenter(groupId, extra)
                                 : scaledCurrent;
                         state.lastCenter = advanced == null ? scaledCurrent : advanced;
                     }
@@ -489,109 +436,20 @@ public final class RTSMovementBoostManager {
                 continue;
             }
 
-            Entity controlled = controlledEntity(recruit);
-            Vec3 before = state.beforeFormationStep;
-            state.beforeFormationStep = null;
-            if (controlled == null || controlled.isRemoved() || before == null) {
-                continue;
-            }
-
-            Vec3 now = controlled.position();
-            double dx = now.x - before.x;
-            double dz = now.z - before.z;
-            double moved = Math.hypot(dx, dz);
-            boolean locked = BetterFormationsCompat.isFormationMemberLocked(state.groupId, recruit.getUUID());
-            if (!locked && moved > 0.002D && moved < 0.80D) {
-                double rewind = 1.0D - ROTATION_REPOSITION_FACTOR;
-                controlled.move(MoverType.SELF, new Vec3(-dx * rewind, 0.0D, -dz * rewind));
-                state.stationaryTicks = 0;
-            } else {
+            boolean locked = FormationRuntime.isFormationMemberLocked(state.groupId, recruit.getUUID());
+            if (locked || !isStillMoving(recruit)) {
                 state.stationaryTicks++;
+            } else {
+                state.stationaryTicks = 0;
             }
 
-            // Keep the rotation state alive until Better Formations has actually settled.
+            // Keep the rotation state alive until native formation runtime has actually settled.
             // Locked final placement is deliberately left exact and is never rewound.
             if (state.stationaryTicks >= 8 && !isStillMoving(recruit)) {
                 ACTIVE_ROTATIONS.remove(entry.getKey(), state);
             }
         }
 
-    }
-
-    private static void applyArmorWeightInfantryStepDamping(BoostState state) {
-        Vec3 before = state.beforeFormationStep;
-        state.beforeFormationStep = null;
-        AbstractRecruitEntity recruit = state.recruit;
-        if (before == null || recruit == null || !recruit.isAlive() || !recruit.holdFormation) return;
-        Entity controlled = controlledEntity(recruit);
-        if (controlled == null || controlled.isRemoved()) return;
-        double factor = armorWeightScale(controlled);
-        if (factor >= 0.999D) return;
-        Vec3 now = controlled.position();
-        double dx = now.x - before.x;
-        double dz = now.z - before.z;
-        double moved = Math.hypot(dx, dz);
-        if (moved < 0.003D || moved > 0.80D) return;
-        double rewind = 1.0D - factor;
-        controlled.move(MoverType.SELF, new Vec3(-dx * rewind, 0.0D, -dz * rewind));
-    }
-
-    private static void applyHastyInfantryStepVariation(BoostState state) {
-        Vec3 before = state.beforeFormationStep;
-        state.beforeFormationStep = null;
-        AbstractRecruitEntity recruit = state.recruit;
-        if (before == null || recruit == null || !recruit.isAlive() || !recruit.holdFormation) {
-            return;
-        }
-        Entity controlled = controlledEntity(recruit);
-        if (controlled == null || controlled.isRemoved()) {
-            return;
-        }
-
-        Vec3 now = controlled.position();
-        double dx = now.x - before.x;
-        double dz = now.z - before.z;
-        double moved = Math.hypot(dx, dz);
-        if (moved < 0.003D || moved > 0.80D) {
-            return;
-        }
-
-        // Scale only the real horizontal BF/member step. A factor below one gently
-        // rewinds the recruit; a factor above one adds a collision-resolved stride.
-        // The formation engine still owns the slot and continuously reins the runner in.
-        double deltaFactor = state.runnerFactor * armorWeightScale(recruit) - 1.0D;
-        if (Math.abs(deltaFactor) <= 1.0E-4D) {
-            return;
-        }
-        controlled.move(MoverType.SELF, new Vec3(dx * deltaFactor, 0.0D, dz * deltaFactor));
-    }
-
-    private static void applySlowMarchStepDamping(BoostState state) {
-        Vec3 before = state.beforeFormationStep;
-        state.beforeFormationStep = null;
-        AbstractRecruitEntity recruit = state.recruit;
-        if (before == null || recruit == null || !recruit.isAlive() || !recruit.holdFormation) {
-            return;
-        }
-        Entity controlled = controlledEntity(recruit);
-        if (controlled == null || controlled.isRemoved()) {
-            return;
-        }
-
-        Vec3 now = controlled.position();
-        double dx = now.x - before.x;
-        double dz = now.z - before.z;
-        double moved = Math.hypot(dx, dz);
-        if (moved < 0.003D || moved > 0.80D) {
-            return;
-        }
-
-        boolean locked = BetterFormationsCompat.isFormationMemberLocked(state.groupId, recruit.getUUID());
-        if (!locked) {
-            double desiredFactor = SLOW_MARCH_FACTOR * armorWeightScale(controlled);
-            double rewind = 1.0D - Math.max(0.01D, desiredFactor);
-            controlled.move(MoverType.SELF, new Vec3(-dx * rewind, 0.0D, -dz * rewind));
-        }
     }
 
     private static Entity controlledEntity(AbstractRecruitEntity recruit) {
@@ -663,51 +521,19 @@ public final class RTSMovementBoostManager {
         state.lastRecoverySlot = slot;
 
         int delayTicks = RTSServerConfig.CAVALRY_STUCK_RECOVERY_DELAY_SECONDS.get() * 20;
-        double maximumDistance = RTSServerConfig.CAVALRY_STUCK_RECOVERY_MAX_DISTANCE.get();
-        if (state.slotStallTicks < delayTicks || distance > maximumDistance) {
+        if (state.slotStallTicks < delayTicks) {
             return;
         }
-        if (!level.hasChunkAt(BlockPos.containing(slot))
-                || !clearRecoveryPath(level, controlled, slot)
-                || !collisionFreeAt(level, controlled, slot)) {
-            // Keep the counter saturated so an obstacle becoming clear can recover quickly,
-            // but never use this feature to teleport through that obstacle.
-            state.slotStallTicks = delayTicks;
-            return;
-        }
-
-        controlled.teleportTo(slot.x, slot.y, slot.z);
-        controlled.setDeltaMovement(Vec3.ZERO);
-        if (controlled instanceof Mob mob) {
-            mob.getNavigation().stop();
-        }
-        recruit.getNavigation().stop();
-        state.lastVehiclePosition = controlled.position();
+        // Recovery is an explicit collision-aware route invalidation. Never snap or teleport
+        // cavalry through terrain; the native controller must find a wider legal route.
+        NativeFormationController.requestRecovery(state.groupId, recruit.getUUID());
+        if (controlled instanceof Mob mob) mob.getNavigation().stop();
         resetRecovery(state);
         RecruitsRTSCameraMod.LOGGER.debug(
-                "Recovered stuck cavalry recruit {} into its RTS formation slot (group {}).",
+                "Requested a fresh tactical route for stuck cavalry recruit {} (group {}).",
                 recruit.getUUID(),
                 state.groupId
         );
-    }
-
-    private static boolean clearRecoveryPath(ServerLevel level, Entity entity, Vec3 slot) {
-        double eye = Math.max(0.35D, Math.min(1.2D, entity.getBbHeight() * 0.5D));
-        Vec3 start = entity.position().add(0.0D, eye, 0.0D);
-        Vec3 end = slot.add(0.0D, eye, 0.0D);
-        return level.clip(new ClipContext(
-                start,
-                end,
-                ClipContext.Block.COLLIDER,
-                ClipContext.Fluid.NONE,
-                entity
-        )).getType() == HitResult.Type.MISS;
-    }
-
-    private static boolean collisionFreeAt(ServerLevel level, Entity entity, Vec3 slot) {
-        Vec3 delta = slot.subtract(entity.position());
-        AABB destination = entity.getBoundingBox().move(delta).inflate(-0.03D);
-        return level.noCollision(entity, destination);
     }
 
     private static void processForcedOrders() {
@@ -742,13 +568,13 @@ public final class RTSMovementBoostManager {
                 }
             }
 
-            Vec3 current = BetterFormationsCompat.formationCenter(groupId);
-            Vec3 destination = BetterFormationsCompat.formationDestination(groupId);
+            Vec3 current = FormationRuntime.formationCenter(groupId);
+            Vec3 destination = FormationRuntime.formationDestination(groupId);
             if (destination != null) {
                 state.destination = destination;
             }
             if (current == null || state.destination == null) {
-                // Custom/native fallback movement has no Better Formations centre to repair.
+                // Custom/native fallback movement has no native formation runtime centre to repair.
                 // Target suppression still protects the explicit move until normal movement ends.
                 boolean anyMoving = alive.stream().anyMatch(RTSMovementBoostManager::isStillMoving);
                 if (!anyMoving) {
@@ -784,28 +610,28 @@ public final class RTSMovementBoostManager {
             int threshold = RTSServerConfig.FORMATION_STALL_RECOVERY_TICKS.get();
             if (state.stallTicks >= threshold) {
                 double nudge = RTSServerConfig.FORMATION_STALL_NUDGE_STEP.get() * averageArmorWeightScale(alive);
-                Vec3 advanced = BetterFormationsCompat.advanceFormationCenter(groupId, nudge);
+                Vec3 advanced = FormationRuntime.advanceFormationCenter(groupId, nudge);
                 if (advanced != null) {
                     state.lastCenter = advanced;
                 }
             }
 
-            int controlled = BetterFormationsCompat.formationMemberCount(groupId);
+            int controlled = FormationRuntime.formationMemberCount(groupId);
             boolean missingMembers = controlled >= 0 && controlled < alive.size();
             boolean longStall = state.stallTicks >= threshold * 3;
             if ((missingMembers || longStall) && state.repairCooldown <= 0) {
-                // Rebuild from the persisted RTS formation memory. This repairs BF states that
+                // Rebuild from the persisted RTS formation memory. This repairs runtime states that
                 // dropped members or got wedged during a dense cavalry/melee collision.
                 if (FormationService.movePreserved(sender, groupId, alive, state.destination)) {
                     state.repairCooldown = FORCED_ORDER_REPAIR_COOLDOWN;
                     state.stallTicks = 0;
-                    Vec3 repaired = BetterFormationsCompat.formationCenter(groupId);
+                    Vec3 repaired = FormationRuntime.formationCenter(groupId);
                     if (repaired != null) {
                         state.lastCenter = repaired;
                     }
                     RecruitsRTSCameraMod.LOGGER.debug(
-                            "Repaired stalled RTS formation {} (expected {}, BF controlled {}, laggards {}).",
-                            groupId, alive.size(), controlled, BetterFormationsCompat.formationLaggards(groupId)
+                            "Repaired stalled RTS formation {} (expected {}, runtime controlled {}, laggards {}).",
+                            groupId, alive.size(), controlled, FormationRuntime.formationLaggards(groupId)
                     );
                 }
             }
@@ -905,7 +731,6 @@ public final class RTSMovementBoostManager {
         if (state.boostedVehicle != null && state.boostedVehicle != currentVehicle) {
             removeMountModifier(state.boostedVehicle, state.modifierId);
             state.boostedVehicle = null;
-            state.lastVehiclePosition = null;
         }
 
         if (currentVehicle instanceof Mob mob) {
@@ -916,82 +741,6 @@ public final class RTSMovementBoostManager {
             state.boostedVehicle = currentVehicle;
         }
 
-        if (currentVehicle instanceof Mob vehicle && isCavalry(recruit)) {
-            double armorScale = armorWeightScale(vehicle);
-            applyCavalryArmorWeightDamping(state, vehicle, armorScale);
-            double memberPace = state.mode == Mode.HASTY_CAVALRY
-                    ? RTSServerConfig.CAVALRY_HASTY_SPEED.get() * 1.2D * state.runnerFactor
-                    : RTSServerConfig.CAVALRY_FORMATION_SPEED.get() * 1.2D;
-            if (state.mode != Mode.SLOW_MARCH) {
-                applyMountedStrideAssist(state, vehicle, memberPace * armorScale);
-            } else {
-                state.lastVehiclePosition = null;
-            }
-        } else {
-            state.lastVehiclePosition = null;
-        }
-    }
-
-    private static void applyCavalryArmorWeightDamping(BoostState state, Mob vehicle, double armorScale) {
-        Vec3 before = state.beforeFormationStep;
-        state.beforeFormationStep = null;
-        if (before == null || armorScale >= 0.999D) {
-            return;
-        }
-        Vec3 now = vehicle.position();
-        double dx = now.x - before.x;
-        double dz = now.z - before.z;
-        double moved = Math.hypot(dx, dz);
-        if (moved < 0.003D || moved > 0.80D) {
-            return;
-        }
-        // Armor Weight's MULTIPLY_TOTAL modifier normally affects navigation/attributes,
-        // but Better Formations glides mounted entities directly. Rewind the ignored part
-        // of that direct step so the datapack remains meaningful in RTS formations too.
-        double rewind = 1.0D - armorScale;
-        vehicle.move(MoverType.SELF, new Vec3(-dx * rewind, 0.0D, -dz * rewind));
-    }
-
-    /**
-     * Better Formations directly moves a mounted group's vehicle by a maximum 0.3 blocks
-     * each tick, bypassing navigation speed. Measure that real movement and add one more
-     * collision-resolved stride in the same direction. This is intentionally based on
-     * observed movement, so a horse that BF could not move through a wall gets no boost.
-     */
-    private static void applyMountedStrideAssist(BoostState state, Mob vehicle, double memberPace) {
-        Vec3 now = vehicle.position();
-        Vec3 previous = state.lastVehiclePosition;
-        if (previous == null) {
-            state.lastVehiclePosition = now;
-            return;
-        }
-
-        double dx = now.x - previous.x;
-        double dz = now.z - previous.z;
-        double moved = Math.hypot(dx, dz);
-        if (moved < 0.01D || moved > 2.5D) {
-            state.lastVehiclePosition = now;
-            return;
-        }
-
-        // Top up the actual step to the configured pace, with no recursive multiplication
-        // of native navigation plus BF movement. A horse already fast enough gets no push.
-        double extraDistance = Math.min(moved * 2.0D, Math.max(0.0D, memberPace - moved));
-        Vec3 hold = state.recruit.getShouldHoldPos() ? state.recruit.getHoldPos() : null;
-        if (hold != null) {
-            double remaining = Math.hypot(hold.x - now.x, hold.z - now.z);
-            extraDistance = Math.min(extraDistance, Math.max(0.0D, remaining - 0.18D));
-        } else if (state.recruit.getShouldMovePos() && state.recruit.getMovePos() != null) {
-            BlockPos target = state.recruit.getMovePos();
-            double remaining = Math.hypot(target.getX() + 0.5D - now.x, target.getZ() + 0.5D - now.z);
-            extraDistance = Math.min(extraDistance, Math.max(0.0D, remaining - 0.18D));
-        }
-
-        if (extraDistance > 1.0E-4D) {
-            double scale = extraDistance / moved;
-            vehicle.move(MoverType.SELF, new Vec3(dx * scale, 0.0D, dz * scale));
-        }
-        state.lastVehiclePosition = vehicle.position();
     }
 
     private static void stop(UUID id, BoostState state) {
@@ -1015,7 +764,6 @@ public final class RTSMovementBoostManager {
             removeMountModifier(state.boostedVehicle, state.modifierId);
             state.boostedVehicle = null;
         }
-        state.lastVehiclePosition = null;
     }
 
     private static void applyAttributeModifier(LivingEntity entity, UUID modifierId, double amount) {
@@ -1119,8 +867,6 @@ public final class RTSMovementBoostManager {
         private final UUID modifierId;
         private int remainingTicks;
         private LivingEntity boostedVehicle;
-        private Vec3 lastVehiclePosition;
-        private Vec3 beforeFormationStep;
         private Vec3 lastRecoverySlot;
         private double lastSlotDistance = Double.NaN;
         private int slotStallTicks;
@@ -1185,7 +931,6 @@ public final class RTSMovementBoostManager {
         private final UUID groupId;
         private int remainingTicks;
         private int stationaryTicks;
-        private Vec3 beforeFormationStep;
 
         private RotationState(AbstractRecruitEntity recruit, UUID groupId, int remainingTicks) {
             this.recruit = recruit;

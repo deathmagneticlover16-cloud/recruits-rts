@@ -26,8 +26,8 @@ import java.util.function.Supplier;
 
 /**
  * A right-drag RTS order. The two world points define the complete front line.
- * The server validates it, divides it among groups, and lets Better Formations own
- * each group's actual line slots.
+ * The server validates it, divides it among groups, and gives each group to the native
+ * formation runtime for collision-aware line slots.
  */
 public record FrontageGroupsPacket(List<UUID> groupIds, Vec3 start, Vec3 end) {
     private static final double MAX_TARGET_DISTANCE = 112.0D;
@@ -176,8 +176,7 @@ public record FrontageGroupsPacket(List<UUID> groupIds, Vec3 start, Vec3 end) {
                         segment.spacing()
                 );
                 if (!formed) {
-                    // Better Formations is optional. Native Recruits still receives a useful
-                    // side-by-side destination for each selected group.
+                    // Keep a native Recruits fallback if formation planning rejects the order.
                     RecruitCommanderUtil.setRecruitsMove(formationRecruits, surface);
                 }
                 RTSMovementBoostManager.registerFormationMove(sender, groupId, formationRecruits);
@@ -202,7 +201,7 @@ public record FrontageGroupsPacket(List<UUID> groupIds, Vec3 start, Vec3 end) {
         if ((artilleryGuns > 0 || ships > 0) && formedGroups > 0) {
             engine = " · formation line + native heavy-unit line";
         } else if (formedGroups > 0) {
-            engine = " · Better Formations line";
+            engine = " · tactical formation line";
         } else {
             engine = " · native group positions";
         }

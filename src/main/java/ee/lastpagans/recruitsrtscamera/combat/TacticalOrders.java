@@ -5,7 +5,7 @@ import com.talhanation.recruits.entities.IRangedRecruit;
 import com.talhanation.recruits.util.RecruitCommanderUtil;
 import ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
-import ee.lastpagans.recruitsrtscamera.compat.BetterFormationsCompat;
+import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.network.RouteManager;
@@ -136,7 +136,7 @@ public final class TacticalOrders {
         RTSGroupAttackManager.cancel(List.of(id));
         RouteManager.cancel(sender, List.of(id));
         RTSMovementBoostManager.cancelForcedOrders(List.of(id));
-        BetterFormationsCompat.releaseForAttack(sender, id);
+        FormationRuntime.releaseForAttack(sender, id);
         FormationService.releaseCustomForAttack(sender, id, members);
         for (var recruit : members) {
             recruit.getNavigation().stop(); recruit.clearMovePos(); recruit.clearHoldPos();

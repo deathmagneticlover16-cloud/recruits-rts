@@ -23,7 +23,7 @@ public final class ArtilleryFormationMath {
         }
         double safeSpacing = clampSpacing(spacing);
         double radians = Math.toRadians(facingYaw);
-        // Better Formations/Minecraft-facing convention: this is the formation-right axis.
+        // Native formation runtime/Minecraft-facing convention: this is the formation-right axis.
         double rightX = Math.cos(radians);
         double rightZ = Math.sin(radians);
         double half = (count - 1) * safeSpacing * 0.5D;

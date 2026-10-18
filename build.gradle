@@ -51,7 +51,6 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     implementation fg.deobf(files('libs/recruits.jar'))
     implementation fg.deobf(files('libs/freecam.jar'))
-    implementation fg.deobf(files('libs/betterformations.jar'))
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 

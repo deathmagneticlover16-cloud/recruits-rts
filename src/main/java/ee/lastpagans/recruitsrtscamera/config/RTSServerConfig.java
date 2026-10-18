@@ -24,6 +24,15 @@ public final class RTSServerConfig {
     public static final ForgeConfigSpec.IntValue FOG_SHIP_VISION_RADIUS;
     public static final ForgeConfigSpec.BooleanValue FOG_BLOCK_HIDDEN_TARGETING;
     public static final ForgeConfigSpec.BooleanValue FORMATION_DOCTRINE_ENABLED;
+    public static final ForgeConfigSpec.BooleanValue NATIVE_FORMATION_RUNTIME;
+    public static final ForgeConfigSpec.BooleanValue RUNTIME_BRAIN;
+    public static final ForgeConfigSpec.BooleanValue GOAL_SUPPRESSION;
+    public static final ForgeConfigSpec.BooleanValue AI_SCHEDULER;
+    public static final ForgeConfigSpec.BooleanValue LOCAL_STEERING;
+    public static final ForgeConfigSpec.BooleanValue TACTICAL_NAVIGATION;
+    public static final ForgeConfigSpec.BooleanValue PROJECTILE_AWARENESS;
+    public static final ForgeConfigSpec.IntValue FORMATION_PATHS_PER_TICK;
+    public static final ForgeConfigSpec.IntValue AGENT_PATHS_PER_TICK;
     public static final ForgeConfigSpec.BooleanValue CAVALRY_STUCK_RECOVERY;
     public static final ForgeConfigSpec.IntValue CAVALRY_STUCK_RECOVERY_DELAY_SECONDS;
     public static final ForgeConfigSpec.DoubleValue CAVALRY_STUCK_RECOVERY_MIN_DISTANCE;
@@ -112,11 +121,41 @@ public final class RTSServerConfig {
                 .define("enabled", true);
         BUILDER.pop();
 
+        BUILDER.push("tacticalRuntime");
+        NATIVE_FORMATION_RUNTIME = BUILDER
+                .comment("Use the built-in slot, route, and formation movement controller.")
+                .define("nativeFormationRuntime", true);
+        RUNTIME_BRAIN = BUILDER
+                .comment("Maintain transient orthogonal recruit runtime state and dirty flags.")
+                .define("runtimeBrain", true);
+        GOAL_SUPPRESSION = BUILDER
+                .comment("Gate native utility movement goals while the RTS formation runtime owns movement.")
+                .define("goalSuppression", true);
+        AI_SCHEDULER = BUILDER
+                .comment("Budget formation and individual recovery route calculations across server ticks.")
+                .define("aiScheduler", true);
+        LOCAL_STEERING = BUILDER
+                .comment("Use damped slot steering and spatial-grid friendly separation before requesting recovery paths.")
+                .define("localSteering", true);
+        TACTICAL_NAVIGATION = BUILDER
+                .comment("Use collision-shape-aware tactical routes with stair, ladder, and hole handling.")
+                .define("tacticalNavigation", true);
+        PROJECTILE_AWARENESS = BUILDER
+                .comment("Wake a formation and raise available shields when hostile projectiles enter its corridor or hit a member.")
+                .define("projectileAwareness", true);
+        FORMATION_PATHS_PER_TICK = BUILDER
+                .comment("Maximum new shared formation routes calculated during one server tick.")
+                .defineInRange("formationPathsPerTick", 3, 1, 32);
+        AGENT_PATHS_PER_TICK = BUILDER
+                .comment("Maximum local recruit recovery routes calculated during one server tick.")
+                .defineInRange("agentPathsPerTick", 10, 1, 128);
+        BUILDER.pop();
+
         BUILDER.push("formationRecovery");
         CAVALRY_STUCK_RECOVERY = BUILDER
                 .comment(
-                        "Allow mounted recruits that fail to converge on a formation slot for a long time to snap to that slot.",
-                        "Recovery only occurs over a short, unobstructed distance into a collision-free destination; it is not a wall-bypass teleport."
+                        "Allow mounted recruits that fail to converge on a formation slot for a long time to request a fresh tactical route.",
+                        "Recovery never teleports the mount and must still find a collision-safe path."
                 )
                 .define("cavalryStuckRecovery", true);
         CAVALRY_STUCK_RECOVERY_DELAY_SECONDS = BUILDER
@@ -126,10 +165,10 @@ public final class RTSServerConfig {
                 .comment("Minimum slot error in blocks before stuck recovery is relevant.")
                 .defineInRange("cavalryStuckRecoveryMinDistance", 3.0D, 1.5D, 8.0D);
         CAVALRY_STUCK_RECOVERY_MAX_DISTANCE = BUILDER
-                .comment("Maximum horizontal snap distance. Larger separations must still be solved by normal movement/pathing.")
+                .comment("Legacy compatibility value retained for existing server configs. Tactical recovery never snaps or teleports cavalry.")
                 .defineInRange("cavalryStuckRecoveryMaxDistance", 12.0D, 4.0D, 24.0D);
         FORMATION_ORDER_WATCHDOG = BUILDER
-                .comment("Keep an explicit RTS move/reform authoritative while Better Formations is stalled by combat or cohesion, and repair long stalls conservatively.")
+                .comment("Keep an explicit RTS move/reform authoritative while the formation runtime is stalled by combat or cohesion, and repair long stalls conservatively.")
                 .define("formationOrderWatchdog", true);
         FORMATION_STALL_RECOVERY_TICKS = BUILDER
                 .comment("Ticks without meaningful formation-centre progress before the RTS watchdog begins a conservative centre nudge.")

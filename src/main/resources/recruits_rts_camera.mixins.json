@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "ee.lastpagans.recruitsrtscamera.mixin",
   "compatibilityLevel": "JAVA_17",
-  "mixins": ["MobGoalAccess", "RecruitRoutingMixin", "RecruitShieldMixin"],
+  "mixins": ["MobGoalAccess", "RecruitRoutingMixin", "RecruitShieldMixin", "RecruitGoalGateMixin", "HorsemanGoalGateMixin", "NomadGoalGateMixin", "FormationUtilsMixin", "NativeOrderFormationReleaseMixin"],
   "client": [
     "KeyMappingMixin",
     "KeyboardHandlerMixin",
