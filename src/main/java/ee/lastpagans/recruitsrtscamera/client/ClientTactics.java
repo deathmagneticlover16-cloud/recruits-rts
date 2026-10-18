@@ -6,14 +6,9 @@ import java.util.*;
 
 public final class ClientTactics {
     private static final Map<UUID, TacticalSettings> SETTINGS = new HashMap<>();
-    private static boolean chargeArmed;
     private ClientTactics() {}
     public static void apply(Map<UUID, TacticalSettings> settings) { SETTINGS.clear(); SETTINGS.putAll(settings); }
-    public static void reset() { SETTINGS.clear(); chargeArmed = false; }
-    public static boolean chargeArmed() { return chargeArmed; }
-    public static void armCharge() { chargeArmed = !chargeArmed; }
-    public static boolean consumeCharge() { boolean value = chargeArmed; chargeArmed = false; return value; }
-    public static void cancelCharge() { chargeArmed = false; }
+    public static void reset() { SETTINGS.clear(); }
     public static void send(TacticsControlPacket.Action action) {
         var ids = RTSCameraController.commanderSelectedGroups();
         if (!ids.isEmpty()) RTSCameraNetwork.CHANNEL.sendToServer(new TacticsControlPacket(new ArrayList<>(ids), action));

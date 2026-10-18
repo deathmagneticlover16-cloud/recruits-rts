@@ -143,6 +143,8 @@ public final class RTSCameraController {
     private static int statusTicks;
     private static long lastTerrainOrderMillis;
     private static BlockPos lastTerrainOrderTarget;
+    private static long lastEnemyOrderMillis;
+    private static UUID lastEnemyOrderTarget;
 
     private static boolean oldAllowInteract;
     private static boolean oldFreezePlayer;
@@ -221,13 +223,7 @@ public final class RTSCameraController {
         if (!active || MC.level == null || SELECTED_GROUPS.isEmpty()) return false;
         var entity = MC.level.getEntity(entityId);
         if (!(entity instanceof LivingEntity living) || !isAttackableTarget(living)) return false;
-        boolean charge = ClientTactics.consumeCharge();
-        RTSCameraNetwork.CHANNEL.sendToServer(new AttackGroupsPacket(new ArrayList<>(SELECTED_GROUPS), entityId, charge));
-        clearCurrentOrderPreviews(SELECTED_GROUPS);
-        lastTerrainOrderMillis = 0L;
-        lastTerrainOrderTarget = null;
-        setStatus((charge ? "Charge order" : selectedAttackPrefersRangedTargeting() ? "Tracked ranged target" : "Attack order")
-                + " sent to " + SELECTED_GROUPS.size() + " group(s). ");
+        sendAttackOrder(living);
         return true;
     }
 
@@ -251,6 +247,7 @@ public final class RTSCameraController {
         if (!active || groupId == null || findOwnedClientGroup(groupId) == null) {
             return;
         }
+        clearEnemyDoubleClick();
         if (!additive) {
             SELECTED_GROUPS.clear();
         }
@@ -685,7 +682,7 @@ public final class RTSCameraController {
     }
 
     public static void stop(String reason) {
-        ClientTactics.cancelCharge();
+        clearEnemyDoubleClick();
         if (!active) {
             return;
         }
@@ -979,7 +976,7 @@ public final class RTSCameraController {
     }
 
     private static void haltSelection() {
-        ClientTactics.cancelCharge();
+        clearEnemyDoubleClick();
         applySelectionToRecruits();
         if (SELECTED_GROUPS.isEmpty()) {
             setStatus("Select at least one group to halt.");
@@ -1259,7 +1256,7 @@ public final class RTSCameraController {
     }
 
     public static void clearSelection() {
-        ClientTactics.cancelCharge();
+        clearEnemyDoubleClick();
         if (!active) {
             return;
         }
@@ -1270,6 +1267,7 @@ public final class RTSCameraController {
     }
 
     private static void selectClickedGroup(boolean additive) {
+        clearEnemyDoubleClick();
         UUID groupId = RTSClientConfig.usesGroundMarkers()
                 ? markerGroupAtCursor(cursorX, cursorY)
                 : null;
@@ -1302,6 +1300,7 @@ public final class RTSCameraController {
     }
 
     private static void selectGroupsInBox(boolean additive) {
+        clearEnemyDoubleClick();
         Set<UUID> inside = groupsInsideCurrentBox();
         if (!additive) {
             SELECTED_GROUPS.clear();
@@ -1415,23 +1414,10 @@ public final class RTSCameraController {
 
         LivingEntity target = raycastAttackTarget(cursorX, cursorY);
         if (isAttackableTarget(target)) {
-            boolean charge = ClientTactics.consumeCharge();
-            RTSCameraNetwork.CHANNEL.sendToServer(new AttackGroupsPacket(
-                    new ArrayList<>(SELECTED_GROUPS),
-                    target.getId(), charge
-            ));
-            clearCurrentOrderPreviews(SELECTED_GROUPS);
-            lastTerrainOrderMillis = 0L;
-            lastTerrainOrderTarget = null;
-            setStatus((charge ? "Charge order" : selectedAttackPrefersRangedTargeting() ? "Tracked ranged target" : "Attack order")
-                    + " sent to " + SELECTED_GROUPS.size() + " group(s). ");
+            sendAttackOrder(target);
             return;
         }
-
-        if (ClientTactics.chargeArmed()) {
-            setStatus("Charge: right-click an enemy troop or banner. Click Charge again to cancel.");
-            return;
-        }
+        clearEnemyDoubleClick();
         GroundHit groundHit = raycastGroundHit(cursorX, cursorY);
         BlockPos targetPos = groundHit == null ? null : groundHit.pos();
         if (targetPos == null) {
@@ -1486,6 +1472,33 @@ public final class RTSCameraController {
         return Math.abs(targetPos.getX() - lastTerrainOrderTarget.getX()) <= HASTY_TARGET_TOLERANCE
                 && Math.abs(targetPos.getY() - lastTerrainOrderTarget.getY()) <= HASTY_TARGET_TOLERANCE
                 && Math.abs(targetPos.getZ() - lastTerrainOrderTarget.getZ()) <= HASTY_TARGET_TOLERANCE;
+    }
+
+    private static void sendAttackOrder(LivingEntity target) {
+        long now = System.currentTimeMillis();
+        UUID targetKey = target.getUUID();
+        if (target instanceof AbstractRecruitEntity recruit && recruit.getGroup() != null) {
+            targetKey = recruit.getGroup();
+        }
+        boolean charge = targetKey.equals(lastEnemyOrderTarget)
+                && lastEnemyOrderMillis > 0L
+                && now - lastEnemyOrderMillis <= HASTY_DOUBLE_CLICK_MS;
+        RTSCameraNetwork.CHANNEL.sendToServer(new AttackGroupsPacket(
+                new ArrayList<>(SELECTED_GROUPS), target.getId(), charge));
+        clearCurrentOrderPreviews(SELECTED_GROUPS);
+        lastTerrainOrderMillis = 0L;
+        lastTerrainOrderTarget = null;
+        lastEnemyOrderMillis = charge ? 0L : now;
+        lastEnemyOrderTarget = charge ? null : targetKey;
+        setStatus((charge ? "Charge order" : selectedAttackPrefersRangedTargeting()
+                ? "Tracked ranged target" : "Attack order")
+                + " sent to " + SELECTED_GROUPS.size() + " group(s)."
+                + (charge ? "" : " Double-RMB the same enemy to charge."));
+    }
+
+    private static void clearEnemyDoubleClick() {
+        lastEnemyOrderMillis = 0L;
+        lastEnemyOrderTarget = null;
     }
 
     private static void issueFrontageOrder() {

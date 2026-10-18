@@ -22,7 +22,9 @@ public final class FormationSlotMath {
         double depth = Math.max(1.1D, 1.12D * spacing) * (mounted ? 1.7D : 1.0D);
         List<Offset> result = new ArrayList<>(count);
         switch (kind == null ? FormationKind.MARCH : kind) {
-            case MARCH -> addGrid(result, count, Math.min(4, Math.max(2, (int) Math.ceil(Math.sqrt(count)))), side, depth);
+            // A march is a road column. Keep two files for normal groups and a single
+            // file for tiny groups instead of allowing it to widen into a square grid.
+            case MARCH -> addGrid(result, count, count < 4 ? 1 : 2, side, depth);
             case LINE -> {
                 int ranks = requestedRanks > 0 ? requestedRanks
                         : frontageWidth > 0.0D ? Math.max(1,

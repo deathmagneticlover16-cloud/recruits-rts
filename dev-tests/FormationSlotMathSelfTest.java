@@ -27,6 +27,11 @@ public final class FormationSlotMathSelfTest {
         var foot = FormationSlotMath.create(FormationKind.MARCH, 16, 1.0D, 0, 0.0D, false);
         var mounted = FormationSlotMath.create(FormationKind.MARCH, 16, 1.0D, 0, 0.0D, true);
         truth(extent(mounted) > extent(foot) * 1.5D, "mounted formations have wider clearance");
+        eq((int) foot.stream().map(FormationSlotMath.Offset::right).distinct().count(), 2,
+                "march uses a two-file column");
+        var tinyMarch = FormationSlotMath.create(FormationKind.MARCH, 3, 1.0D, 0, 0.0D, false);
+        eq((int) tinyMarch.stream().map(FormationSlotMath.Offset::right).distinct().count(), 1,
+                "tiny march uses a single-file column");
     }
 
     private static void assignment() {

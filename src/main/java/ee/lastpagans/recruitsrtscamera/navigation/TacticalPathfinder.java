@@ -94,6 +94,37 @@ public final class TacticalPathfinder {
         return cell == null ? null : cell.position;
     }
 
+    /**
+     * Resolve a formation slot without silently moving it to the bottom of a hole.
+     * Small shape-height differences are valid; a surface more than a step below the
+     * formation plane is not. In that case an adjacent surface at the intended level
+     * is preferred so the member routes around the opening.
+     */
+    public static Vec3 nearestFormationStandable(ServerLevel level, Mob mover, Vec3 desired) {
+        Cell best = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        BlockPos origin = BlockPos.containing(desired);
+        for (int radius = 0; radius <= 2; radius++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (radius > 0 && Math.max(Math.abs(dx), Math.abs(dz)) != radius) continue;
+                    for (int floorY = origin.getY() - 1; floorY <= origin.getY() + 2; floorY++) {
+                        Cell cell = standingOn(level, mover,
+                                new BlockPos(origin.getX() + dx, floorY, origin.getZ() + dz));
+                        if (cell == null || cell.position.y < desired.y - 0.70D) continue;
+                        double vertical = Math.abs(cell.position.y - desired.y);
+                        double score = horizontalDistanceSq(cell.position, desired) + vertical * vertical * 2.0D;
+                        if (score < bestScore) {
+                            best = cell;
+                            bestScore = score;
+                        }
+                    }
+                }
+            }
+        }
+        return best == null ? null : best.position;
+    }
+
     /** Resolve only the requested column. Used by local steering so it never selects a ledge beside the probe. */
     public static Vec3 standableAt(ServerLevel level, Mob mover, Vec3 desired) {
         BlockPos origin = BlockPos.containing(desired);
@@ -340,21 +371,30 @@ public final class TacticalPathfinder {
         }
         Collections.reverse(reversed);
         boolean constrained = false;
+        int constrainedStart = -1;
+        int constrainedEnd = -1;
         List<Vec3> points = new ArrayList<>(reversed.size());
         Cell previous = null;
         for (int i = 0; i < reversed.size(); i++) {
             Cell cell = reversed.get(i);
             points.add(cell.position);
-            if (cell.climbable || previous != null && Math.abs(cell.position.y - previous.position.y) > 0.40D) {
-                constrained = true;
-            }
+            boolean narrow = cell.climbable
+                    || previous != null && Math.abs(cell.position.y - previous.position.y) > 0.40D;
             // A flat doorway, bridge, ledge, or one-block corridor also cannot carry a full
             // formation. Endpoints are ignored so a destination beside a wall can still reform.
-            if (i > 0 && i + 1 < reversed.size() && openSides(level, mover, cell) < 4) constrained = true;
+            if (i > 0 && i + 1 < reversed.size() && openSides(level, mover, cell) < 4) narrow = true;
+            if (narrow) {
+                constrained = true;
+                if (constrainedStart < 0) constrainedStart = i;
+                constrainedEnd = i;
+            }
             previous = cell;
         }
         List<Vec3> immutable = List.copyOf(points);
-        return new Route(immutable, complete, constrained, TacticalTerrainRevisions.snapshot(level, immutable));
+        if (constrainedStart >= 0) constrainedStart = Math.max(1, constrainedStart - 2);
+        if (constrainedEnd >= 0) constrainedEnd = Math.min(points.size() - 1, constrainedEnd + 2);
+        return new Route(immutable, complete, constrained, constrainedStart, constrainedEnd,
+                TacticalTerrainRevisions.snapshot(level, immutable));
     }
 
     private static int openSides(ServerLevel level, Mob mover, Cell cell) {
@@ -392,11 +432,18 @@ public final class TacticalPathfinder {
         return Double.isFinite(value.x) && Double.isFinite(value.y) && Double.isFinite(value.z);
     }
 
+    private static double horizontalDistanceSq(Vec3 a, Vec3 b) {
+        double dx = a.x - b.x;
+        double dz = a.z - b.z;
+        return dx * dx + dz * dz;
+    }
+
     private record Cell(BlockPos key, Vec3 position, boolean climbable) {}
     private record SearchNode(Cell cell, double score) {}
 
-    public record Route(List<Vec3> points, boolean complete, boolean constrained, Map<Long, Long> terrainRevisions) {
-        public static final Route EMPTY = new Route(List.of(), false, false, Map.of());
+    public record Route(List<Vec3> points, boolean complete, boolean constrained,
+                        int constrainedStart, int constrainedEnd, Map<Long, Long> terrainRevisions) {
+        public static final Route EMPTY = new Route(List.of(), false, false, -1, -1, Map.of());
 
         public boolean isValid(ServerLevel level) {
             return TacticalTerrainRevisions.valid(level, terrainRevisions);

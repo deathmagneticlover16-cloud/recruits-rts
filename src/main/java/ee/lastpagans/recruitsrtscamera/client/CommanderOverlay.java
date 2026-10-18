@@ -181,10 +181,6 @@ public final class CommanderOverlay {
             return true;
         }
 
-        if (layout.chargeButton().contains(mouseX, mouseY)) {
-            if (!RTSCameraController.commanderSelectedGroups().isEmpty()) ClientTactics.armCharge();
-            return true;
-        }
         if (layout.tacticsButton().contains(mouseX, mouseY)) {
             tacticsMenuOpen = !tacticsMenuOpen;
             formationMenuOpen = false;
@@ -629,13 +625,8 @@ public final class CommanderOverlay {
         boolean hasSelection = RTSCommandFacade.selectedGroupCount() > 0;
         int aggro = RTSCommandFacade.selectedAggroState();
         boolean aggressive = aggro == 2;
-        renderItemButton(graphics, layout.chargeButton(), net.minecraft.world.item.Items.IRON_SWORD,
-                ClientTactics.chargeArmed());
         renderItemButton(graphics, layout.tacticsButton(), net.minecraft.world.item.Items.WRITABLE_BOOK, tacticsMenuOpen);
-        if (layout.chargeButton().contains(guiMouseX(), guiMouseY()))
-            renderCommandTooltip(graphics, ClientTactics.chargeArmed() ? "Charge armed" : "Charge",
-                    "Click, then right-click an enemy. Click again or Halt to cancel.");
-        else if (layout.tacticsButton().contains(guiMouseX(), guiMouseY()))
+        if (layout.tacticsButton().contains(guiMouseX(), guiMouseY()))
             renderCommandTooltip(graphics, "Tactics and abilities", "Skirmish, weapon modes, mounts, shields and battle abilities.");
         boolean shieldsUp = RTSCommandFacade.selectedShieldsUp();
         boolean slowMarch = RTSCommandFacade.selectedSlowMarch();
@@ -949,7 +940,7 @@ public final class CommanderOverlay {
         Bounds next = new Bounds(navBaseX + NAV_WIDTH + CARD_GAP, navY1,
                 navBaseX + NAV_WIDTH * 2 + CARD_GAP, navY2);
 
-        int commandCount = 13;
+        int commandCount = 12;
         int totalButtons = COMMAND_BUTTON_SIZE * commandCount + COMMAND_BUTTON_GAP * (commandCount - 1);
         int buttonX = panelX + Math.max(8, (panelWidth - totalButtons) / 2);
         int buttonY1 = panelBottom - COMMAND_BAR_HEIGHT + 2;
@@ -978,8 +969,6 @@ public final class CommanderOverlay {
         Bounds enemyBanners = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
 
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
-        Bounds charge = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
-        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds tactics = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
 
         return new Layout(
@@ -988,7 +977,7 @@ public final class CommanderOverlay {
                 cardsX, cardsRight - navSpace,
                 cardsPerPage, pageCount,
                 prev, next, formation, halt, aggression, shields,
-                slowMarch, looseSpacing, fireControl, missile, bodyguard, bodyguardFollow, enemyBanners, charge, tactics
+                slowMarch, looseSpacing, fireControl, missile, bodyguard, bodyguardFollow, enemyBanners, tactics
         );
     }
 
@@ -1172,7 +1161,6 @@ public final class CommanderOverlay {
             Bounds bodyguardButton,
             Bounds bodyguardFollowButton,
             Bounds enemyBannersButton,
-            Bounds chargeButton,
             Bounds tacticsButton
     ) {
         private static final Layout EMPTY = new Layout(0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
@@ -1182,7 +1170,7 @@ public final class CommanderOverlay {
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
-                new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0));
+                new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0));
 
         boolean contains(int x, int y) {
             return x >= panelX && x < panelRight && y >= panelY && y < panelBottom;
