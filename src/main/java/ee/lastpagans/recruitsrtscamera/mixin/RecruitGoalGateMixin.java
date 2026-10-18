@@ -39,14 +39,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class RecruitGoalGateMixin {
     @Shadow(remap = false) private AbstractRecruitEntity recruit;
 
-    @Inject(method = "canUse", at = @At("HEAD"), cancellable = true)
+    // Recruits is supplied as its production JAR, so overridden vanilla Goal methods retain
+    // their SRG names on the annotation-processor classpath. Explicit selectors also avoid
+    // descriptor inference across this multi-target mixin.
+    @Inject(method = "m_8036_()Z", at = @At("HEAD"), cancellable = true, remap = false)
     private void rts$singleMovementAuthorityOnStart(CallbackInfoReturnable<Boolean> result) {
         rts$gateMovementGoal(result);
     }
 
     // Some of the mixed goal classes inherit Goal.canContinueToUse() instead of
     // overriding it, so this injection is optional across the multi-target mixin.
-    @Inject(method = "canContinueToUse", at = @At("HEAD"), cancellable = true, require = 0)
+    @Inject(method = "m_8045_()Z", at = @At("HEAD"), cancellable = true, require = 0, remap = false)
     private void rts$singleMovementAuthorityWhileRunning(CallbackInfoReturnable<Boolean> result) {
         rts$gateMovementGoal(result);
     }

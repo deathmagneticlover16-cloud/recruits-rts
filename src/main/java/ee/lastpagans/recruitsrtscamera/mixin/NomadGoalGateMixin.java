@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class NomadGoalGateMixin {
     @Shadow(remap = false) @Final private NomadEntity nomad;
 
-    @Inject(method = {"canUse", "canContinueToUse"}, at = @At("HEAD"), cancellable = true)
+    @Inject(method = {"m_8036_()Z", "m_8045_()Z"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void rts$singleMountedAuthority(CallbackInfoReturnable<Boolean> result) {
         RecruitRuntimeMetrics.NATIVE_GOAL_EVALUATIONS.increment();
         if (RTSServerConfig.GOAL_SUPPRESSION.get() && RecruitRuntimeRegistry.brain(nomad).authority()
