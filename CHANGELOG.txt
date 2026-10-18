@@ -1,0 +1,59 @@
+Recruits: RTS Camera 0.12.0-server.1
+Combat and tactical orders expansion
+
+NEW CONTROLS
+- Sword button: arm Charge, then right-click an enemy troop or its banner. Click again or Halt to cancel the cursor. Charge orders skip the normal formation staging delay; foot melee troops get +20% movement for eight seconds. Mounted melee uses the committed cavalry pass and existing measured impact damage. Charge does not switch archers out of ranged mode; choose Melee first when appropriate.
+- Book button: open Tactics & Abilities. Choose Skirmish ON/OFF, Ranged/Melee/Native weapon choice, Mount/Dismount, FRONT/UP/AUTO/Native shields, Second Wind, Hold the Line or War Cry.
+- Group weapon, skirmish, shield and Hold Fire preferences persist across reloads and reconnects. The tactics panel shows common selected settings, or Mixed tactical modes. Ordinary movement/Halt cancels combat movement without erasing saved preferences.
+- Server validates group ownership and command permission. Network protocol is rts-camera-120; update BOTH clients and server together. Native dependency versions remain Recruits 1.15.2, Forge 47.2.0, Minecraft 1.20.1.
+
+SKIRMISH
+- Works during explicit Commander attack orders for ranged infantry and horse archers. Repositioning temporarily owns movement; native ranged AI handles firing, ammunition and weapon presentation while in the useful range band.
+- Foot troops retreat when enemies approach within eight blocks and continue until fourteen blocks clear. Mounted skirmishers use twelve/twenty blocks. Advance and stop thresholds are also separate (foot 27/21, mounted 32/25) to avoid a single-distance forward/backward loop.
+- Retreat chooses an outward heading and uses normal navigation pace. Local hostile checks and path requests are throttled. Skirmishing does not set morale routing, disband the group, or remove troops.
+- Native terrain pathfinding still determines whether a retreat route exists. A soldier trapped by terrain is not teleported out.
+
+WEAPON AND MOUNT CONTROL
+- Melee mode disables ranged AI and equips a carried sword, axe, trident or tagged throwable melee weapon when replacing a bow/crossbow. It does not create missing equipment. Ranged mode permits native ranged weapon use; Native returns that choice to Recruits.
+- Hold Fire is now persistent and attack-order refreshes respect it. Strategic Fire respects Hold Fire and explicit Melee mode. Commander throws check Hold Fire both before wind-up and at release.
+- Dismount cancels current movement/attack and remembers the horse. The troop stays on foot until Mount is ordered. Mount uses a loaded remembered horse, or an available nearby horse belonging to the commander; it uses native mount navigation and never spawns or steals a horse. Ships are excluded from horse dismounting.
+
+SHIELDS
+- FRONT reacts to nearby melee threats/swings and raises the shield between attacks. Vanilla directional blocking, shield disable cooldown and equipment durability remain in force.
+- UP braces shields and additionally intercepts descending arrows/javelins from above, consuming shield durability. Piercing arrows and shield-bypassing damage are excluded from the overhead interception.
+- AUTO detects approaching local missiles and briefly alerts the whole recruit group to raise shields. Food, potions and active ranged item use take priority.
+- Native UseShield is suppressed while a tactical shield stance owns the shield, preventing its raise/lower loop from competing. The original shields button restores native shield control.
+- UP is a gameplay stance with the native blocking pose in this version. A bespoke overhead arm/shield animation is still pending the animation addon; do not claim it is implemented.
+
+BATTLE ABILITIES
+- Second Wind removes 25 fatigue from loaded commandable members; 60-second group cooldown.
+- Hold the Line halves Commander-applied morale shocks for 15 seconds; 60-second group cooldown. It does not make the group immune to routing or every native morale loss.
+- War Cry applies an eight-point morale shock to hostile formations with members visible within 18 blocks; 90-second group cooldown. Enemy groups receive at most one such shock per ten seconds, including cries from multiple selected groups.
+- Cooldowns and effect expiry are saved. No ability rallies routed troops or restores their commandability. The action bar reports unavailable/on-cooldown orders.
+
+CAVALRY AND FORMATION COMBAT
+- CavalryManeuver is the tested, dependency-free tactical plan; CavalryTacticalController adapts its waypoints to Minecraft's navigation.
+- A charge freezes its impact/exit points. A moving or replaced defender cannot drag the horse's current pass backward. Riders continue beyond the line, follow four points around a six-block turn radius, then accept the next pass target.
+- Group members turn in the same direction. Cavalry uses its distributed defender positions instead of the former five random lane-offset buckets.
+- Both rider and mount movement goals are reserved while the controller is active. Cancellation removes installed goals and stops navigation; idle goal accumulation from 0.11.0 is fixed.
+- Unreachable paths receive a turn-out attempt and bounded retry/pause. This is a tactical movement rewrite using the existing terrain navigator, not a replacement for Minecraft's pathfinding engine.
+- Formation target leases enforce each recruit's assigned defender against native retarget/LOS searches. Staging clears native targets; melee, ranged and thrown opening missiles use distributed formation assignments. Replacement defenders are balanced across the formation.
+- Attack expiry, missing groups, Halt, replacement orders, logout, dimension changes and routing clean up the tactical controllers. Network movement cancellation is scoped to owned groups.
+
+PROJECTILE LETHALITY
+- New [projectiles] config: arrowLightArmorDamageMultiplier=2.0; javelinLightArmorDamageMultiplier=1.6.
+- Applies to recruit-fired arrows/Commander thrown weapons hitting recruits. The extra multiplier decreases linearly with armor and reaches 1x at twenty armor points. Vanilla armor, enchantments and shields still resolve the hit afterward. Set either value to 1 to disable that bonus.
+- Cannonball penetration and explosive shrapnel are not part of this release.
+
+RETAINED / BOUNDARIES
+- Routing disband, persistent escapes at normal pace, RoutedDesertersEvent, finite cavalry charge momentum/morale pressure, Armor Weight compatibility and all supplied GUI art remain.
+- RoutedDesertersEvent still fires before actual living escaped survivors are removed. Settlements/campaign consequences remain outside Commander.
+- Optional Order Relay/SPA/Small Ships/Siege Weapons integrations remain optional. New tactics use existing generic Order Relay command categories where available.
+- Crouch/prone with real hitboxes, war dogs, cannon penetration/shrapnel, synchronized Volley, scouting/LOS banner overhaul and further Bodyguard movement fixes remain on the roadmap.
+
+VALIDATION / BUILD
+- Java 17 compiled CavalryManeuver, TacticalMath, TacticalSettings and ChargeMomentum with their standalone tests: 44 new tactical checks plus 19 existing momentum checks passed.
+- All 114 main Java files passed Java 17 syntax parsing. Native methods/fields and the new UseShield mixin target were checked in the bundled Recruits JAR. Bundled dependency ZIP CRC checks passed.
+- Full Forge compile was attempted but stopped before compilation: Gradle could not download gradle-8.1.1-bin.zip (Network is unreachable). No full semantic Forge compile, client/server launch, UI render or in-game combat pass is claimed.
+- Run BUILD.bat or gradlew.bat clean build with Java 17. Expected output: build/libs/recruits-rts-camera-0.12.0-server.1.jar. Replace the previous addon on clients and server.
+- First game checks: charge and kill the assigned defender mid-pass; cancel with Halt; ranged/melee/hold-fire combinations; foot and mounted skirmishing; dismount/remount; shield overhead/frontal/rear/piercing hits; ability cooldown after reload; 100v100 target spread; routing plus reload and campaign event.

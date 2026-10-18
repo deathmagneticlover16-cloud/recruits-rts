@@ -1,0 +1,11 @@
+{
+  "advisor_general_attacked": {"sounds": ["recruits_rts_camera:advisor/latin/latin_00", "recruits_rts_camera:advisor/latin/latin_01"]},
+  "advisor_unit_rout": {"sounds": ["recruits_rts_camera:advisor/latin/latin_02", "recruits_rts_camera:advisor/latin/latin_03", "recruits_rts_camera:advisor/latin/latin_08", "recruits_rts_camera:advisor/latin/latin_12"]},
+  "advisor_units_tired": {"sounds": ["recruits_rts_camera:advisor/latin/latin_04", "recruits_rts_camera:advisor/latin/latin_11"]},
+  "advisor_unit_fallen": {"sounds": ["recruits_rts_camera:advisor/latin/latin_05", "recruits_rts_camera:advisor/latin/latin_09"]},
+  "advisor_ammo_depleted": {"sounds": ["recruits_rts_camera:advisor/latin/latin_06", "recruits_rts_camera:advisor/latin/latin_07"]},
+  "advisor_units_exhausted": {"sounds": ["recruits_rts_camera:advisor/latin/latin_10", "recruits_rts_camera:advisor/latin/latin_16", "recruits_rts_camera:advisor/latin/latin_17"]},
+  "advisor_enemy_commander_fallen": {"sounds": ["recruits_rts_camera:advisor/latin/latin_13", "recruits_rts_camera:advisor/latin/latin_14"]},
+  "advisor_enemy_unit_rout": {"sounds": ["recruits_rts_camera:advisor/latin/latin_15"]},
+  "advisor_artillery_attacked": {"sounds": ["recruits_rts_camera:advisor/latin/latin_18"]}
+}

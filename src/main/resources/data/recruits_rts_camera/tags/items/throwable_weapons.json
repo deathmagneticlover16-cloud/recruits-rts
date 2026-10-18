@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    {"id": "antiquelegacy:iron_antique_spear", "required": false},
+    {"id": "antiquelegacy:iron_triarii_spear", "required": false}
+  ]
+}

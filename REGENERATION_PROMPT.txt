@@ -1,0 +1,147 @@
+RECRUITS: RTS CAMERA / COMMANDER - REGENERATION CONTEXT
+Current source version: 0.12.0-server.1
+Minecraft/loader: Forge 1.20.1, Forge 47.2.0
+Base dependency: Villager Recruits 1.15.2. Better Formations 1.0.3 is integrated. Freecam is bundled as a compile dependency. Order Relay, Serious Player Animations, Siege Weapons and Small Ships integrations must remain optional.
+
+PROJECT GOAL
+Turn Recruits combat into a Total War: Rome II-like RTS commander mode while preserving normal Minecraft outside RTS. Server authority and 100v100+ reliability matter more than flashy hacks. Use native Recruits mechanics where practical, but Commander may override broken attack/formation behavior.
+
+0.12.0 HEADLINE CHANGES (CURRENT)
+- Dedicated sword/Charge button plus book/Tactics & Abilities menu. Charge arms the next enemy troop/banner RMB order; click again or Halt cancels it. Group Charge skips formation staging; foot melee receives a temporary +20% speed for eight seconds. Ranged troops remain ranged unless Melee mode is chosen.
+- New TacticalSettings stores per-group Native/Ranged/Melee choice, Skirmish, Native/Front/Up/Auto shield mode and Hold Fire. RTSGroupTacticsSavedData keeps legacy Use Missiles intact, saves new settings and ability timers, and reads entries independently so one damaged entry does not discard other groups.
+- New server-validated TacticsControlPacket and owner-only TacticsStateSyncPacket. ClientTactics is reset on logout. Network protocol rts-camera-120 requires clients and server to update together.
+- SkirmishController temporarily owns movement while closing or retreating; native ranged goals fire in the useful range band. Foot retreat thresholds: enter <8 blocks, release >=14; horse archers <12/>=20. Foot advance >27/stop <=21; mounted >32/stop <=25. Retreat direction commits during each withdrawal. Path and local-threat checks occur at bounded intervals. This is not morale routing and never disbands/removes soldiers.
+- Ranged/Melee preferences are respected during persistent attack refresh. Melee can swap a bow/crossbow for an available carried sword, axe, trident or #throwable_weapons item via the native inventory swap API. Do not create a missing backup weapon. Hold Fire persists, blocks new recruit projectile spawns, prevents Commander throw wind-up/release and is respected by Strategic Fire.
+- Dismount cancels movement, remembers an actual horse UUID and persists RTSRemainDismounted. Mount returns to the remembered loaded horse or an eligible nearby player-owned horse using native mount navigation; no spawning/stealing/horse-teleport. Horse checks exclude ships.
+- ShieldTactics: FRONT uses ordinary directional blocking with melee threat timing; UP also intercepts descending arrows/Commander thrown weapons using shield durability; AUTO shares a short group alert when local approaching missiles are detected. Piercing arrows, bypass-shield damage and native shield cooldown remain respected. Food/potions/active ranged use take precedence.
+- RecruitShieldMixin disables native UseShield.hasShieldInHand only while the tactical shield controller owns the stance, preventing competing raise/lower behavior. Original shield bar button returns to Native control.
+- IMPORTANT: UP currently uses the normal native blocking pose. Dedicated overhead visuals remain a separate animation-addon task. RTSShieldUp and RTSTacticalShield are server persistent runtime flags, not a completed SPA animation integration.
+- Second Wind: remove 25 fatigue, group cooldown 60 seconds. Hold the Line: halve Commander-applied morale shocks for 15 seconds, group cooldown 60 seconds. War Cry: -8 morale to visible hostile formations within 18 blocks, group cooldown 90 seconds; each victim formation can receive only one cry shock per ten seconds. Timers persist. No ability can rally a routed group.
+- ProjectileBalance adds armor-sensitive damage for recruit-fired arrows and Commander thrown weapons against recruits. [projectiles] defaults: arrowLightArmorDamageMultiplier=2.0, javelinLightArmorDamageMultiplier=1.6. Extra damage tapers linearly to zero at 20 armor; normal damage mitigation still follows. 1 disables each bonus.
+- CavalryManeuver is a dependency-free, directly tested waypoint plan. CavalryTacticalController reserves rider AND horse movement, freezes the pass geometry through target movement/death/reassignment, exits 18 blocks beyond the impact point, turns via four points around radius 6, then accepts a fresh pass target. Members of one group turn the same way. Native terrain navigation remains the underlying pathfinder.
+- Fixed 0.11.0 goal leaks/cancellation, shifting target-chase endpoints and immediate reverse turns. Cancellation removes goals and stops navigation. Blocked lanes try a turn-out then a bounded pause/replan; do not claim impassable terrain is solved.
+- TacticalCombatManager enforces short-lived per-recruit target leases. Native searchForTargets is suppressed while leased and LivingChangeTargetEvent is constrained to the assigned target. Stage/engage assignments, including thrown missiles, retain formation target distribution. Routing veto wins. Expiry/Halt/replacement orders/logout/dimension changes clean up controllers.
+- CHANGELOG.txt contains current behavior, caveats, controls and test results. No full Forge build or gameplay pass is claimed.
+
+0.11.0 HISTORICAL STARTING POINT
+- Introduced the mounted goal and refined frontage assignments. Its movement and lifecycle shortcomings are superseded by 0.12.0 above; do not restore the previous five hashed lane buckets, moving pass endpoint or instantaneous direction flip.
+
+0.10.9 HEADLINE CHANGES
+- Corrected the second routing failure found in playtesting: routed units no longer recompute their heading from the nearest hostile or alternate +/-60-degree stall turns. Their original outward direction is persistent, so two enemy groups cannot make them run ten blocks forward and ten blocks backward.
+- Routed units no longer sprint. Foot soldiers and mounts use their normal movement speed and navigation pace during escape; the old forced 1.6 movement field and sprint flag are gone. Escape waypoints are 16 blocks and refresh every ten ticks.
+
+0.10.8 HEADLINE CHANGES
+- Fixed the user's confirmed 0.10.7 failure: routing hid the Commander card, but native Recruits retained the group and troops kept fighting. RoutedGroupManager now removes, saves and broadcasts the native group, clears all ordinary recruit AI goals and installs an exclusive escape goal. Native commands, target acquisition, morale-driven recovery and outgoing attacks are blocked while routing.
+- RTSRoutingSavedData persists pending escapes independently of native groups, including unloaded roster members. Entity persistent data retains original owner/group, escape origin, direction and loaded escape time. Normal world/chunk reload must resume fleeing, never rebuild a commandable group.
+- A living routed recruit must actually travel at least 30 horizontal blocks and get clear of nearby/visible hostiles before tactical removal. No automatic rally and no timed teleport. Native owner/team are retained during flight for diplomacy and campaign inspection; unit/team accounting is removed only on actual death or living escape.
+- Cavalry formation targets are now 0.50 blocks/tick regular and 0.72 hasty (10 and 14.4 blocks/second before terrain/cohesion/mount armor), versus foot targets around 0.20/0.24. Mounted combat/follow navigation receives a separate temporary 1.60x mount speed multiplier, excluded during formation pacing.
+- Mounted melee charges now use measured forward run-up, speed and duration. Full strength requires 22 blocks at 0.72 blocks/tick; faster/longer sustained runs produce stronger impacts up to the configured cap. The first impact has up to 48 raw bonus damage before armor/shields, then 60% and 36% for the next two contacts. Actual swept mount contact can strike the front ranks without waiting for a slow melee cooldown.
+- Charge momentum is finite: at most three contacts in a short impact window; stopping, sharp turns, flight and teleport jumps cannot generate charge power. Disengagement and a fresh run-up are required for another pass. Dismounted troops, ranged projectiles and ships do not receive cavalry impact damage.
+- Cavalry inflicts extra morale pressure on foot troops while dealing close-combat damage: melee 2 points/second, ranged 8. Full charge shock is up to 14 versus melee or 30 versus ranged. Pressure is per defending group; shock uses the strongest-contact budget over two seconds, not a multiplier for every horse. Existing morale-item resistance applies.
+- The ten [cavalry] server config settings expose all primary speed/damage/morale defaults. Existing configs receive defaults for new keys; do not tell users to delete their configs.
+- Public RoutedDesertersEvent remains intact before actual living survivors are removed. See the campaign boundary below for batch semantics.
+
+RETAINED 0.10.7 CHANGES
+- Rome-II-style ground markers are now default selection feedback. Hover = hollow marker under each loaded group member; selected = filled. Circle default, square option. Legacy full-body entity glow is retained behind selectionHighlightMode (GROUND_MARKERS / ENTITY_GLOW / BOTH / OFF).
+- New user art from icons.zip is integrated. Runtime card sheet is 32x256, rows Sword/Spear/Bow/Crossbow/Horse/Horse Archer/Ship/Catapult; shield infantry reuses Sword. Floating banners layer trim-matched 64x128-per-row Silver/Gray/Gold emblem sheets directly onto the static banners.
+- Temporary landscape/test command-bar background is removed. Runtime main_command_bar.png is the normal 0.10.6 master background.
+- Group attack is explicitly formation-vs-formation: source group keeps target group UUID, target locks are spread across the opposing frontage, and dead/invalid targets are reassigned inside the same hostile formation. Throwable opening missiles use the same distributed assignment.
+- Morale is less brittle: routing threshold/shocks are softened and nearby living player commander supplies a modest morale-stability/recovery aura.
+- The 0.10.7 physical-routing attempt was defective in-game. Its intended escape behavior is replaced by the authoritative 0.10.8/0.10.9 path described above; do not restore the old BattleMechanicsManager escape loop.
+- Public Forge event `ee.lastpagans.recruitsrtscamera.api.RoutedDesertersEvent` fires immediately BEFORE escaped routed survivors are removed. It exposes ServerLevel, group UUID, former owner UUID, survivor Recruit UUIDs and escape position so Settlements/campaign systems can materialize deserters/manpower/bandits. This hook is non-negotiable going forward.
+- Armor Weight 1.20.1 v1.1 compatibility was explicitly checked against modifier UUID `8d6f7c24-4fe2-4dc7-a36e-79dd83f5fb31`. Ordinary formation steps, Hasty infantry, Slow March and group-center movement now preserve that external movement penalty instead of letting Commander direct movement bypass it.
+
+MAJOR CURRENT SYSTEMS
+- RTS free camera, box/card/banner/ground-marker selection, move/frontage/rotate/routes/halt, formation presets, strategic ranged targeting.
+- Rome-II-style unit cards and icon-only bottom command bar.
+- Static floating banners; friendly banner left-click selects, enemy banner RMB attacks; enemy banner visibility toggle.
+- Unit-card presentation cache so unit type/rank survive beyond native Recruit entity tracking range.
+- Bodyguard/General group: player occupies a synthetic formation slot; follow-general toggle; bodyguard protection behavior. Do not force special banner trim for General until user supplies a dedicated top marker asset.
+- Fatigue stages Fresh/Winded/Tired/Exhausted with movement/combat effects. Recruits native morale remains source of truth. Casualties, rear attacks, exhaustion, commander death and standards affect morale.
+- #rts:morale_items: bearer gives morale-shock resistance, prefers safer formation location, nearby troops protect bearer, standard loss causes morale shock.
+- Routing/Wavering. Every combat-session group UUID has routedThisBattle; rout advisor warning may fire only once per group per battle. Routing now permanently detaches the group from both command systems, persists pending escapes and replaces ordinary AI with fleeing. Keep the routing manager, SavedData and common mixins together.
+- CavalryCombatManager owns measured charge contacts, shock/pressure and the combat speed modifier. ChargeMomentum is the dependency-free run-up/impact state machine. RTSMovementBoostManager owns BF formation pacing. Avoid stacking both speed paths or bypassing Armor Weight.
+- #recruits_rts_camera:throwable_weapons. Test items: antiquelegacy:iron_antique_spear and antiquelegacy:iron_triarii_spear. Use Missiles is per-group and OFF by default.
+- Optional Serious Animations 0.8.1+: semantic spear throw API; Commander starts animation, waits SPA release tick (11 in 0.8.1), then spawns projectile. Spear renderer uses actual item model, point-forward 3D flight.
+- Persistent explicit RTS attack target locks work around native Recruits LOS/follow-owner attack shimmy. 0.10.7 distributes initial locks across enemy frontage.
+- Modded-terrain formation grounding uses collision shapes rather than full-block assumptions.
+- Loose spacing target ~2.2x.
+- Latin battle advisor portrait + 19 supplied Latin-accent voice files with priority/cooldown logic.
+
+ASSET RULES - IMPORTANT
+Never destructively resize authored pixel sprites. In particular DO NOT convert 32x32 source cells to 16x16. Render-scale with nearest-neighbor only.
+
+0.10.7 card icon sheet: 32x256, eight 32x32 rows:
+0 Sword
+1 Spear(s)
+2 Bow
+3 Crossbow
+4 Horse/cavalry
+5 Horse Bow/horse archer
+6 Ship
+7 Catapult
+Shield infantry intentionally reuses Sword.
+
+0.10.7 banner emblem sheets: SilverTrim / GrayTrim / GoldTrim are each 64x1024, eight 64x128 rows with the SAME order as the card sheet. They are authored to fit banners directly; do not crop/repack them.
+Banner base assets: Pointed/Rounded/Square each have 64x384 trims (silver, dark/black, gold) and 64x2048 16-color cloth sheets.
+Current banner rule: static 2D, no waving. General uses normal faction trim/color. Red uses gold trim under legacy mapping.
+
+Shield sprite rows: 0 shield down, 1 shield up.
+Chevrons: nine 32x32 rows, top to bottom 3/2/1 gold, 3/2/1 silver, 3/2/1 copper.
+Ground marker sheets are 32x64: top 32x32 hollow/hover, bottom 32x32 filled/selected. Circle and square variants exist.
+Unit-card layout preference: small unit type icon LEFT, small chevrons RIGHT, status icons along unobstructed bottom.
+
+IMPORTANT UNRESOLVED / ROADMAP
+- Further skirmish testing/refinement on uneven terrain, dense mixed groups and modded ranged weapons. The first functional mode ships in 0.12.0.
+- Further shield timing/balance and bespoke FRONT/UP animations through the separate animation addon. Functional shield stances and group missile alerts ship in 0.12.0; overhead visual pose is still pending.
+- Further infantry charge cohesion, cavalry turning/terrain tuning and formations regrouping together. A dedicated Charge button and committed mounted passes ship in 0.12.0.
+- Crouch and Prone group toggles; prone should eventually have real hitbox/gameplay meaning and support musket-volley tactics. SPA owns presentation.
+- Broader modded weapon selection/animation compatibility; explicit Ranged/Melee mode ships in 0.12.0.
+- Fix mounted player Bodyguard formation bug. Recruit Mount/Dismount controls ship in 0.12.0.
+- War dogs as future handler/release/disruption units.
+- Tune projectile lethality in real modpack combat. Armor-sensitive arrow/javelin multipliers ship in 0.12.0.
+- Cannonballs should penetrate multiple soldiers; explosive shrapnel should create severe casualties in dense formations.
+- Banner visibility whitelist/permissions and real LOS/hiddenness/scouting rules so hidden formations do not advertise themselves through terrain.
+- Further smooth Bodyguard player movement/facing and centered/rear-center slot behavior. Avoid teleporting player merely for entering RTS; distant player should remain detached until rejoining.
+- Improve pathfinding over stairs, ~1.5-block steps, ships and awkward/modded terrain.
+- Roads More Travelled compatibility idea: marching armies leave tracks/footprints.
+- Preset ARMY formations are planned above group formations (triplex acies, march column, archers front/infantry center/cavalry rear). An Army should contain persistent group/formation UUIDs and may eventually be represented/deployed by a strategic army banner similar in spirit to Raise Your Banner.
+- Future synchronized Volley, Testudo/Shield Wall formations and horns/intimidation; further ability balancing. Hold the Line, Second Wind and War Cry ship in 0.12.0. Any future Rally must respect the permanent routing/campaign boundary and cannot silently restore deserters.
+- SPA roadmap is separate/modular: trident-like slower spear throw, stationary throw wind-up, long-idle upright spear posture, routing run, fatigue idles, standards, shields, cavalry/ranged refinement. Commander should call semantic APIs, not animation internals.
+- Possible Corpse-mod/death-pose integration requires inspecting exact Corpse mod API/JAR first.
+
+BATTLE ARCHITECTURE DIRECTION
+Groups should increasingly behave as persistent tactical FORMATION objects. An ATTACK order is Group/Formation A -> Group/Formation B, not a single clicked entity. Individual soldiers get stable target assignments inside the enemy formation and reassign only when their target dies/becomes invalid. This same hostile formation target should eventually drive Volley, Skirmish, Charge and other group combat behaviors.
+
+ROUTING / CAMPAIGN BOUNDARY
+Commander owns tactical route/escape. It must not silently decide campaign consequences. On successful battlefield escape it posts RoutedDesertersEvent before removing tactical entities. Settlements or another campaign layer owns whether survivors become deserters, return to manpower, form bandits, etc.
+The native group is removed at initial rout, before the escape hook. The hook still exposes ServerLevel, original group UUID, original owner UUID, living survivor UUID list and escape position. Process the supplied UUID list, not a lookup of the already-removed native group. Stragglers and previously unloaded members may escape in later batches under the same original group UUID. Each living survivor is emitted once during normal save/reload operation; campaign consumers should also deduplicate by survivor UUID. Dead recruits are casualties, not deserter-event survivors. Do not turn this into a silent campaign conversion.
+
+BUILD / TEST CAVEAT
+2026-09-05 compile fix: RTSCameraController now imports net.minecraft.world.entity.Entity for ground-marker selection. This fixes the reported missing Entity symbol at the original line 1572. The follow-up compile attempt was blocked before Java compilation because the Gradle distribution download returned Network is unreachable. No full Forge compile is claimed for this correction.
+0.12.0 verification: Java 17 compiles the pure CavalryManeuver, TacticalMath, TacticalSettings and ChargeMomentum classes with their regression tests: 44 tactical checks and 19 momentum checks pass. All 114 main Java files parse. Native UseShield target/field, inventory swapping, horse command and AttackUtil APIs were inspected against the bundled JAR. This does not verify semantic Forge compilation, mixin application, dedicated-server startup or gameplay.
+The full compileJava command was attempted during this release but failed before compilation downloading Gradle 8.1.1 (Network is unreachable). User should run BUILD.bat or gradlew.bat clean build locally with Java 17; expected output build/libs/recruits-rts-camera-0.12.0-server.1.jar. Do not claim a successful JAR build unless it actually succeeds.
+dev-tests/TacticalSystemsSelfTest.java covers the live production maneuver plan, target movement/death during commitment, both turn directions, recovery decisions, skirmish hysteresis, armor scaling and independent settings. It does not simulate Minecraft terrain, networking or shield hit resolution.
+
+FOCUSED IN-GAME CHECKS FOR 0.12.0
+A. Open the book menu, exercise each mode and reconnect/save/reload. Hold Fire must survive fresh Attack/Strategic Fire and weapon-mode changes.
+B. Give archers and horse archers a group Attack plus Skirmish. Approach, fire, retreat and resume against a closing enemy; cancel with Halt/Move. Verify equipment/ammunition and terrain behavior.
+C. Use the sword/Charge cursor on a hostile banner and entity; cancel the cursor with Halt. Compare cavalry run-up and infantry charge with normal Attack.
+D. Dismount/remount a horse unit; ensure no automatic remount after reload, no missing/duplicated horses, and no ship/player mount hijacking.
+E. Test FRONT/UP/AUTO with frontal/rear melee, overhead/flat/piercing arrows and shield disable/break. UP overhead art is intentionally pending.
+F. Activate each ability, retry during cooldown, then reload. War Cry cannot stack per horse/group packet; routed units cannot rally.
+G. Compare arrows/javelins against light/heavy armor and shields, including multiplier=1.
+H. Repeat the baseline checks below; the same dependencies, art and routing hook remain required.
+
+BASELINE IN-GAME REGRESSION CHECKS
+
+1. Rout a fresh group while engaged. Confirm it disappears from both Commander and native Recruits command bars, stops melee/ranged attacks and cannot be recalled by native or RTS commands. Pursuers must still be able to hurt it.
+2. Save/reload while soldiers are fleeing, and unload/reload a member before it has escaped. Confirm routing persists, no native group is recreated, and each living survivor exits only after traveling clear of hostiles. Verify RoutedDesertersEvent batches if a campaign consumer is installed.
+3. Compare regular and hasty cavalry against light infantry over a flat, clear course, including armored riders/mounts. Cavalry should have a clear speed gap; terrain/cohesion and Armor Weight still matter.
+4. Compare point-blank cavalry melee with an uninterrupted 25-30 block mounted attack into a foot formation. Front contacts should take much greater damage after the run-up, with weaker follow-through. Repeat against similarly sized melee and ranged groups; ranged morale should collapse much faster.
+5. Leave cavalry bogged down in melee, then withdraw and charge again. Continued melee should apply morale pressure but no repeated full charge impacts; a new run-up should restore charge power. Also check that friendly, dismounted and ship troops receive no accidental cavalry bonus.
+6. Watch routed foot and mounted units over at least 50 blocks. They should continue outward at ordinary pace without sprinting or repeatedly reversing direction. Put an enemy group on either side only as a stress test; the route should not oscillate between them.
+7. Order a cavalry formation against a full enemy formation. Watch for a visible lane approach, one committed pass through the line, a turn-out beyond the enemy, and re-forming. Horses should not orbit one soldier, stop at the line, or all choose the same defender.
+8. Kill or unload a defender in the middle of the fight. Its attacker should receive a replacement from the same enemy frontage before using a nearest-target fallback. Check that infantry and ranged groups also retain distributed formation target locks.
+
+Keep source ZIP clean: actual project + GUI-ASSET-KIT + CHANGELOG.txt + this REGENERATION_PROMPT.txt. Avoid piles of markdown/debug clutter.
