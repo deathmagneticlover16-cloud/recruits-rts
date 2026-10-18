@@ -28,7 +28,6 @@ import ee.lastpagans.recruitsrtscamera.network.RouteGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.StrategicFirePacket;
 import ee.lastpagans.recruitsrtscamera.network.FireControlPacket;
 import ee.lastpagans.recruitsrtscamera.network.MoveGroupsPacket;
-import ee.lastpagans.recruitsrtscamera.network.MissileControlPacket;
 import ee.lastpagans.recruitsrtscamera.network.SetFormationPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.network.RTSModeStatePacket;
@@ -56,6 +55,7 @@ import net.xolt.freecam.util.FreeCamera;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -93,7 +93,6 @@ public final class RTSCameraController {
     private static final Set<UUID> LOCAL_SLOW_MARCH_GROUPS = new LinkedHashSet<>();
     private static final Set<UUID> LOCAL_LOOSE_SPACING_GROUPS = new LinkedHashSet<>();
     private static final Set<UUID> LOCAL_FIRE_AT_WILL_GROUPS = new LinkedHashSet<>();
-    private static final Set<UUID> LOCAL_USE_MISSILES_GROUPS = new LinkedHashSet<>();
     private static final Map<UUID, CurrentOrderPreview> CURRENT_ORDER_PREVIEWS = new HashMap<>();
     private static FormationKind formationTool = FormationKind.MARCH;
     private static ArmyPreset armyPresetTool = ArmyPreset.BALANCED;
@@ -304,30 +303,6 @@ public final class RTSCameraController {
         return !applicable.isEmpty() && applicable.stream().allMatch(LOCAL_LOOSE_SPACING_GROUPS::contains);
     }
 
-    static boolean commanderUseMissilesEnabled() {
-        return !SELECTED_GROUPS.isEmpty()
-                && SELECTED_GROUPS.stream().allMatch(LOCAL_USE_MISSILES_GROUPS::contains);
-    }
-
-    static void commanderToggleUseMissiles() {
-        if (SELECTED_GROUPS.isEmpty()) {
-            setStatus("Select at least one group first.");
-            return;
-        }
-        boolean enable = !commanderUseMissilesEnabled();
-        if (enable) LOCAL_USE_MISSILES_GROUPS.addAll(SELECTED_GROUPS);
-        else LOCAL_USE_MISSILES_GROUPS.removeAll(SELECTED_GROUPS);
-        RTSCameraNetwork.CHANNEL.sendToServer(new MissileControlPacket(
-                new ArrayList<>(SELECTED_GROUPS), enable
-        ));
-        setStatus(enable ? "Use Missiles enabled." : "Hold Missiles enabled.");
-    }
-
-    public static void applyPersistentMissileSync(Set<UUID> useMissilesGroups) {
-        LOCAL_USE_MISSILES_GROUPS.clear();
-        if (useMissilesGroups != null) LOCAL_USE_MISSILES_GROUPS.addAll(useMissilesGroups);
-    }
-
     static void commanderToggleLooseSpacing() {
         List<UUID> applicable = SELECTED_GROUPS.stream()
                 .filter(id -> !LOCAL_CUSTOM_GROUPS.contains(id))
@@ -347,8 +322,8 @@ public final class RTSCameraController {
         setStatus(enable ? "Loose spacing ordered." : "Normal spacing ordered.");
     }
 
-    static void commanderFireControl(FireControlPacket.Mode mode) {
-        sendFireControl(mode);
+    static void commanderFireControl(List<UUID> groupIds, FireControlPacket.Mode mode) {
+        sendFireControl(groupIds, mode);
     }
 
     static boolean commanderFireAtWillEnabled() {
@@ -1004,6 +979,18 @@ public final class RTSCameraController {
                 + " · next P: " + armyPresetTool.displayName());
     }
 
+    static void commanderApplyArmyPreset(ArmyPreset preset) {
+        applySelectionToRecruits();
+        if (SELECTED_GROUPS.isEmpty() || preset == null) {
+            setStatus("Select at least one group before applying an army preset.");
+            return;
+        }
+        RTSCameraNetwork.CHANNEL.sendToServer(new ArmyPresetPacket(new ArrayList<>(SELECTED_GROUPS), preset));
+        clearCurrentOrderPreviews(SELECTED_GROUPS);
+        armyPresetTool = preset.next();
+        setStatus("Army preset: " + preset.displayName() + " — " + preset.description());
+    }
+
     private static void designateStrategicFire() {
         applySelectionToRecruits();
         if (SELECTED_GROUPS.isEmpty()) {
@@ -1031,18 +1018,24 @@ public final class RTSCameraController {
     }
 
     private static void sendFireControl(FireControlPacket.Mode mode) {
+        sendFireControl(new ArrayList<>(SELECTED_GROUPS), mode);
+    }
+
+    private static void sendFireControl(Collection<UUID> groupIds, FireControlPacket.Mode mode) {
         applySelectionToRecruits();
-        if (SELECTED_GROUPS.isEmpty()) {
+        List<UUID> targets = groupIds == null ? List.of() : groupIds.stream()
+                .filter(SELECTED_GROUPS::contains).distinct().toList();
+        if (targets.isEmpty()) {
             setStatus("Select at least one ranged/artillery group first.");
             return;
         }
         RTSCameraNetwork.CHANNEL.sendToServer(new FireControlPacket(
-                new ArrayList<>(SELECTED_GROUPS), mode
+                targets, mode
         ));
         if (mode == FireControlPacket.Mode.FIRE_AT_WILL) {
-            LOCAL_FIRE_AT_WILL_GROUPS.addAll(SELECTED_GROUPS);
+            LOCAL_FIRE_AT_WILL_GROUPS.addAll(targets);
         } else {
-            LOCAL_FIRE_AT_WILL_GROUPS.removeAll(SELECTED_GROUPS);
+            LOCAL_FIRE_AT_WILL_GROUPS.removeAll(targets);
         }
         setStatus(mode == FireControlPacket.Mode.HOLD_FIRE ? "Hold fire order sent." : "Fire at will order sent.");
     }
@@ -2263,7 +2256,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.12.2-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.13.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

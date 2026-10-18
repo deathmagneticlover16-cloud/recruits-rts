@@ -3,6 +3,7 @@ package ee.lastpagans.recruitsrtscamera.formation;
 /** High-level multi-group deployment templates for RTS Camera. */
 public enum ArmyPreset {
     BALANCED("Balanced", "infantry front · ranged rear · cavalry wings"),
+    DOUBLE_LINE("Double Line", "all groups deployed in two supporting ranks"),
     CAVALRY_VANGUARD("Cavalry Vanguard", "cavalry front · infantry middle · ranged rear"),
     SKIRMISH_SCREEN("Skirmish Screen", "ranged front · cavalry wings · infantry rear"),
     RESERVE("Reserve", "infantry front · ranged middle · cavalry reserve");

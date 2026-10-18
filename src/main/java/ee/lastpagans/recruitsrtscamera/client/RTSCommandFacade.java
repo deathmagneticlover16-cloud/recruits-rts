@@ -11,16 +11,17 @@ import com.talhanation.recruits.entities.RecruitEntity;
 import com.talhanation.recruits.entities.RecruitShieldmanEntity;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import com.talhanation.recruits.network.MessageAggro;
-import com.talhanation.recruits.network.MessageShields;
 import com.talhanation.recruits.world.RecruitsGroup;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.formation.FormationDoctrine;
 import ee.lastpagans.recruitsrtscamera.formation.FormationKind;
+import ee.lastpagans.recruitsrtscamera.formation.ArmyPreset;
 import ee.lastpagans.recruitsrtscamera.network.FireControlPacket;
 import ee.lastpagans.recruitsrtscamera.network.BodyguardCommandPacket;
 import ee.lastpagans.recruitsrtscamera.network.BodyguardFollowCommandPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.battle.GroupBattleSnapshot;
+import ee.lastpagans.recruitsrtscamera.combat.RangedWeaponEligibility;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
@@ -123,8 +124,10 @@ public final class RTSCommandFacade {
                     moraleState,
                     sample == null ? 0 : sample.count(),
                     sample == null ? -1 : sample.dominantAggroState(),
-                    sample != null && sample.majorityShieldsUp(),
                     sample != null && sample.rangedCapable(),
+                    sample != null && sample.rangedMajority(),
+                    sample != null && sample.cavalryMajority(),
+                    sample != null && sample.majorityMounted(),
                     sample != null && sample.majorityFireAtWill(),
                     sample == null ? Double.NaN : sample.centerX(),
                     sample == null ? Double.NaN : sample.anchorY(),
@@ -309,6 +312,10 @@ public final class RTSCommandFacade {
         RTSCameraController.commanderSetFormation(kind);
     }
 
+    public static void applyArmyPreset(ArmyPreset preset) {
+        RTSCameraController.commanderApplyArmyPreset(preset);
+    }
+
     public static FormationKind commonSelectedFormationKind() {
         return RTSCameraController.commanderCommonFormationKind();
     }
@@ -333,31 +340,11 @@ public final class RTSCommandFacade {
         return found ? state : -1;
     }
 
-    public static boolean selectedShieldsUp() {
-        int selected = 0;
-        int up = 0;
-        for (UnitCardView view : unitCards()) {
-            if (!view.selected() || view.loadedSampleCount() <= 0) continue;
-            selected++;
-            if (view.majorityShieldsUp()) up++;
-        }
-        return selected > 0 && up == selected;
-    }
-
     public static void toggleAggression() {
         if (MC.player == null) return;
         int target = selectedAggroState() == 2 ? 1 : 2;
         for (UUID groupId : RTSCameraController.commanderSelectedGroups()) {
             Main.SIMPLE_CHANNEL.sendToServer(new MessageAggro(MC.player.getUUID(), target, groupId));
-        }
-    }
-
-    public static void toggleShields() {
-        ClientTactics.send(ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action.SHIELD_NATIVE);
-        if (MC.player == null) return;
-        boolean target = !selectedShieldsUp();
-        for (UUID groupId : RTSCameraController.commanderSelectedGroups()) {
-            Main.SIMPLE_CHANNEL.sendToServer(new MessageShields(MC.player.getUUID(), groupId, target));
         }
     }
 
@@ -377,42 +364,65 @@ public final class RTSCommandFacade {
         RTSCameraController.commanderToggleLooseSpacing();
     }
 
-    public static boolean selectedUseMissiles() {
-        return RTSCameraController.commanderUseMissilesEnabled();
+    public static boolean selectedHasRangedWeapons() {
+        return unitCards().stream().anyMatch(view -> view.selected() && view.rangedCapable());
     }
 
-    public static void toggleUseMissiles() {
-        RTSCameraController.commanderToggleUseMissiles();
+    public static boolean selectedHasRangedMajority() {
+        return unitCards().stream().anyMatch(view -> view.selected() && view.rangedMajority());
     }
 
-    public static boolean selectedSupportsRangedControl() {
+    public static boolean selectedHasCavalryMajority() {
+        return unitCards().stream().anyMatch(view -> view.selected() && view.cavalryMajority());
+    }
+
+    public static boolean selectedCavalryMounted() {
         boolean found = false;
         for (UnitCardView view : unitCards()) {
-            if (!view.selected()) continue;
+            if (!view.selected() || !view.cavalryMajority()) continue;
             found = true;
-            if (!view.rangedCapable()) return false;
+            if (!view.majorityMounted()) return false;
         }
         return found;
     }
 
     public static boolean selectedFireAtWill() {
-        if (RTSCameraController.commanderFireAtWillEnabled()) {
-            return true;
-        }
-        boolean found = false;
-        for (UnitCardView view : unitCards()) {
-            if (!view.selected() || !view.rangedCapable()) continue;
-            found = true;
-            if (!view.majorityFireAtWill()) return false;
-        }
-        return found;
+        List<UUID> eligible = selectedGroups(UnitCardView::rangedCapable);
+        return !eligible.isEmpty() && eligible.stream().noneMatch(ClientTactics::holdFire);
     }
 
     public static void toggleFireControl() {
-        if (!selectedSupportsRangedControl()) return;
-        RTSCameraController.commanderFireControl(
+        List<UUID> eligible = selectedGroups(UnitCardView::rangedCapable);
+        if (eligible.isEmpty()) return;
+        RTSCameraController.commanderFireControl(eligible,
                 selectedFireAtWill() ? FireControlPacket.Mode.HOLD_FIRE : FireControlPacket.Mode.FIRE_AT_WILL
         );
+    }
+
+    public static boolean selectedSkirmishing() {
+        List<UUID> eligible = selectedGroups(UnitCardView::rangedMajority);
+        return !eligible.isEmpty() && eligible.stream().allMatch(ClientTactics::skirmishing);
+    }
+
+    public static void toggleSkirmish() {
+        List<UUID> eligible = selectedGroups(UnitCardView::rangedMajority);
+        if (eligible.isEmpty()) return;
+        ClientTactics.send(eligible, selectedSkirmishing()
+                ? ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action.SKIRMISH_OFF
+                : ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action.SKIRMISH_ON);
+    }
+
+    public static void toggleMount() {
+        List<UUID> eligible = selectedGroups(UnitCardView::cavalryMajority);
+        if (eligible.isEmpty()) return;
+        ClientTactics.send(eligible, selectedCavalryMounted()
+                ? ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action.DISMOUNT
+                : ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action.MOUNT);
+    }
+
+    private static List<UUID> selectedGroups(java.util.function.Predicate<UnitCardView> eligible) {
+        return unitCards().stream().filter(UnitCardView::selected).filter(eligible)
+                .map(UnitCardView::groupId).toList();
     }
 
     public static String selectedGroupLabel() {
@@ -531,8 +541,10 @@ public final class RTSCommandFacade {
             int moraleState,
             int loadedSampleCount,
             int dominantAggroState,
-            boolean majorityShieldsUp,
             boolean rangedCapable,
+            boolean rangedMajority,
+            boolean cavalryMajority,
+            boolean majorityMounted,
             boolean majorityFireAtWill,
             double centerX,
             double anchorY,
@@ -554,8 +566,10 @@ public final class RTSCommandFacade {
             float averageMorale,
             int count,
             int dominantAggroState,
-            boolean majorityShieldsUp,
             boolean rangedCapable,
+            boolean rangedMajority,
+            boolean cavalryMajority,
+            boolean majorityMounted,
             boolean majorityFireAtWill,
             double centerX,
             double anchorY,
@@ -614,8 +628,9 @@ public final class RTSCommandFacade {
         private double totalX;
         private double totalZ;
         private double maxY = Double.NEGATIVE_INFINITY;
-        private int shieldsUp;
         private int rangedCapable;
+        private int cavalry;
+        private int mounted;
         private int fireAtWill;
         private int count;
 
@@ -625,9 +640,11 @@ public final class RTSCommandFacade {
             totalLevel += Math.max(0, recruit.getXpLevel());
             totalMorale += Math.max(0.0F, recruit.getMorale());
             aggroCounts.merge(recruit.getState(), 1, Integer::sum);
-            if (recruit.getShouldBlock()) shieldsUp++;
-            if (type == CommanderUnitType.BOW || type == CommanderUnitType.CROSSBOW
-                    || type == CommanderUnitType.NOMAD || type == CommanderUnitType.ARTILLERY) {
+            if (type == CommanderUnitType.CAVALRY || type == CommanderUnitType.NOMAD) {
+                cavalry++;
+                if (recruit.getVehicle() != null) mounted++;
+            }
+            if (RangedWeaponEligibility.hasRangedWeapon(recruit)) {
                 rangedCapable++;
                 if (recruit.getShouldRanged()) fireAtWill++;
             }
@@ -653,8 +670,10 @@ public final class RTSCommandFacade {
                     .max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(15);
             return new GroupSample(
                     dominant, averageLevel, averageMorale, count, aggro,
-                    count > 0 && shieldsUp * 2 >= count,
                     rangedCapable > 0,
+                    count > 0 && rangedCapable * 2 > count,
+                    count > 0 && cavalry * 2 > count,
+                    cavalry > 0 && mounted * 2 >= cavalry,
                     rangedCapable > 0 && fireAtWill * 2 >= rangedCapable,
                     count <= 0 ? Double.NaN : totalX / count,
                     count <= 0 || !Double.isFinite(maxY) ? Double.NaN : maxY + 2.2D,
@@ -663,4 +682,5 @@ public final class RTSCommandFacade {
             );
         }
     }
+
 }

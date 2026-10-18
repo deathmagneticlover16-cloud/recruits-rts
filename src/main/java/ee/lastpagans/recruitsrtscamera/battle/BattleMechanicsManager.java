@@ -544,8 +544,6 @@ public final class BattleMechanicsManager {
         // group-wide morale shocks. The tag is intentionally external (#rts:morale_items)
         // so the server can nominate any banner/standard item through a datapack.
         float effectiveDelta = delta;
-        if (delta < 0 && ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData
-                .get(level).timer(groupId, "holdLineUntil") > level.getGameTime()) effectiveDelta *= 0.5F;
         if (delta < 0.0F && groupHasMoraleItem(level, groupId)) {
             effectiveDelta *= 0.80F;
         }

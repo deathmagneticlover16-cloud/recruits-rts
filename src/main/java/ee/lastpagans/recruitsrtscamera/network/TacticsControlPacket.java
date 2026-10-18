@@ -13,9 +13,7 @@ import java.util.function.Supplier;
 
 public record TacticsControlPacket(List<UUID> groupIds, Action action) {
     public enum Action {
-        SKIRMISH_ON, SKIRMISH_OFF, RANGED, MELEE, NATIVE_COMBAT,
-        MOUNT, DISMOUNT, SHIELD_FRONT, SHIELD_UP, SHIELD_AUTO, SHIELD_NATIVE,
-        SECOND_WIND, HOLD_LINE, WAR_CRY
+        SKIRMISH_ON, SKIRMISH_OFF, MOUNT, DISMOUNT
     }
     public TacticsControlPacket {
         groupIds = List.copyOf(groupIds.subList(0, Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER)));
@@ -34,12 +32,8 @@ public record TacticsControlPacket(List<UUID> groupIds, Action action) {
     }
     public static void handle(TacticsControlPacket p, Supplier<NetworkEvent.Context> supplier) {
         var context = supplier.get();
-        String relay = switch (p.action) {
-            case RANGED -> "order_fire_at_will";
-            case MELEE, WAR_CRY -> "order_attack";
-            case MOUNT, SKIRMISH_ON -> "order_forward";
-            default -> "order_move_and_hold";
-        };
+        String relay = p.action == Action.MOUNT || p.action == Action.SKIRMISH_ON
+                ? "order_forward" : "order_move_and_hold";
         context.enqueueWork(() -> OrderRelayCompat.executeOrRelay(context, p.groupIds, relay,
                 () -> execute(p, context.getSender())));
         context.setPacketHandled(true);

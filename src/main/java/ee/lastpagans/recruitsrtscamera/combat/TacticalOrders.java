@@ -1,10 +1,7 @@
 package ee.lastpagans.recruitsrtscamera.combat;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
-import com.talhanation.recruits.entities.IRangedRecruit;
 import com.talhanation.recruits.util.RecruitCommanderUtil;
-import ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager;
-import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
@@ -16,6 +13,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import com.talhanation.recruits.entities.HorsemanEntity;
+import com.talhanation.recruits.entities.NomadEntity;
 import java.util.*;
 
 public final class TacticalOrders {
@@ -28,21 +27,21 @@ public final class TacticalOrders {
         var data = RTSGroupTacticsSavedData.get(level);
         int changed = 0, unavailable = 0;
         Set<UUID> reserved = new HashSet<>();
-        Set<UUID> affectedEnemies = new HashSet<>();
         for (var entry : groups.entrySet()) {
             UUID id = entry.getKey();
             var members = entry.getValue();
             var s = data.settings(id);
+            boolean cavalryMajority = majority(members, recruit -> recruit instanceof HorsemanEntity
+                    || recruit instanceof NomadEntity);
+            boolean rangedMajority = majority(members, RangedWeaponEligibility::hasRangedWeapon);
+            if ((action == Action.MOUNT || action == Action.DISMOUNT) && !cavalryMajority
+                    || (action == Action.SKIRMISH_ON || action == Action.SKIRMISH_OFF) && !rangedMajority) {
+                unavailable++;
+                continue;
+            }
             switch (action) {
                 case SKIRMISH_ON -> s = s.withSkirmish(true);
                 case SKIRMISH_OFF -> s = s.withSkirmish(false);
-                case RANGED -> s = s.withCombat(TacticalSettings.CombatMode.RANGED);
-                case MELEE -> s = s.withCombat(TacticalSettings.CombatMode.MELEE);
-                case NATIVE_COMBAT -> s = s.withCombat(TacticalSettings.CombatMode.NATIVE);
-                case SHIELD_FRONT -> s = s.withShield(TacticalSettings.ShieldMode.FRONT);
-                case SHIELD_UP -> s = s.withShield(TacticalSettings.ShieldMode.UP);
-                case SHIELD_AUTO -> s = s.withShield(TacticalSettings.ShieldMode.AUTO);
-                case SHIELD_NATIVE -> s = s.withShield(TacticalSettings.ShieldMode.NATIVE);
                 case MOUNT, DISMOUNT -> {
                     cancelMovement(sender, id, members);
                     for (var recruit : members) {
@@ -67,51 +66,22 @@ public final class TacticalOrders {
                     }
                     continue;
                 }
-                case SECOND_WIND, HOLD_LINE, WAR_CRY -> {
-                    long now = level.getGameTime();
-                    String key = action.name();
-                    if (data.timer(id, key) > now) { unavailable++; continue; }
-                    if (action == Action.SECOND_WIND) {
-                        for (var recruit : members) BattleMechanicsManager.recoverFatigue(recruit, 25);
-                        data.setTimer(id, key, now + 1200);
-                    } else if (action == Action.HOLD_LINE) {
-                        data.setTimer(id, "holdLineUntil", now + 300);
-                        data.setTimer(id, key, now + 1200);
-                    } else {
-                        for (var recruit : members) {
-                            for (var enemy : level.getEntitiesOfClass(AbstractRecruitEntity.class,
-                                    recruit.getBoundingBox().inflate(18, 8, 18),
-                                    e -> e.isAlive() && e.getGroup() != null && !RoutedGroupManager.isRouting(e)
-                                            && recruit.canAttack(e) && !recruit.isAlliedTo(e))) {
-                                if (recruit.distanceToSqr(enemy) <= 18 * 18 && recruit.hasLineOfSight(enemy))
-                                    affectedEnemies.add(enemy.getGroup());
-                            }
-                        }
-                        data.setTimer(id, key, now + 1800);
-                    }
-                    changed++;
-                    continue;
-                }
             }
             data.setSettings(id, s);
             for (var recruit : members) {
-                if (recruit instanceof IRangedRecruit && (action == Action.RANGED || action == Action.MELEE || action == Action.NATIVE_COMBAT)) {
-                    recruit.stopUsingItem();
-                    recruit.setShouldRanged(action != Action.MELEE);
-                }
                 TacticalCombatManager.applyMode(recruit);
             }
             changed++;
         }
-        // One morale shock per enemy formation, even when many selected groups shout together.
-        for (UUID enemy : affectedEnemies) {
-            if (data.timer(enemy, "warCryProtectionUntil") <= level.getGameTime()) {
-                BattleMechanicsManager.adjustGroupMorale(level, enemy, -8);
-                data.setTimer(enemy, "warCryProtectionUntil", level.getGameTime() + 200);
-            }
-        }
         sender.displayClientMessage(Component.literal(action.name().replace('_', ' ') + ": " + changed
                 + " applied" + (unavailable == 0 ? "" : " · " + unavailable + " unavailable/on cooldown")), true);
+    }
+
+    private static boolean majority(List<AbstractRecruitEntity> members,
+                                    java.util.function.Predicate<AbstractRecruitEntity> predicate) {
+        if (members == null || members.isEmpty()) return false;
+        long eligible = members.stream().filter(Objects::nonNull).filter(predicate).count();
+        return eligible * 2 > members.size();
     }
 
     private static AbstractHorse findMount(ServerLevel level, ServerPlayer owner, AbstractRecruitEntity recruit, Set<UUID> reserved) {

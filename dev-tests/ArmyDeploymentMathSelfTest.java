@@ -30,6 +30,13 @@ public final class ArmyDeploymentMathSelfTest {
         check(cavalry.get("cavL").z() > cavalry.get("inf1").z(), "cavalry vanguard is in front");
         check(cavalry.get("inf1").z() > cavalry.get("rng").z(), "ranged stays rear");
 
+        Map<String, ArmyDeploymentMath.Target> doubleLine = ArmyDeploymentMath.plan(
+                ArmyPreset.DOUBLE_LINE, groups, 0, 0, 0
+        );
+        long frontRank = doubleLine.values().stream().filter(target -> target.z() > 0).count();
+        long rearRank = doubleLine.values().stream().filter(target -> target.z() < 0).count();
+        check(frontRank == 3 && rearRank == 2, "double line splits groups into supporting ranks");
+
         Map<String, ArmyDeploymentMath.Target> skirmish = ArmyDeploymentMath.plan(
                 ArmyPreset.SKIRMISH_SCREEN, groups, 10, 20, 90
         );

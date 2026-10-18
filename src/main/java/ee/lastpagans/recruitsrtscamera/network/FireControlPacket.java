@@ -3,6 +3,7 @@ package ee.lastpagans.recruitsrtscamera.network;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.IStrategicFire;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
+import ee.lastpagans.recruitsrtscamera.combat.RangedWeaponEligibility;
 import ee.lastpagans.recruitsrtscamera.compat.OrderRelayCompat;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.server.ServerPacketGuard;
@@ -13,6 +14,7 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -63,10 +65,14 @@ public record FireControlPacket(List<UUID> groupIds, Mode mode) {
         }
         Map<UUID, List<AbstractRecruitEntity>> groups = ServerGroupResolver.resolve(sender, packet.groupIds);
         var data = ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData.get(sender.serverLevel());
-        for (UUID id : groups.keySet()) data.setSettings(id, data.settings(id).withHoldFire(packet.mode == Mode.HOLD_FIRE));
+        Map<UUID, List<AbstractRecruitEntity>> eligibleGroups = new LinkedHashMap<>();
+        groups.forEach((id, recruits) -> {
+            if (recruits.stream().anyMatch(RangedWeaponEligibility::hasRangedWeapon)) eligibleGroups.put(id, recruits);
+        });
+        for (UUID id : eligibleGroups.keySet()) data.setSettings(id, data.settings(id).withHoldFire(packet.mode == Mode.HOLD_FIRE));
         int changed = 0;
         int artillery = 0;
-        for (List<AbstractRecruitEntity> recruits : groups.values()) {
+        for (List<AbstractRecruitEntity> recruits : eligibleGroups.values()) {
             for (AbstractRecruitEntity recruit : recruits) {
                 if (!(recruit instanceof IStrategicFire strategic)) {
                     continue;
@@ -98,4 +104,5 @@ public record FireControlPacket(List<UUID> groupIds, Mode mode) {
         RTSCameraNetwork.CHANNEL.send(net.minecraftforge.network.PacketDistributor.PLAYER.with(() -> sender),
                 TacticsStateSyncPacket.forPlayer(sender));
     }
+
 }

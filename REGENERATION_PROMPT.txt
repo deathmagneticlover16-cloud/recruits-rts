@@ -1,5 +1,5 @@
 RECRUITS: RTS CAMERA / COMMANDER - REGENERATION CONTEXT
-Current source version: 0.12.2-server.1
+Current source version: 0.13.0-server.1
 Minecraft/loader: Forge 1.20.1, Forge 47.2.0
 Base dependency: Villager Recruits 1.15.2. Formation geometry, slot execution and tactical navigation are native to this mod. Freecam is bundled as a compile dependency. Order Relay, Serious Player Animations, Siege Weapons and Small Ships integrations must remain optional.
 VERSION POLICY: Every source behavior change must increment the semantic version in gradle.properties. Use a patch increment unless the change adds a backward-compatible feature (minor) or breaks compatibility (major), and keep CHANGELOG.txt, BUILD.bat, the debug HUD and this file synchronized.
@@ -7,26 +7,18 @@ VERSION POLICY: Every source behavior change must increment the semantic version
 PROJECT GOAL
 Turn Recruits combat into a Total War: Rome II-like RTS commander mode while preserving normal Minecraft outside RTS. Server authority and 100v100+ reliability matter more than flashy hacks. Use native Recruits mechanics where practical, but Commander may override broken attack/formation behavior.
 
-0.12.2 HEADLINE CHANGES (CURRENT)
-- Better Formations is no longer a dependency. NativeFormationController owns preset/frontage/freehand slot assignment, shared group routes, laggard catch-up, custom-slot persistence and movement authority. Laggards accelerate by at most 1.25x and replan individually; they never stop the shared anchor. Normal anchor pace is 0.14 blocks/tick and foot navigation uses 0.78 speed. Moving slots bypass stationary locking so formations do not pulse between stop and start. Native Recruits formation commands enter the same runtime; ordinary Recruits move/follow/attack/upkeep orders release that authority.
-- TacticalPathfinder is a collision-shape A* over actual support surfaces. It rejects unsupported air, handles slabs/stairs/modded shapes, creates ladder links and marks narrow/elevated routes for immediate single-column transit. Constrained members follow centered shape waypoints without lateral steering. A member displaced off and below the route replans from its landing point instead of jumping against the stair side. Formations reform only at the destination. Terrain-region revisions invalidate affected routes.
-- RecruitRuntimeBrain/Registry, RecruitSpatialIndex and RecruitAIScheduler provide transient orthogonal state, event-maintained lookup, local separation and bounded formation/recovery path work. Goal mixins enforce one movement authority while the formation runtime is active. These systems do not implement simulation or rendering LOD.
-- ProjectileAwarenessManager records hostile projectile corridors and impacts by formation. ShieldTactics uses this event-driven alert to raise available shields and face horizontal fire; descending fire selects the existing UP interception posture.
-- Book/Tactics & Abilities remains on the command bar; the dedicated Charge button was removed. Double-RMB the same enemy formation to charge. Group Charge skips formation staging; foot melee receives a temporary +20% speed for eight seconds. Ranged troops remain ranged unless Melee mode is chosen.
-- New TacticalSettings stores per-group Native/Ranged/Melee choice, Skirmish, Native/Front/Up/Auto shield mode and Hold Fire. RTSGroupTacticsSavedData keeps legacy Use Missiles intact, saves new settings and ability timers, and reads entries independently so one damaged entry does not discard other groups.
-- New server-validated TacticsControlPacket and owner-only TacticsStateSyncPacket. ClientTactics is reset on logout. Network protocol rts-camera-120 requires clients and server to update together.
-- SkirmishController temporarily owns movement while closing or retreating; native ranged goals fire in the useful range band. Foot retreat thresholds: enter <8 blocks, release >=14; horse archers <12/>=20. Foot advance >27/stop <=21; mounted >32/stop <=25. Retreat direction commits during each withdrawal. Path and local-threat checks occur at bounded intervals. This is not morale routing and never disbands/removes soldiers.
-- Ranged/Melee preferences are respected during persistent attack refresh. Melee can swap a bow/crossbow for an available carried sword, axe, trident or #throwable_weapons item via the native inventory swap API. Do not create a missing backup weapon. Hold Fire persists, blocks new recruit projectile spawns, prevents Commander throw wind-up/release and is respected by Strategic Fire.
-- Dismount cancels movement, remembers an actual horse UUID and persists RTSRemainDismounted. Mount returns to the remembered loaded horse or an eligible nearby player-owned horse using native mount navigation; no spawning/stealing/horse-teleport. Horse checks exclude ships.
-- ShieldTactics: FRONT uses ordinary directional blocking with melee threat timing; UP also intercepts descending arrows/Commander thrown weapons using shield durability; projectile corridor/impact events share a short alert with the formation. Piercing arrows, bypass-shield damage and native shield cooldown remain respected. Food/potions/active ranged use take precedence.
-- RecruitShieldMixin disables native UseShield.hasShieldInHand only while the tactical shield controller owns the stance, preventing competing raise/lower behavior. Original shield bar button returns to Native control.
-- IMPORTANT: UP currently uses the normal native blocking pose. Dedicated overhead visuals remain a separate animation-addon task. RTSShieldUp and RTSTacticalShield are server persistent runtime flags, not a completed SPA animation integration.
-- Second Wind: remove 25 fatigue, group cooldown 60 seconds. Hold the Line: halve Commander-applied morale shocks for 15 seconds, group cooldown 60 seconds. War Cry: -8 morale to visible hostile formations within 18 blocks, group cooldown 90 seconds; each victim formation can receive only one cry shock per ten seconds. Timers persist. No ability can rally a routed group.
-- ProjectileBalance adds armor-sensitive damage for recruit-fired arrows and Commander thrown weapons against recruits. [projectiles] defaults: arrowLightArmorDamageMultiplier=2.0, javelinLightArmorDamageMultiplier=1.6. Extra damage tapers linearly to zero at 20 armor; normal damage mitigation still follows. 1 disables each bonus.
-- CavalryManeuver is a dependency-free, directly tested waypoint plan. CavalryTacticalController reserves rider AND horse movement, freezes the pass geometry through target movement/death/reassignment, exits 18 blocks beyond the impact point, turns via four points around radius 6, then accepts a fresh pass target. Members of one group turn the same way. Native terrain navigation remains the underlying pathfinder.
-- Fixed 0.11.0 goal leaks/cancellation, shifting target-chase endpoints and immediate reverse turns. Cancellation removes goals and stops navigation. Blocked lanes try a turn-out then a bounded pause/replan; do not claim impassable terrain is solved.
-- TacticalCombatManager enforces short-lived per-recruit target leases. Native searchForTargets is suppressed while leased and LivingChangeTargetEvent is constrained to the assigned target. Stage/engage assignments, including thrown missiles, retain formation target distribution. Routing veto wins. Expiry/Halt/replacement orders/logout/dimension changes clean up controllers.
-- CHANGELOG.txt contains current behavior, caveats, controls and test results. No full Forge build or gameplay pass is claimed.
+0.13.0 HEADLINE CHANGES (CURRENT)
+- The Tactics & Abilities window is removed. Second Wind, Hold the Line, War Cry, shield stance commands, weapon-mode commands and the legacy Use/Hold Missiles feature have no registered command or packet path.
+- Eligibility-filtered controls live directly on the command bar. Cavalry-majority groups receive Mount/Dismount; a group with any loaded member carrying a ranged or tagged throwable weapon receives Fire At Will/Hold Fire; ranged-majority groups receive Skirmish. Mixed selections send each command only to eligible groups, and the server validates the same rules.
+- The old single-group Formations drop-up is replaced by Army Presets: Balanced infantry-front/ranged-rear, Double Line, Cavalry Vanguard, Skirmish Screen and Reserve. Individual groups retain their current internal formation while the preset arranges group centres.
+- Ranged attack orders preserve the built-in formation runtime and slot ownership through target reassignment and target death. Native attack refresh no longer clears ranged hold/formation state.
+- Native MessageFaceCommand now updates every active runtime slot facing. Yaw, body yaw, head yaw and previous-frame rotations are applied every settled tick, including mounted movers, so native look/move controls cannot discard the order after arrival.
+- Tactical A* penalizes pinched cells and elevation strongly enough to prefer a wider formation-capable detour. Broad stairs and gentle rises retain formation geometry; ladders and genuinely narrow routes still use centered column transit and reform afterward.
+- Projectile awareness and automatic shield reaction remain combat behavior. There are no manual Shields Up/Down buttons.
+- Tagged javelin/spear throws now follow persistent Fire At Will/Hold Fire instead of a separate missile toggle.
+- Better Formations remains unnecessary. NativeFormationController owns preset/frontage/freehand slots, shared routes, catch-up and movement authority. Rendering/simulation LOD remains out of scope.
+- Network protocol is rts-camera-130 because removing the legacy missile packets changes registered message IDs. Clients and server must update together.
+- CHANGELOG.txt contains the exact current controls and validation limits. Per the user's instruction, do not run the Gradle/Forge build in this workspace; the packager builds with Java 17.
 
 0.11.0 HISTORICAL STARTING POINT
 - Introduced the mounted goal and refined frontage assignments. Its movement and lifecycle shortcomings are superseded by 0.12.0 above; do not restore the previous five hashed lane buckets, moving pass endpoint or instantaneous direction flip.
@@ -124,7 +116,7 @@ The native group is removed at initial rout, before the escape hook. The hook st
 
 BUILD / TEST CAVEAT
 0.12.2 source verification: all main Java files pass Java 17 syntax parsing. All nine dependency-free suites pass, including 37 formation-slot checks with a 1,200-unit assignment case plus the tactical, custom-formation, frontage, artillery, cavalry and projection suites. Native formation/goal method descriptors were inspected against the bundled Recruits JAR.
-At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.12.2-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
+At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.13.0-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
 dev-tests/TacticalSystemsSelfTest.java covers the live production maneuver plan, target movement/death during commitment, both turn directions, recovery decisions, skirmish hysteresis, armor scaling and independent settings. It does not simulate Minecraft terrain, networking or shield hit resolution.
 
 FOCUSED IN-GAME CHECKS FOR 0.12.2
@@ -133,7 +125,6 @@ B. Give archers and horse archers a group Attack plus Skirmish. Approach, fire, 
 C. Right-click a hostile formation once for Attack, then double-right-click its banner and two different members of the same group for Charge. Compare cavalry run-up and infantry charge with normal Attack.
 D. Dismount/remount a horse unit; ensure no automatic remount after reload, no missing/duplicated horses, and no ship/player mount hijacking.
 E. Test FRONT/UP/AUTO with frontal/rear melee, overhead/flat/piercing arrows and shield disable/break. UP overhead art is intentionally pending.
-F. Activate each ability, retry during cooldown, then reload. War Cry cannot stack per horse/group packet; routed units cannot rally.
 G. Compare arrows/javelins against light/heavy armor and shields, including multiplier=1.
 H. Repeat the baseline checks below; the same dependencies, art and routing hook remain required.
 

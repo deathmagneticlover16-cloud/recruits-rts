@@ -76,7 +76,7 @@ public final class TacticalPathfinder {
             }
             for (Cell neighbor : neighbors(level, mover, current)) {
                 if (closed.contains(neighbor.key)) continue;
-                double next = cost.get(current.key) + movementCost(current, neighbor);
+                double next = cost.get(current.key) + movementCost(level, mover, current, neighbor);
                 if (next + 1.0E-6D >= cost.getOrDefault(neighbor.key, Double.POSITIVE_INFINITY)) continue;
                 cost.put(neighbor.key, next);
                 parent.put(neighbor.key, current.key);
@@ -376,11 +376,13 @@ public final class TacticalPathfinder {
         for (int i = 0; i < reversed.size(); i++) {
             Cell cell = reversed.get(i);
             points.add(cell.position);
-            boolean narrow = cell.climbable
-                    || previous != null && Math.abs(cell.position.y - previous.position.y) > 0.40D;
-            // A flat doorway, bridge, ledge, or one-block corridor also cannot carry a full
-            // formation. Endpoints are ignored so a destination beside a wall can still reform.
-            if (i > 0 && i + 1 < reversed.size() && openSides(level, mover, cell) < 4) narrow = true;
+            int clearance = openSides(level, mover, cell);
+            boolean narrow = cell.climbable;
+            // A broad stair or gentle height change can carry formation slots. Column mode is
+            // reserved for a genuinely pinched route where the full frontage cannot pass.
+            if (i > 0 && i + 1 < reversed.size() && clearance <= 2) narrow = true;
+            if (previous != null && Math.abs(cell.position.y - previous.position.y) > 0.75D
+                    && clearance < 4) narrow = true;
             if (narrow) constrained = true;
             previous = cell;
         }
@@ -397,11 +399,20 @@ public final class TacticalPathfinder {
         return count;
     }
 
-    private static double movementCost(Cell a, Cell b) {
+    private static double movementCost(ServerLevel level, Mob mover, Cell a, Cell b) {
         double dx = a.position.x - b.position.x;
         double dy = a.position.y - b.position.y;
         double dz = a.position.z - b.position.z;
-        return Math.sqrt(dx * dx + dz * dz) + Math.abs(dy) * (a.climbable || b.climbable ? 1.1D : 1.8D);
+        int clearance = openSides(level, mover, b);
+        double pinchPenalty = switch (clearance) {
+            case 0, 1 -> 10.0D;
+            case 2 -> 5.0D;
+            case 3 -> 1.5D;
+            default -> 0.0D;
+        };
+        return Math.sqrt(dx * dx + dz * dz)
+                + Math.abs(dy) * (a.climbable || b.climbable ? 2.0D : 4.0D)
+                + pinchPenalty;
     }
 
     private static double heuristic(Cell a, Cell b) {

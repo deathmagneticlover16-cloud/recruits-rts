@@ -69,6 +69,8 @@ public final class ArmyDeploymentMath {
         infantry.sort(leftToRight);
         ranged.sort(leftToRight);
         cavalry.sort(leftToRight);
+        List<GroupSpec> all = new ArrayList<>(groups);
+        all.sort(leftToRight);
 
         Map<String, Offset> offsets = new LinkedHashMap<>();
         switch (preset) {
@@ -77,6 +79,11 @@ public final class ArmyDeploymentMath {
                 addRow(offsets, ranged, -5.0D);
                 double coreHalf = Math.max(rowHalfWidth(infantry), rowHalfWidth(ranged));
                 addWings(offsets, cavalry, 0.5D, coreHalf);
+            }
+            case DOUBLE_LINE -> {
+                int split = (all.size() + 1) / 2;
+                addRow(offsets, all.subList(0, split), +3.5D);
+                addRow(offsets, all.subList(split, all.size()), -3.5D);
             }
             case CAVALRY_VANGUARD -> {
                 addRow(offsets, cavalry, +6.0D);

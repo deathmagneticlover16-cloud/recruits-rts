@@ -13,6 +13,16 @@ public final class ClientTactics {
         var ids = RTSCameraController.commanderSelectedGroups();
         if (!ids.isEmpty()) RTSCameraNetwork.CHANNEL.sendToServer(new TacticsControlPacket(new ArrayList<>(ids), action));
     }
+    public static void send(Collection<UUID> ids, TacticsControlPacket.Action action) {
+        if (ids != null && !ids.isEmpty())
+            RTSCameraNetwork.CHANNEL.sendToServer(new TacticsControlPacket(new ArrayList<>(ids), action));
+    }
+    public static boolean skirmishing(UUID groupId) {
+        return SETTINGS.getOrDefault(groupId, TacticalSettings.DEFAULT).skirmish();
+    }
+    public static boolean holdFire(UUID groupId) {
+        return SETTINGS.getOrDefault(groupId, TacticalSettings.DEFAULT).holdFire();
+    }
     public static String selectionLabel() {
         var ids = RTSCameraController.commanderSelectedGroups();
         if (ids.isEmpty()) return "Select a group";

@@ -59,7 +59,6 @@ public final class CommanderGuiTextures {
     public static final ResourceLocation COMMAND_HALT = commander("commands/halt.png");
     public static final ResourceLocation COMMAND_STANCE_NEUTRAL = commander("commands/stance_neutral.png");
     public static final ResourceLocation COMMAND_STANCE_AGGRESSIVE = commander("commands/stance_aggressive.png");
-    public static final ResourceLocation COMMAND_SHIELD_STATES = commander("commands/shield_states.png");
     public static final ResourceLocation COMMAND_SLOW_MARCH = commander("commands/slow_march.png");
     public static final ResourceLocation COMMAND_LOOSE_SPACING = commander("commands/loose_spacing.png");
     public static final ResourceLocation COMMAND_FIRE_AT_WILL = commander("commands/fire_at_will.png");

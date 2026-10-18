@@ -65,6 +65,10 @@ public final class FormationRuntime {
         return NativeFormationController.heading(groupId);
     }
 
+    public static boolean faceFormation(UUID groupId, float heading) {
+        return NativeFormationController.face(groupId, heading);
+    }
+
     public static Vec3 commanderSlot(ServerLevel level, ServerPlayer player, UUID groupId) {
         return NativeFormationController.commanderSlot(level, player, groupId);
     }

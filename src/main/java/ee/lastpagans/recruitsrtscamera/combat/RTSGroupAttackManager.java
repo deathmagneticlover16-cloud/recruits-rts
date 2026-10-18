@@ -50,7 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * first advance as a formation toward the hostile formation, then release into combat
  * only when the two fronts are actually close enough to engage. This prevents an
  * attacking army from feeding individual recruits into a stationary enemy line one at
- * a time. Ranged-heavy groups keep their normal ranged behaviour and engage directly.</p>
+ * a time. Ranged-heavy groups approach to firing distance as a formation and retain it.</p>
  *
  * <p>Horsemen are handed to {@link CavalryTacticalController} at engagement. The native
  * {@code HorsemanAttackAI} is deliberately suppressed for that explicit RTS order because
@@ -68,6 +68,7 @@ public final class RTSGroupAttackManager {
 
     // These are edge-to-edge gaps, not centre distances.
     private static final double INFANTRY_ENGAGE_GAP = 3.25D;
+    private static final double RANGED_ENGAGE_GAP = 18.0D;
     // Give mounted lines room to leave formation and build a real run-up before the
     // first contact. Infantry releases much closer to the opposing frontage.
     private static final double CAVALRY_RELEASE_GAP = 20.0D;
@@ -121,7 +122,11 @@ public final class RTSGroupAttackManager {
         SINGLE_TARGETS.put(attackingGroupId, new SingleTargetState(
                 sender, attackingGroupId, target.getId(), MAX_ORDER_TICKS
         ));
-        releaseFormationForCombat(sender, attackingGroupId, recruits);
+        // Ranged groups keep their slots while firing. Native Recruits used to release the
+        // formation here, which made archers scatter as soon as their target died.
+        if (classifyApproach(recruits) != ApproachKind.DIRECT) {
+            releaseFormationForCombat(sender, attackingGroupId, recruits);
+        }
         int ordered = 0;
         for (AbstractRecruitEntity recruit : recruits) {
             if (assignCombatTarget(recruit, target, attackingGroupId)) {
@@ -217,7 +222,8 @@ public final class RTSGroupAttackManager {
 
             if (state.phase == Phase.NEW) {
                 state.approachKind = classifyApproach(attackers);
-                if (state.approachKind == ApproachKind.DIRECT || state.charge) {
+                if (state.charge || (state.approachKind == ApproachKind.DIRECT
+                        && formationEdgeGap(attackers, candidates) <= RANGED_ENGAGE_GAP)) {
                     beginEngagement(state, attackers, candidates);
                 } else {
                     state.phase = Phase.APPROACH;
@@ -233,16 +239,16 @@ public final class RTSGroupAttackManager {
                 // while the formation is still closing on the enemy line.
                 for (var attacker : attackers) TacticalCombatManager.lock(attacker, state.sourceGroupId, null);
                 RecruitCommanderUtil.setRecruitsClearTargets(attackers);
-                // Tagged spear/pilum infantry only throws when the player explicitly
-                // enabled Use Missiles for this group. The default is Hold Missiles.
-                if (useMissiles(state.sender.serverLevel(), state.sourceGroupId)) {
+                if (fireAtWill(state.sender.serverLevel(), state.sourceGroupId)) {
                     throwOpeningMissiles(attackers, candidates);
                 }
 
                 double edgeGap = formationEdgeGap(attackers, candidates);
-                double releaseGap = state.approachKind == ApproachKind.CAVALRY
-                        ? CAVALRY_RELEASE_GAP
-                        : INFANTRY_ENGAGE_GAP;
+                double releaseGap = switch (state.approachKind) {
+                    case DIRECT -> RANGED_ENGAGE_GAP;
+                    case CAVALRY -> CAVALRY_RELEASE_GAP;
+                    case INFANTRY -> INFANTRY_ENGAGE_GAP;
+                };
                 if (edgeGap <= releaseGap || state.approachTicks >= MAX_APPROACH_TICKS) {
                     beginEngagement(state, attackers, candidates);
                     continue;
@@ -286,7 +292,7 @@ public final class RTSGroupAttackManager {
             }
             List<AbstractRecruitEntity> attackers = loadedAttackers(sender, sourceGroup);
             if (attackers.isEmpty()) continue;
-            boolean throwAllowed = useMissiles(level, sourceGroupId);
+            boolean throwAllowed = fireAtWill(level, sourceGroupId);
             for (AbstractRecruitEntity attacker : attackers) {
                 if (throwAllowed && ThrowableWeaponManager.hasThrowable(attacker)
                         && ThrowableWeaponManager.tryThrow(attacker, target)) {
@@ -343,9 +349,11 @@ public final class RTSGroupAttackManager {
         Vec3 direction = new Vec3(delta.x / distance, 0.0D, delta.z / distance);
         double sourceExtent = forwardExtent(attackers, sourceCenter, direction);
         double targetExtent = backwardExtent(targets, targetCenter, direction);
-        double desiredGap = state.approachKind == ApproachKind.CAVALRY
-                ? CAVALRY_RELEASE_GAP
-                : INFANTRY_ENGAGE_GAP;
+        double desiredGap = switch (state.approachKind) {
+            case DIRECT -> RANGED_ENGAGE_GAP;
+            case CAVALRY -> CAVALRY_RELEASE_GAP;
+            case INFANTRY -> INFANTRY_ENGAGE_GAP;
+        };
         double desiredCenterDistance = Math.max(1.0D, sourceExtent + targetExtent + desiredGap);
         Vec3 desired = new Vec3(
                 targetCenter.x - direction.x * desiredCenterDistance,
@@ -380,7 +388,9 @@ public final class RTSGroupAttackManager {
             List<AbstractRecruitEntity> attackers,
             List<LivingEntity> candidates
     ) {
-        releaseFormationForCombat(state.sender, state.sourceGroupId, attackers);
+        if (state.approachKind != ApproachKind.DIRECT) {
+            releaseFormationForCombat(state.sender, state.sourceGroupId, attackers);
+        }
         state.phase = Phase.ENGAGED;
         state.approachTicks = 0;
         state.replanTicks = 0;
@@ -444,7 +454,7 @@ public final class RTSGroupAttackManager {
         }
 
         Map<UUID, LivingEntity> frontageAssignments = formationAssignments(attackers, candidates);
-        boolean throwAllowed = useMissiles(state.sender.serverLevel(), state.sourceGroupId);
+        boolean throwAllowed = fireAtWill(state.sender.serverLevel(), state.sourceGroupId);
         for (AbstractRecruitEntity attacker : attackers) {
             LivingEntity locked = lockedTarget(attacker, candidateById, state.lockedTargets);
             if (locked == null) {
@@ -574,13 +584,16 @@ public final class RTSGroupAttackManager {
                     && !TacticalCombatManager.settings(attacker).holdFire()) attacker.setShouldRanged(true);
         }
 
-        attacker.setShouldMovePos(false);
-        attacker.setShouldHoldPos(false);
-        attacker.clearMovePos();
-        attacker.clearHoldPos();
-        attacker.setShouldFollow(false);
-        attacker.setIsFollowing(false);
-        attacker.setFollowState(0);
+        boolean preserveFormation = FormationRuntime.formationMemberCount(groupId) > 0;
+        if (!preserveFormation) {
+            attacker.setShouldMovePos(false);
+            attacker.setShouldHoldPos(false);
+            attacker.clearMovePos();
+            attacker.clearHoldPos();
+            attacker.setShouldFollow(false);
+            attacker.setIsFollowing(false);
+            attacker.setFollowState(0);
+        }
         if (attacker.getTarget() != assigned) {
             attacker.setTarget(assigned);
         }
@@ -630,13 +643,16 @@ public final class RTSGroupAttackManager {
                     && !TacticalCombatManager.settings(attacker).holdFire()) attacker.setShouldRanged(true);
         }
 
-        attacker.setShouldMovePos(false);
-        attacker.setShouldHoldPos(false);
-        attacker.clearMovePos();
-        attacker.clearHoldPos();
-        attacker.setShouldFollow(false);
-        attacker.setIsFollowing(false);
-        attacker.setFollowState(0);
+        boolean preserveFormation = FormationRuntime.formationMemberCount(groupId) > 0;
+        if (!preserveFormation) {
+            attacker.setShouldMovePos(false);
+            attacker.setShouldHoldPos(false);
+            attacker.clearMovePos();
+            attacker.clearHoldPos();
+            attacker.setShouldFollow(false);
+            attacker.setIsFollowing(false);
+            attacker.setFollowState(0);
+        }
         attacker.setTarget(assigned);
         return true;
     }
@@ -702,9 +718,9 @@ public final class RTSGroupAttackManager {
      * formation before the spread penalty has time to catch up.
      */
 
-    private static boolean useMissiles(ServerLevel level, UUID groupId) {
+    private static boolean fireAtWill(ServerLevel level, UUID groupId) {
         return level != null && groupId != null
-                && RTSGroupTacticsSavedData.get(level).useMissiles(groupId);
+                && !RTSGroupTacticsSavedData.get(level).settings(groupId).holdFire();
     }
 
     private static void throwOpeningMissiles(

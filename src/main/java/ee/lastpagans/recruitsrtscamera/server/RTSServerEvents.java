@@ -9,7 +9,6 @@ import ee.lastpagans.recruitsrtscamera.network.RouteManager;
 import ee.lastpagans.recruitsrtscamera.network.PermissionSyncPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.network.FormationStateSyncPacket;
-import ee.lastpagans.recruitsrtscamera.network.MissileStateSyncPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.TickEvent;
@@ -79,10 +78,6 @@ public final class RTSServerEvents {
         RTSCameraNetwork.CHANNEL.send(
                 PacketDistributor.PLAYER.with(() -> player),
                 FormationStateSyncPacket.forPlayer(player)
-        );
-        RTSCameraNetwork.CHANNEL.send(
-                PacketDistributor.PLAYER.with(() -> player),
-                MissileStateSyncPacket.forPlayer(player)
         );
         BodyguardManager.sync(player);
         RTSCameraNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),

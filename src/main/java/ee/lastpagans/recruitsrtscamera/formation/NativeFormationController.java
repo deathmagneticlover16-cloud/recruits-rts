@@ -160,6 +160,14 @@ public final class NativeFormationController {
         return state == null ? null : state.heading;
     }
 
+    /** Face every member without rotating or rebuilding the formation's slot geometry. */
+    public static boolean face(UUID groupId, float heading) {
+        State state = STATES.get(groupId);
+        if (state == null || !Float.isFinite(heading)) return false;
+        for (UUID recruitId : state.offsets.keySet()) state.facings.put(recruitId, heading);
+        return true;
+    }
+
     public static int memberCount(UUID groupId) {
         State state = STATES.get(groupId);
         return state == null ? -1 : state.offsets.size();
@@ -440,8 +448,7 @@ public final class NativeFormationController {
             Vec3 velocity = mover.getDeltaMovement();
             mover.setDeltaMovement(0.0D, velocity.y, 0.0D);
             agent.clearPath();
-            recruit.ownerRot = finalHeading;
-            mover.setYRot(finalHeading);
+            enforceFacing(recruit, mover, finalHeading);
             return true;
         }
 
@@ -722,7 +729,28 @@ public final class NativeFormationController {
         float delta = net.minecraft.util.Mth.wrapDegrees(targetYaw - mover.getYRot());
         float yaw = mover.getYRot() + (float) clamp(delta, -12.0D, 12.0D);
         mover.setYRot(yaw);
+        mover.setYBodyRot(yaw);
+        mover.setYHeadRot(yaw);
         recruit.ownerRot = yaw;
+    }
+
+    /** Keep native look/move controls from immediately overwriting an explicit face order. */
+    private static void enforceFacing(AbstractRecruitEntity recruit, Mob mover, float yaw) {
+        recruit.ownerRot = yaw;
+        recruit.setYRot(yaw);
+        recruit.setYBodyRot(yaw);
+        recruit.setYHeadRot(yaw);
+        recruit.yRotO = yaw;
+        recruit.yBodyRotO = yaw;
+        recruit.yHeadRotO = yaw;
+        if (mover != recruit) {
+            mover.setYRot(yaw);
+            mover.setYBodyRot(yaw);
+            mover.setYHeadRot(yaw);
+            mover.yRotO = yaw;
+            mover.yBodyRotO = yaw;
+            mover.yHeadRotO = yaw;
+        }
     }
 
     private static double navigationSpeed(AbstractRecruitEntity recruit) {

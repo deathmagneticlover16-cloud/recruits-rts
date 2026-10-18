@@ -6,7 +6,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class RTSCameraNetwork {
-    private static final String PROTOCOL = "rts-camera-120";
+    private static final String PROTOCOL = "rts-camera-130";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(RecruitsRTSCameraMod.MOD_ID, "main"),
@@ -41,8 +41,6 @@ public final class RTSCameraNetwork {
         CHANNEL.registerMessage(id++, BodyguardFollowCommandPacket.class, BodyguardFollowCommandPacket::encode, BodyguardFollowCommandPacket::decode, BodyguardFollowCommandPacket::handle);
         CHANNEL.registerMessage(id++, BodyguardCarryPacket.class, BodyguardCarryPacket::encode, BodyguardCarryPacket::decode, BodyguardCarryPacket::handle);
         CHANNEL.registerMessage(id++, RTSModeStatePacket.class, RTSModeStatePacket::encode, RTSModeStatePacket::decode, RTSModeStatePacket::handle);
-        CHANNEL.registerMessage(id++, MissileControlPacket.class, MissileControlPacket::encode, MissileControlPacket::decode, MissileControlPacket::handle);
-        CHANNEL.registerMessage(id++, MissileStateSyncPacket.class, MissileStateSyncPacket::encode, MissileStateSyncPacket::decode, MissileStateSyncPacket::handle);
         CHANNEL.registerMessage(id++, AdvisorEventPacket.class, AdvisorEventPacket::encode, AdvisorEventPacket::decode, AdvisorEventPacket::handle);
         CHANNEL.registerMessage(id++, BattleStateSyncPacket.class, BattleStateSyncPacket::encode, BattleStateSyncPacket::decode, BattleStateSyncPacket::handle);
         CHANNEL.registerMessage(id++, TacticsControlPacket.class, TacticsControlPacket::encode, TacticsControlPacket::decode, TacticsControlPacket::handle,

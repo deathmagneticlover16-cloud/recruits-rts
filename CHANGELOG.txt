@@ -1,3 +1,16 @@
+Recruits: RTS Camera 0.13.0-server.1
+Commander control cleanup and formation persistence
+
+- Replaced the old Formations drop-up with Army Presets: Balanced, Double Line, Cavalry Vanguard, Skirmish Screen and Reserve.
+- Removed the Tactics & Abilities tab, manual shield commands, legacy Use/Hold Missiles, weapon-mode commands, Second Wind, Hold the Line and War Cry.
+- Added direct eligibility-filtered command-bar controls: Mount/Dismount for cavalry-majority groups, Fire At Will/Hold Fire for groups with any ranged weapon, and Skirmish for ranged-majority groups. Server handling repeats the eligibility checks.
+- Ranged attack orders keep their formation runtime and slot ownership when targets change or die.
+- Native Recruits Face commands now update the built-in formation runtime. Settled recruits and mounts continuously apply ordered yaw to body and head facing so those commands persist.
+- Shared routes prefer wider, flatter detours. Broad stairs keep formation geometry; ladders and truly narrow passages still use centered column transit.
+- Tagged throwable weapons now obey Fire At Will/Hold Fire. The legacy missile packets and persistent toggle were removed.
+- Network protocol is now rts-camera-130; update clients and server together.
+- Source version and packaging references are 0.13.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.12.2-server.1
 Combat and tactical orders expansion
 

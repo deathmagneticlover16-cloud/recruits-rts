@@ -1,6 +1,7 @@
 package ee.lastpagans.recruitsrtscamera.client;
 
 import ee.lastpagans.recruitsrtscamera.formation.FormationKind;
+import ee.lastpagans.recruitsrtscamera.formation.ArmyPreset;
 import ee.lastpagans.recruitsrtscamera.config.RTSClientConfig;
 import ee.lastpagans.recruitsrtscamera.math.ScreenProjection;
 import net.minecraft.client.Minecraft;
@@ -54,7 +55,6 @@ public final class CommanderOverlay {
 
     private static int page;
     private static boolean formationMenuOpen;
-    private static boolean tacticsMenuOpen;
     private static Layout lastLayout = Layout.EMPTY;
     private static Boolean enemyBannersVisibleOverride;
 
@@ -64,7 +64,6 @@ public final class CommanderOverlay {
     public static void reset() {
         page = 0;
         formationMenuOpen = false;
-        tacticsMenuOpen = false;
         lastLayout = Layout.EMPTY;
         enemyBannersVisibleOverride = null;
     }
@@ -104,7 +103,6 @@ public final class CommanderOverlay {
             renderSelectedLabel(graphics, layout);
             renderCommandPanel(graphics, layout);
             if (formationMenuOpen) renderFormationMenu(graphics, layout);
-            if (tacticsMenuOpen) renderTacticsMenu(graphics, layout);
         } finally {
             graphics.pose().popPose();
         }
@@ -120,19 +118,6 @@ public final class CommanderOverlay {
         Layout layout = currentLayout();
         Bounds popup = formationPopupBounds(layout);
         boolean overPopup = formationMenuOpen && popup.contains(mouseX, mouseY);
-        boolean overTactics = tacticsMenuOpen && tacticsBounds(layout).contains(mouseX, mouseY);
-        if (overTactics) {
-            if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && action == GLFW.GLFW_PRESS
-                    && !RTSCameraController.commanderSelectedGroups().isEmpty()) {
-                for (TacticEntry entry : tacticEntries(layout)) if (entry.bounds.contains(mouseX, mouseY)) {
-                    ClientTactics.send(entry.action);
-                    return true;
-                }
-            }
-            return true;
-        }
-        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && action == GLFW.GLFW_PRESS
-                && !layout.tacticsButton().contains(mouseX, mouseY)) tacticsMenuOpen = false;
 
         // Floating banners are genuine RTS hit targets, not decoration. Friendly LMB selects;
         // hostile RMB issues the same attack order as right-clicking one of that group's recruits.
@@ -162,9 +147,9 @@ public final class CommanderOverlay {
         }
 
         if (overPopup) {
-            for (FormationHitbox hitbox : formationHitboxes(layout)) {
+            for (ArmyPresetHitbox hitbox : formationHitboxes(layout)) {
                 if (hitbox.bounds().contains(mouseX, mouseY)) {
-                    RTSCommandFacade.setFormation(hitbox.kind());
+                    RTSCommandFacade.applyArmyPreset(hitbox.preset());
                     formationMenuOpen = false;
                     return true;
                 }
@@ -181,13 +166,7 @@ public final class CommanderOverlay {
             return true;
         }
 
-        if (layout.tacticsButton().contains(mouseX, mouseY)) {
-            tacticsMenuOpen = !tacticsMenuOpen;
-            formationMenuOpen = false;
-            return true;
-        }
         if (layout.formationButton().contains(mouseX, mouseY)) {
-            tacticsMenuOpen = false;
             formationMenuOpen = !formationMenuOpen;
             return true;
         }
@@ -199,8 +178,8 @@ public final class CommanderOverlay {
             RTSCommandFacade.toggleAggression();
             return true;
         }
-        if (layout.shieldsButton().contains(mouseX, mouseY)) {
-            RTSCommandFacade.toggleShields();
+        if (RTSCommandFacade.selectedHasCavalryMajority() && layout.mountButton().contains(mouseX, mouseY)) {
+            RTSCommandFacade.toggleMount();
             return true;
         }
         if (layout.slowMarchButton().contains(mouseX, mouseY)) {
@@ -211,12 +190,12 @@ public final class CommanderOverlay {
             RTSCommandFacade.toggleLooseSpacing();
             return true;
         }
-        if (layout.fireControlButton().contains(mouseX, mouseY)) {
+        if (RTSCommandFacade.selectedHasRangedWeapons() && layout.fireControlButton().contains(mouseX, mouseY)) {
             RTSCommandFacade.toggleFireControl();
             return true;
         }
-        if (layout.missileButton().contains(mouseX, mouseY)) {
-            RTSCommandFacade.toggleUseMissiles();
+        if (RTSCommandFacade.selectedHasRangedMajority() && layout.skirmishButton().contains(mouseX, mouseY)) {
+            RTSCommandFacade.toggleSkirmish();
             return true;
         }
         if (layout.bodyguardButton().contains(mouseX, mouseY)) {
@@ -249,7 +228,6 @@ public final class CommanderOverlay {
         Layout layout = currentLayout();
         int mouseX = guiMouseX();
         int mouseY = guiMouseY();
-        if (tacticsMenuOpen && tacticsBounds(layout).contains(mouseX, mouseY)) return true;
         if (!layout.contains(mouseX, mouseY)
                 && !(formationMenuOpen && formationPopupBounds(layout).contains(mouseX, mouseY))) {
             return false;
@@ -264,7 +242,6 @@ public final class CommanderOverlay {
         Layout layout = currentLayout();
         int x = guiMouseX();
         int y = guiMouseY();
-        if (tacticsMenuOpen && tacticsBounds(layout).contains(x, y)) return true;
         if (layout.contains(x, y) || (formationMenuOpen && formationPopupBounds(layout).contains(x, y))) return true;
         for (BannerHitbox banner : bannerHitboxes(layout)) if (banner.bounds().contains(x, y)) return true;
         return false;
@@ -532,28 +509,32 @@ public final class CommanderOverlay {
         graphics.fill(popup.x1(), popup.y1(), popup.x2(), popup.y2(), 0xE0181816);
         drawBorder(graphics, popup, 0xFFD7B84F);
 
-        FormationKind active = RTSCommandFacade.commonSelectedFormationKind();
         int mouseX = guiMouseX();
         int mouseY = guiMouseY();
-        FormationHitbox hovered = null;
+        ArmyPresetHitbox hovered = null;
 
-        for (FormationHitbox hitbox : formationHitboxes(layout)) {
+        for (ArmyPresetHitbox hitbox : formationHitboxes(layout)) {
             Bounds b = hitbox.bounds();
-            boolean isActive = active == hitbox.kind();
             boolean isHovered = b.contains(mouseX, mouseY);
-            int fill = isActive ? 0xCC554817 : (isHovered ? 0xCC3A3934 : 0xAA24231F);
+            int fill = isHovered ? 0xCC3A3934 : 0xAA24231F;
             graphics.fill(b.x1(), b.y1(), b.x2(), b.y2(), fill);
-            drawBorder(graphics, b, isActive ? GOLD : 0xFF777166);
+            drawBorder(graphics, b, isHovered ? GOLD : 0xFF777166);
 
             int iconX = b.x1() + (b.width() - FORMATION_ICON_SIZE) / 2;
             int iconY = b.y1() + (b.height() - FORMATION_ICON_SIZE) / 2;
-            drawFormationIcon(graphics, hitbox.kind(), iconX, iconY);
+            drawArmyPresetIcon(graphics, hitbox.preset(), iconX, iconY);
             if (isHovered) hovered = hitbox;
         }
 
         if (hovered != null) {
-            renderFormationTooltip(graphics, hovered.kind(), popup);
+            renderArmyPresetTooltip(graphics, hovered.preset(), popup);
         }
+    }
+
+    private static void drawArmyPresetIcon(GuiGraphics graphics, ArmyPreset preset, int x, int y) {
+        FormationKind[] icons = {FormationKind.LINE, FormationKind.LINE,
+                FormationKind.TRIANGLE, FormationKind.VEE, FormationKind.HOLLOW_SQUARE};
+        drawFormationIcon(graphics, icons[Math.min(preset.ordinal(), icons.length - 1)], x, y);
     }
 
     private static void drawFormationIcon(GuiGraphics graphics, FormationKind kind, int x, int y) {
@@ -590,9 +571,21 @@ public final class CommanderOverlay {
         }
     }
 
+    private static void renderArmyPresetTooltip(GuiGraphics graphics, ArmyPreset preset, Bounds popup) {
+        List<String> lines = List.of(preset.displayName().toUpperCase(java.util.Locale.ROOT), preset.description());
+        int width = Math.max(MC.font.width(lines.get(0)), MC.font.width(lines.get(1))) + 10;
+        int height = 26;
+        int x = Math.max(4, popup.x1() - width - 4);
+        int y = Math.max(4, Math.min(guiMouseY() - 6, virtualGuiHeight() - height - 4));
+        graphics.fill(x, y, x + width, y + height, 0xEE11110F);
+        drawBorder(graphics, new Bounds(x, y, x + width, y + height), 0xFF8F825C);
+        graphics.drawString(MC.font, lines.get(0), x + 5, y + 4, GOLD, false);
+        graphics.drawString(MC.font, lines.get(1), x + 5, y + 14, TEXT, false);
+    }
+
     private static Bounds formationPopupBounds(Layout layout) {
         int cols = 3;
-        int rows = 3;
+        int rows = (ArmyPreset.values().length + cols - 1) / cols;
         int innerW = cols * FORMATION_BUTTON_SIZE + (cols - 1) * FORMATION_GRID_GAP;
         int innerH = rows * FORMATION_BUTTON_SIZE + (rows - 1) * FORMATION_GRID_GAP;
         int width = innerW + 8;
@@ -604,16 +597,16 @@ public final class CommanderOverlay {
         return new Bounds(x1, y1, x2, y2);
     }
 
-    private static List<FormationHitbox> formationHitboxes(Layout layout) {
+    private static List<ArmyPresetHitbox> formationHitboxes(Layout layout) {
         Bounds popup = formationPopupBounds(layout);
-        List<FormationHitbox> result = new ArrayList<>();
-        FormationKind[] values = FormationKind.values();
+        List<ArmyPresetHitbox> result = new ArrayList<>();
+        ArmyPreset[] values = ArmyPreset.values();
         for (int i = 0; i < values.length; i++) {
             int col = i % 3;
             int row = i / 3;
             int x = popup.x1() + 4 + col * (FORMATION_BUTTON_SIZE + FORMATION_GRID_GAP);
             int y = popup.y1() + 4 + row * (FORMATION_BUTTON_SIZE + FORMATION_GRID_GAP);
-            result.add(new FormationHitbox(
+            result.add(new ArmyPresetHitbox(
                     new Bounds(x, y, x + FORMATION_BUTTON_SIZE, y + FORMATION_BUTTON_SIZE),
                     values[i]
             ));
@@ -623,17 +616,15 @@ public final class CommanderOverlay {
 
     private static void renderCommandPanel(GuiGraphics graphics, Layout layout) {
         boolean hasSelection = RTSCommandFacade.selectedGroupCount() > 0;
-        int aggro = RTSCommandFacade.selectedAggroState();
-        boolean aggressive = aggro == 2;
-        renderItemButton(graphics, layout.tacticsButton(), net.minecraft.world.item.Items.WRITABLE_BOOK, tacticsMenuOpen);
-        if (layout.tacticsButton().contains(guiMouseX(), guiMouseY()))
-            renderCommandTooltip(graphics, "Tactics and abilities", "Skirmish, weapon modes, mounts, shields and battle abilities.");
-        boolean shieldsUp = RTSCommandFacade.selectedShieldsUp();
+        boolean aggressive = RTSCommandFacade.selectedAggroState() == 2;
         boolean slowMarch = RTSCommandFacade.selectedSlowMarch();
         boolean loose = RTSCommandFacade.selectedLooseSpacing();
-        boolean ranged = RTSCommandFacade.selectedSupportsRangedControl();
+        boolean ranged = RTSCommandFacade.selectedHasRangedWeapons();
+        boolean rangedMajority = RTSCommandFacade.selectedHasRangedMajority();
+        boolean cavalryMajority = RTSCommandFacade.selectedHasCavalryMajority();
+        boolean mounted = cavalryMajority && RTSCommandFacade.selectedCavalryMounted();
         boolean fireAtWill = ranged && RTSCommandFacade.selectedFireAtWill();
-        boolean useMissiles = RTSCommandFacade.selectedUseMissiles();
+        boolean skirmishing = rangedMajority && RTSCommandFacade.selectedSkirmishing();
         boolean canBodyguard = RTSCommandFacade.canToggleBodyguard();
         boolean bodyguard = RTSCommandFacade.selectedIsBodyguard();
         boolean canFollowBodyguard = RTSCommandFacade.canToggleBodyguardFollow();
@@ -648,19 +639,17 @@ public final class CommanderOverlay {
                 aggressive ? CommanderGuiTextures.COMMAND_STANCE_AGGRESSIVE
                         : CommanderGuiTextures.COMMAND_STANCE_NEUTRAL,
                 hasSelection, aggressive);
-        renderSpriteCommandButton(graphics, layout.shieldsButton(),
-                CommanderGuiTextures.COMMAND_SHIELD_STATES,
-                shieldsUp ? 1 : 0, 64, hasSelection, shieldsUp);
+        if (cavalryMajority) renderItemButton(graphics, layout.mountButton(),
+                net.minecraft.world.item.Items.SADDLE, mounted);
         renderIconCommandButton(graphics, layout.slowMarchButton(),
                 CommanderGuiTextures.COMMAND_SLOW_MARCH, hasSelection, slowMarch);
         renderIconCommandButton(graphics, layout.looseSpacingButton(),
                 CommanderGuiTextures.COMMAND_LOOSE_SPACING, hasSelection, loose);
-        renderIconCommandButton(graphics, layout.fireControlButton(),
+        if (ranged) renderIconCommandButton(graphics, layout.fireControlButton(),
                 fireAtWill ? CommanderGuiTextures.COMMAND_FIRE_AT_WILL
-                        : CommanderGuiTextures.COMMAND_HOLD_FIRE,
-                hasSelection && ranged, fireAtWill);
-        renderIconCommandButton(graphics, layout.missileButton(),
-                CommanderGuiTextures.COMMAND_USE_MISSILES, hasSelection, useMissiles);
+                        : CommanderGuiTextures.COMMAND_HOLD_FIRE, true, fireAtWill);
+        if (rangedMajority) renderItemButton(graphics, layout.skirmishButton(),
+                net.minecraft.world.item.Items.BOW, skirmishing);
         renderIconCommandButton(graphics, layout.bodyguardButton(),
                 CommanderGuiTextures.COMMAND_BODYGUARD, canBodyguard, bodyguard);
         renderIconCommandButton(graphics, layout.bodyguardFollowButton(),
@@ -668,57 +657,46 @@ public final class CommanderOverlay {
         renderIconCommandButton(graphics, layout.enemyBannersButton(),
                 CommanderGuiTextures.COMMAND_ENEMY_BANNERS, true, enemyBanners);
 
-        if (RTSCommandFacade.commandCursor()) {
-            int mx = guiMouseX();
-            int my = guiMouseY();
-            if (layout.formationButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, "Formations",
-                        formationMenuOpen ? "Close the preset formation drop-up."
-                                : "Choose a preset formation.");
-            } else if (layout.haltButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, "Halt", "Stop the selected groups immediately.");
-            } else if (layout.aggressionButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, aggressive ? "Aggressive" : "Neutral",
-                        aggressive ? "Actively seek and engage enemies."
-                                : "Defend and respond without hunting targets.");
-            } else if (layout.shieldsButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, shieldsUp ? "Shields Up" : "Shields Down",
-                        shieldsUp ? "Lower shields on shield-capable troops."
-                                : "Raise shields on shield-capable troops.");
-            } else if (layout.slowMarchButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, slowMarch ? "Slow March: ON" : "Slow March",
-                        slowMarch ? "Normal RMB moves use an orderly reduced pace. Click to disable."
-                                : "Use an orderly reduced pace for normal RMB moves.");
-            } else if (layout.looseSpacingButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, loose ? "Loose Spacing: ON" : "Loose Spacing",
-                        loose ? "Return selected preset formations to normal spacing."
-                                : "Spread selected preset formations to maximum supported spacing.");
-            } else if (layout.fireControlButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, fireAtWill ? "Fire At Will" : "Hold Fire",
-                        !ranged ? "Select only ranged or artillery groups to use this control."
-                                : (fireAtWill ? "Click to order the selected ranged units to hold fire."
-                                : "Click to let the selected ranged units fire at will."));
-            } else if (layout.missileButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, useMissiles ? "Use Missiles: ON" : "Hold Missiles",
-                        useMissiles ? "Tagged spears/javelins may be thrown on attack orders. Click to preserve them."
-                                : "Allow selected groups to throw tagged melee missiles on attack orders.");
-            } else if (layout.bodyguardButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, bodyguard ? "General / Bodyguard" : "Designate Bodyguard",
-                        canBodyguard ? (bodyguard ? "Remove the selected group as your General's Bodyguard."
-                                : "Place your real player in this formation as its commander slot while RTS view stays detached.")
-                                : "Select exactly one owned group.");
-            } else if (layout.bodyguardFollowButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, followBodyguard ? "Bodyguard Follows: ON" : "Bodyguard Follows",
-                        canFollowBodyguard ? (followBodyguard
-                                ? "Outside RTS view, the Bodyguard reforms around you. Click to stop following."
-                                : "Keep the Bodyguard with your real player while RTS view is closed.")
-                                : "Assign a General's Bodyguard first.");
-            } else if (layout.enemyBannersButton().contains(mx, my)) {
-                renderCommandTooltip(graphics, enemyBanners ? "Enemy Banners: ON" : "Enemy Banners: OFF",
-                        enemyBanners
-                                ? "Hide hostile banners. Right-click a hostile banner to attack its group."
-                                : "Show hostile banners for targeting and battlefield awareness.");
-            }
+        if (!RTSCommandFacade.commandCursor()) return;
+        int mx = guiMouseX();
+        int my = guiMouseY();
+        if (layout.formationButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, "Army Presets",
+                    formationMenuOpen ? "Close the army preset menu." : "Arrange selected groups as a combined army.");
+        } else if (layout.haltButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, "Halt", "Stop the selected groups immediately.");
+        } else if (layout.aggressionButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, aggressive ? "Aggressive" : "Neutral",
+                    aggressive ? "Actively seek and engage enemies." : "Defend and respond without hunting targets.");
+        } else if (cavalryMajority && layout.mountButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, mounted ? "Dismount" : "Mount",
+                    mounted ? "Dismount the selected cavalry-majority groups."
+                            : "Mount the selected cavalry-majority groups.");
+        } else if (layout.slowMarchButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, slowMarch ? "Slow March: ON" : "Slow March",
+                    "Toggle reduced formation movement speed.");
+        } else if (layout.looseSpacingButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, loose ? "Loose Spacing: ON" : "Loose Spacing",
+                    "Toggle wider spacing for preset formations.");
+        } else if (ranged && layout.fireControlButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, fireAtWill ? "Fire At Will" : "Hold Fire",
+                    fireAtWill ? "Order weapon-bearing groups to hold fire."
+                            : "Let weapon-bearing groups fire at will.");
+        } else if (rangedMajority && layout.skirmishButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, skirmishing ? "Skirmish: ON" : "Skirmish",
+                    skirmishing ? "Order ranged-majority groups to stand and fight."
+                            : "Order ranged-majority groups to keep firing distance.");
+        } else if (layout.bodyguardButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, bodyguard ? "General / Bodyguard" : "Designate Bodyguard",
+                    canBodyguard ? "Toggle the selected group as the General's Bodyguard."
+                            : "Select exactly one owned group.");
+        } else if (layout.bodyguardFollowButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, followBodyguard ? "Bodyguard Follows: ON" : "Bodyguard Follows",
+                    canFollowBodyguard ? "Toggle whether the Bodyguard follows your real player."
+                            : "Assign a General's Bodyguard first.");
+        } else if (layout.enemyBannersButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, enemyBanners ? "Enemy Banners: ON" : "Enemy Banners: OFF",
+                    "Toggle hostile battlefield banners.");
         }
     }
 
@@ -940,7 +918,10 @@ public final class CommanderOverlay {
         Bounds next = new Bounds(navBaseX + NAV_WIDTH + CARD_GAP, navY1,
                 navBaseX + NAV_WIDTH * 2 + CARD_GAP, navY2);
 
-        int commandCount = 12;
+        boolean showMount = RTSCommandFacade.selectedHasCavalryMajority();
+        boolean showFire = RTSCommandFacade.selectedHasRangedWeapons();
+        boolean showSkirmish = RTSCommandFacade.selectedHasRangedMajority();
+        int commandCount = 8 + (showMount ? 1 : 0) + (showFire ? 1 : 0) + (showSkirmish ? 1 : 0);
         int totalButtons = COMMAND_BUTTON_SIZE * commandCount + COMMAND_BUTTON_GAP * (commandCount - 1);
         int buttonX = panelX + Math.max(8, (panelWidth - totalButtons) / 2);
         int buttonY1 = panelBottom - COMMAND_BAR_HEIGHT + 2;
@@ -952,90 +933,41 @@ public final class CommanderOverlay {
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds aggression = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
-        Bounds shields = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
-        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
+        Bounds mount = new Bounds(0, 0, 0, 0);
+        if (showMount) {
+            mount = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
+            buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
+        }
         Bounds slowMarch = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds looseSpacing = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
-        Bounds fireControl = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
-        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
-        Bounds missile = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
-        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
+        Bounds fireControl = new Bounds(0, 0, 0, 0);
+        if (showFire) {
+            fireControl = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
+            buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
+        }
+        Bounds skirmish = new Bounds(0, 0, 0, 0);
+        if (showSkirmish) {
+            skirmish = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
+            buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
+        }
         Bounds bodyguard = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds bodyguardFollow = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds enemyBanners = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
 
-        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
-        Bounds tactics = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
-
         return new Layout(
                 panelX, panelY, panelRight, panelBottom,
                 0, 0,
                 cardsX, cardsRight - navSpace,
                 cardsPerPage, pageCount,
-                prev, next, formation, halt, aggression, shields,
-                slowMarch, looseSpacing, fireControl, missile, bodyguard, bodyguardFollow, enemyBanners, tactics
+                prev, next, formation, halt, aggression, mount,
+                slowMarch, looseSpacing, fireControl, skirmish, bodyguard, bodyguardFollow, enemyBanners
         );
     }
 
-
-    private record TacticEntry(Bounds bounds, String label, String detail,
-            ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action action) {}
-
-    private static Bounds tacticsBounds(Layout layout) {
-        int width = Math.min(350, virtualGuiWidth() - 8);
-        int x = Math.max(4, (virtualGuiWidth() - width) / 2);
-        int y = Math.max(4, layout.panelY() - 204);
-        return new Bounds(x, y, x + width, y + 200);
-    }
-
-    private static List<TacticEntry> tacticEntries(Layout layout) {
-        var actions = ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action.values();
-        String[] labels = {"Skirmish ON", "Skirmish OFF", "Ranged weapons", "Melee weapons", "Native weapon choice",
-                "Mount", "Dismount", "Shields FRONT", "Shields UP", "Shields AUTO", "Native shields",
-                "Second Wind", "Hold the Line", "War Cry"};
-        String[] details = {
-                "Keep firing distance; withdraw when enemies close.", "Fight in place using normal combat movement.",
-                "Prefer ranged weapons. Hold Fire still applies.", "Close for melee; equip an available backup weapon.",
-                "Return weapon choice to native Recruits AI.", "Return to a remembered or nearby owned horse.",
-                "Dismount and stay on foot until ordered to mount.", "Face melee threats and cover between attacks.",
-                "Brace shields; also intercept overhead arrows and javelins.", "Nearby incoming missiles alert the whole formation.",
-                "Return shield decisions to native Recruits AI.", "Recover 25 fatigue. Cooldown: 60 seconds.",
-                "Halve morale shocks for 15 seconds. Cooldown: 60 seconds.", "Frighten visible enemies within 18 blocks. Cooldown: 90 seconds."};
-        Bounds box = tacticsBounds(layout);
-        int columnWidth = (box.width() - 12) / 2;
-        List<TacticEntry> result = new ArrayList<>();
-        for (int i = 0; i < actions.length; i++) {
-            int x = box.x1() + 4 + (i % 2) * (columnWidth + 4);
-            int y = box.y1() + 32 + (i / 2) * 19;
-            result.add(new TacticEntry(new Bounds(x, y, x + columnWidth, y + 17), labels[i], details[i], actions[i]));
-        }
-        return result;
-    }
-
-    private static void renderTacticsMenu(GuiGraphics graphics, Layout layout) {
-        Bounds box = tacticsBounds(layout);
-        graphics.fill(box.x1(), box.y1(), box.x2(), box.y2(), 0xF51B1A17);
-        drawBorder(graphics, box, GOLD);
-        graphics.drawString(MC.font, "TACTICS & ABILITIES", box.x1() + 6, box.y1() + 5, GOLD, false);
-        graphics.drawString(MC.font, MC.font.plainSubstrByWidth(ClientTactics.selectionLabel(), box.width() - 12),
-                box.x1() + 6, box.y1() + 18, 0xFFD6CCB6, false);
-        String detail = "Orders apply to the selected groups.";
-        for (TacticEntry entry : tacticEntries(layout)) {
-            boolean hovered = entry.bounds.contains(guiMouseX(), guiMouseY());
-            graphics.fill(entry.bounds.x1(), entry.bounds.y1(), entry.bounds.x2(), entry.bounds.y2(),
-                    hovered ? 0xFF54492F : 0xFF302D25);
-            graphics.drawString(MC.font, entry.label, entry.bounds.x1() + 4, entry.bounds.y1() + 4, 0xFFE6DECE, false);
-            if (hovered) detail = entry.detail;
-        }
-        int wrap = box.width() - 12;
-        var lines = MC.font.split(net.minecraft.network.chat.Component.literal(detail), wrap);
-        for (int i = 0; i < Math.min(2, lines.size()); i++)
-            graphics.drawString(MC.font, lines.get(i), box.x1() + 6, box.y2() - 26 + i * 10, 0xFFBBAF99, false);
-    }
 
     private static void renderItemButton(GuiGraphics graphics, Bounds bounds, net.minecraft.world.item.Item item, boolean active) {
         graphics.fill(bounds.x1(), bounds.y1(), bounds.x2(), bounds.y2(), active ? 0xCC554817 : 0xB824231F);
@@ -1117,7 +1049,7 @@ public final class CommanderOverlay {
     private record CardHitbox(Bounds bounds, RTSCommandFacade.UnitCardView view) {
     }
 
-    private record FormationHitbox(Bounds bounds, FormationKind kind) {
+    private record ArmyPresetHitbox(Bounds bounds, ArmyPreset preset) {
     }
 
     private record BannerHitbox(Bounds bounds, boolean enemy, java.util.UUID groupId, int representativeEntityId) {
@@ -1153,15 +1085,14 @@ public final class CommanderOverlay {
             Bounds formationButton,
             Bounds haltButton,
             Bounds aggressionButton,
-            Bounds shieldsButton,
+            Bounds mountButton,
             Bounds slowMarchButton,
             Bounds looseSpacingButton,
             Bounds fireControlButton,
-            Bounds missileButton,
+            Bounds skirmishButton,
             Bounds bodyguardButton,
             Bounds bodyguardFollowButton,
-            Bounds enemyBannersButton,
-            Bounds tacticsButton
+            Bounds enemyBannersButton
     ) {
         private static final Layout EMPTY = new Layout(0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
@@ -1170,7 +1101,7 @@ public final class CommanderOverlay {
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
-                new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0));
+                new Bounds(0, 0, 0, 0));
 
         boolean contains(int x, int y) {
             return x >= panelX && x < panelRight && y >= panelY && y < panelBottom;
