@@ -44,6 +44,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RTSMovementBoostManager {
+    private static final double BASE_FORMATION_CENTER_STEP = 0.14D;
+    private static final double REGULAR_INFANTRY_NAV_SPEED = 0.78D;
     private static final double REGULAR_CAVALRY_NAV_SPEED = 1.50D;
     private static final double REGULAR_CAVALRY_MOUNT_MULTIPLIER = 0.35D;
     private static final double HASTY_INFANTRY_SPEED = 1.08D;
@@ -51,10 +53,14 @@ public final class RTSMovementBoostManager {
     private static final double HASTY_CAVALRY_NAV_SPEED = 1.62D;
     private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 0.45D;
 
-    // native formation runtime centre STEP is 0.2 blocks/tick. These are *additional* steps.
-    private static double regularCavalryExtra() { return RTSServerConfig.CAVALRY_FORMATION_SPEED.get() - 0.2D; }
-    private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.04D;   // ~0.24 total
-    private static double hastyCavalryExtra() { return RTSServerConfig.CAVALRY_HASTY_SPEED.get() - 0.2D; }
+    // Additional centre steps relative to the native formation runtime baseline.
+    private static double regularCavalryExtra() {
+        return RTSServerConfig.CAVALRY_FORMATION_SPEED.get() - BASE_FORMATION_CENTER_STEP;
+    }
+    private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.10D;   // ~0.24 total
+    private static double hastyCavalryExtra() {
+        return RTSServerConfig.CAVALRY_HASTY_SPEED.get() - BASE_FORMATION_CENTER_STEP;
+    }
 
     private static final double HASTY_VARIATION = 0.06D;
     private static final double SLOW_MARCH_FACTOR = 0.55D;
@@ -323,7 +329,7 @@ public final class RTSMovementBoostManager {
                 double mountAttributeAmount = 0.0D;
                 double selfAttributeAmount = 0.0D;
                 switch (state.mode) {
-                    case FORMATION_INFANTRY -> navigationSpeed = 1.0D;
+                    case FORMATION_INFANTRY -> navigationSpeed = REGULAR_INFANTRY_NAV_SPEED;
                     case FORMATION_CAVALRY -> {
                         navigationSpeed = REGULAR_CAVALRY_NAV_SPEED;
                         mountAttributeAmount = REGULAR_CAVALRY_MOUNT_MULTIPLIER;

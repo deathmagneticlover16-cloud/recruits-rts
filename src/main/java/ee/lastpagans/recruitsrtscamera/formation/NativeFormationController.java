@@ -41,18 +41,19 @@ import java.util.UUID;
  * Built-in server-authoritative formation runtime.
  *
  * <p>The controller owns slot assignment and execution. A formation follows one shared tactical
- * route on open ground. At ladders, stairs, and narrow passages, front-center pairs peel into
- * a distance-spaced snake while later ranks retain their approach slots. Members recover their
- * geometric slots after the anchor reaches its destination.</p>
+ * route on open ground. At ladders, stairs, and narrow passages, the group immediately enters
+ * the original distance-spaced single column and follows centered support-shape waypoints.
+ * Members recover their geometric slots after the anchor reaches its destination.</p>
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class NativeFormationController {
     private static final Map<UUID, State> STATES = new LinkedHashMap<>();
     private static final int MAX_FORMATION_SEARCH = 18_000;
     private static final int MAX_AGENT_SEARCH = 3_500;
-    private static final double CENTER_SPEED = 0.20D;
+    private static final double CENTER_SPEED = 0.14D;
     private static final double SLOT_LOCK_DISTANCE_SQ = 0.30D * 0.30D;
-    private static final int QUEUE_BATCH_SIZE = 2;
+    private static final double FOOT_NAV_SPEED = 0.78D;
+    private static final double MOUNTED_NAV_SPEED = 0.72D;
 
     private NativeFormationController() {
     }
@@ -205,8 +206,6 @@ public final class NativeFormationController {
         state.route = TacticalPathfinder.Route.EMPTY;
         state.routeIndex = 0;
         state.dispersed = false;
-        state.releasedToQueue = 0;
-        state.stagingCenter = null;
         state.agents.values().forEach(Agent::clearPath);
     }
 
@@ -356,9 +355,8 @@ public final class NativeFormationController {
                             if (state.route.points().isEmpty()) RecruitRuntimeMetrics.PATH_FAILURES.increment();
                             if (state.route.constrained()) RecruitRuntimeMetrics.CONSTRAINED_ROUTES.increment();
                             state.routeIndex = Math.min(1, Math.max(0, state.route.points().size() - 1));
-                            state.dispersed = false;
-                            state.releasedToQueue = 0;
-                            state.stagingCenter = null;
+                            state.dispersed = state.dispersed || state.route.constrained()
+                                    || Math.abs(state.destination.y - state.center.y) > 1.20D;
                             state.trail.clear();
                             rememberTrail(state, state.center);
                             state.nextRouteAt = level.getGameTime() + (state.route.points().isEmpty() ? 20L : 5L);
@@ -372,7 +370,6 @@ public final class NativeFormationController {
         Vec3 effectiveDestination = effectiveDestination(state);
         boolean travelling = horizontalDistanceSq(state.center, effectiveDestination) > 0.16D
                 || Math.abs(state.center.y - effectiveDestination.y) > 0.65D;
-        if (travelling) beginQueueWhenReady(state, members.size(), level.getGameTime());
         Vec3 previousCenter = state.center;
         // The anchor never waits for one member. Cohesion is recovered by accelerating
         // laggards and giving their personal replans priority, so one failed mover cannot
@@ -381,13 +378,10 @@ public final class NativeFormationController {
             advanceAlongRoute(state, CENTER_SPEED);
         } else if (!travelling) {
             state.dispersed = false;
-            state.releasedToQueue = 0;
-            state.stagingCenter = null;
         }
         state.velocity = state.center.subtract(previousCenter);
 
         int laggards = 0;
-        int queuedNotReady = 0;
         int index = 0;
         for (AbstractRecruitEntity recruit : members) {
             FormationSlotMath.Offset offset = state.offsets.get(recruit.getUUID());
@@ -398,21 +392,20 @@ public final class NativeFormationController {
             Mob mover = controlledMob(recruit);
             if (mover == null) continue;
             int transitIndex = index++;
-            boolean released = state.dispersed && travelling && transitIndex < state.releasedToQueue;
-            Vec3 desired = released
+            boolean columnTransit = state.dispersed && travelling;
+            Vec3 desired = columnTransit
                     ? trailPosition(state, transitIndex)
-                    : worldSlot(state.dispersed && state.stagingCenter != null ? state.stagingCenter : state.center,
-                    state.heading, offset);
+                    : worldSlot(state.center, state.heading, offset);
             Agent agent = state.agents.computeIfAbsent(recruit.getUUID(), Agent::new);
             Vec3 grounded = agent.grounded(level, mover, desired);
             if (grounded != null) desired = grounded;
             double slotError = horizontalDistanceSq(mover.position(), desired);
             double heightError = Math.abs(mover.getY() - desired.y);
-            double catchUpScale = slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.55D
-                    : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.30D : 1.0D;
+            double catchUpScale = slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.25D
+                    : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.12D : 1.0D;
             recruit.setHoldPos(desired);
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
-            boolean arrived = drive(level, recruit, mover, desired, agent, released, memberHeading,
+            boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit, memberHeading,
                     state.velocity, catchUpScale);
             if (arrived) {
                 state.locked.add(recruit.getUUID());
@@ -423,11 +416,8 @@ public final class NativeFormationController {
                 RecruitRuntimeRegistry.brain(recruit).markMoving(level.getGameTime());
                 if (slotError > 1.55D * 1.55D || heightError > 0.85D) laggards++;
             }
-            if (released && transitIndex >= Math.max(0, state.releasedToQueue - QUEUE_BATCH_SIZE)
-                    && horizontalDistanceSq(mover.position(), desired) > 1.35D * 1.35D) queuedNotReady++;
         }
         state.laggards = laggards;
-        releaseNextQueueBatch(state, members.size(), queuedNotReady, level.getGameTime());
     }
 
     private static boolean drive(
@@ -456,7 +446,10 @@ public final class NativeFormationController {
         }
 
         long now = level.getGameTime();
-        boolean localCandidate = RTSServerConfig.LOCAL_STEERING.get()
+        // On stairs/ladders use the shape-aware tactical waypoints exclusively. Local
+        // steering is deliberately disabled there because its lateral correction can
+        // pull a member toward the outside edge of a stair.
+        boolean localCandidate = !dispersed && RTSServerConfig.LOCAL_STEERING.get()
                 && horizontal <= 8.0D * 8.0D && vertical <= 2.0D;
         Boolean directSafety = localCandidate ? agent.canSteerDirect(level, mover, desired, now) : Boolean.FALSE;
         boolean fallenBehind = desired.y - mover.getY() > 0.72D;
@@ -465,10 +458,18 @@ public final class NativeFormationController {
             agent.clearPath();
             LocalFormationSteering.steer(level, recruit, mover, desired,
                     RecruitRuntimeRegistry.brain(recruit).desiredVelocity(), catchUpScale);
-            faceMovement(recruit, mover, desired);
             return false;
         }
 
+        boolean fellOffConstrainedRoute = dispersed && fallenBehind
+                && !agent.path.points().isEmpty()
+                && agent.pathDeviationSq(mover.position()) > 0.85D * 0.85D;
+        if (fellOffConstrainedRoute) {
+            // A member knocked off stairs must start a route from its landing point.
+            // Continuing toward an upper stale waypoint makes it jump against the side.
+            agent.clearPath();
+            agent.nextPlanAt = 0L;
+        }
         boolean goalChanged = agent.goal == null || agent.goal.distanceToSqr(desired) > (dispersed ? 1.0D : 0.75D * 0.75D);
         boolean needsPath = agent.path.points().isEmpty() || agent.index >= agent.path.points().size()
                 || goalChanged || !agent.path.isValid(level);
@@ -506,8 +507,7 @@ public final class NativeFormationController {
             // bounded tactical search has no result. The grounded goal is supported, so
             // this fallback keeps the recruit moving without steering toward open air.
             mover.getNavigation().moveTo(desired.x, desired.y, desired.z,
-                    (recruit.getVehicle() == null ? 1.05D : 1.0D) * catchUpScale);
-            faceMovement(recruit, mover, desired);
+                    navigationSpeed(recruit) * catchUpScale);
             return false;
         }
 
@@ -531,9 +531,10 @@ public final class NativeFormationController {
             double dz = waypoint.z - mover.getZ();
             Vec3 velocity = mover.getDeltaMovement();
             mover.getNavigation().stop();
-            mover.setDeltaMovement(clamp(dx * 0.22D * catchUpScale, -0.18D, 0.18D),
-                    Math.max(0.20D * catchUpScale, velocity.y),
-                    clamp(dz * 0.22D * catchUpScale, -0.18D, 0.18D));
+            mover.setDeltaMovement(clamp(dx * 0.16D * catchUpScale, -0.14D, 0.14D),
+                    Math.max(0.14D * catchUpScale, velocity.y),
+                    clamp(dz * 0.16D * catchUpScale, -0.14D, 0.14D));
+            faceMovement(recruit, mover, waypoint);
         } else {
             if (waypoint.y > mover.getY() + 0.45D
                     && horizontalDistanceSq(mover.position(), waypoint) < 1.45D * 1.45D) {
@@ -541,9 +542,8 @@ public final class NativeFormationController {
             }
             mover.getNavigation().stop();
             mover.getMoveControl().setWantedPosition(waypoint.x, waypoint.y, waypoint.z,
-                    (recruit.getVehicle() == null ? 1.05D : 1.0D) * catchUpScale);
+                    navigationSpeed(recruit) * catchUpScale);
         }
-        faceMovement(recruit, mover, waypoint);
         return false;
     }
 
@@ -574,48 +574,12 @@ public final class NativeFormationController {
 
     private static Vec3 trailPosition(State state, int memberIndex) {
         if (state.trail.isEmpty()) return state.center;
-        double behind = memberIndex * 0.90D;
-        Vec3 middle = sampleTrail(state, behind);
-        Vec3 ahead = sampleTrail(state, Math.max(0.0D, behind - 0.32D));
-        Vec3 back = sampleTrail(state, behind + 0.32D);
-        if (Math.abs(ahead.y - middle.y) < 0.80D && Math.abs(back.y - middle.y) < 0.80D) {
-            return ahead.scale(0.20D).add(middle.scale(0.60D)).add(back.scale(0.20D));
-        }
-        return middle;
-    }
-
-    private static Vec3 sampleTrail(State state, double distanceBehind) {
-        if (state.trail.isEmpty()) return state.center;
-        double remaining = distanceBehind;
-        for (int i = state.trail.size() - 1; i > 0; i--) {
-            Vec3 newer = state.trail.get(i);
-            Vec3 older = state.trail.get(i - 1);
-            double length = newer.distanceTo(older);
-            if (length >= remaining && length > 1.0E-5D) return newer.lerp(older, remaining / length);
-            remaining -= length;
-        }
+        int behind = memberIndex * 5;
+        int trailIndex = state.trail.size() - 1 - behind;
+        if (trailIndex >= 0) return state.trail.get(trailIndex);
         double yaw = Math.toRadians(state.heading);
         Vec3 forward = new Vec3(-Math.sin(yaw), 0.0D, Math.cos(yaw));
-        return state.trail.get(0).add(forward.scale(-remaining));
-    }
-
-    private static void beginQueueWhenReady(State state, int memberCount, long now) {
-        if (state.dispersed || !state.route.constrained() || state.route.constrainedStart() < 0
-                || state.route.points().isEmpty()) return;
-        int entryIndex = Math.min(state.route.constrainedStart(), state.route.points().size() - 1);
-        Vec3 entry = state.route.points().get(entryIndex);
-        if (state.routeIndex < entryIndex && horizontalDistanceSq(state.center, entry) > 1.75D * 1.75D) return;
-        state.dispersed = true;
-        state.stagingCenter = state.center;
-        state.releasedToQueue = Math.min(QUEUE_BATCH_SIZE, memberCount);
-        state.nextQueueReleaseAt = now + 20L;
-    }
-
-    private static void releaseNextQueueBatch(State state, int memberCount, int queuedNotReady, long now) {
-        if (!state.dispersed || state.releasedToQueue >= memberCount) return;
-        if (queuedNotReady > 0 && now < state.nextQueueReleaseAt) return;
-        state.releasedToQueue = Math.min(memberCount, state.releasedToQueue + QUEUE_BATCH_SIZE);
-        state.nextQueueReleaseAt = now + 20L;
+        return state.trail.get(0).add(forward.scale(trailIndex * 0.20D));
     }
 
     private static Vec3 effectiveDestination(State state) {
@@ -694,8 +658,6 @@ public final class NativeFormationController {
         state.route = TacticalPathfinder.Route.EMPTY;
         state.routeIndex = 0;
         state.dispersed = false;
-        state.releasedToQueue = 0;
-        state.stagingCenter = null;
         state.agents.values().forEach(Agent::clearPath);
     }
 
@@ -756,9 +718,15 @@ public final class NativeFormationController {
         double dx = target.x - mover.getX();
         double dz = target.z - mover.getZ();
         if (dx * dx + dz * dz < 1.0E-5D) return;
-        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float targetYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float delta = net.minecraft.util.Mth.wrapDegrees(targetYaw - mover.getYRot());
+        float yaw = mover.getYRot() + (float) clamp(delta, -12.0D, 12.0D);
         mover.setYRot(yaw);
         recruit.ownerRot = yaw;
+    }
+
+    private static double navigationSpeed(AbstractRecruitEntity recruit) {
+        return recruit.getVehicle() == null ? FOOT_NAV_SPEED : MOUNTED_NAV_SPEED;
     }
 
     private static boolean carriesMoraleItem(AbstractRecruitEntity recruit) {
@@ -798,9 +766,6 @@ public final class NativeFormationController {
         int emptyTicks;
         int consecutiveFailures;
         boolean dispersed;
-        int releasedToQueue;
-        Vec3 stagingCenter;
-        long nextQueueReleaseAt;
         boolean routePending;
         long nextRouteAt;
 
@@ -878,6 +843,17 @@ public final class NativeFormationController {
                 return false;
             }
             return now - lastProgressAt >= 14L;
+        }
+
+        double pathDeviationSq(Vec3 position) {
+            if (path.points().isEmpty()) return Double.POSITIVE_INFINITY;
+            double nearest = Double.POSITIVE_INFINITY;
+            int start = Math.max(0, index - 1);
+            int end = Math.min(path.points().size(), index + 3);
+            for (int i = start; i < end; i++) {
+                nearest = Math.min(nearest, horizontalDistanceSq(position, path.points().get(i)));
+            }
+            return nearest;
         }
 
         Boolean canSteerDirect(ServerLevel level, Mob mover, Vec3 destination, long now) {

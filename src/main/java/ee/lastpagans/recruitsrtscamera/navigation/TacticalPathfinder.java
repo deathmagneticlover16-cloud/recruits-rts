@@ -371,8 +371,6 @@ public final class TacticalPathfinder {
         }
         Collections.reverse(reversed);
         boolean constrained = false;
-        int constrainedStart = -1;
-        int constrainedEnd = -1;
         List<Vec3> points = new ArrayList<>(reversed.size());
         Cell previous = null;
         for (int i = 0; i < reversed.size(); i++) {
@@ -383,17 +381,11 @@ public final class TacticalPathfinder {
             // A flat doorway, bridge, ledge, or one-block corridor also cannot carry a full
             // formation. Endpoints are ignored so a destination beside a wall can still reform.
             if (i > 0 && i + 1 < reversed.size() && openSides(level, mover, cell) < 4) narrow = true;
-            if (narrow) {
-                constrained = true;
-                if (constrainedStart < 0) constrainedStart = i;
-                constrainedEnd = i;
-            }
+            if (narrow) constrained = true;
             previous = cell;
         }
         List<Vec3> immutable = List.copyOf(points);
-        if (constrainedStart >= 0) constrainedStart = Math.max(1, constrainedStart - 2);
-        if (constrainedEnd >= 0) constrainedEnd = Math.min(points.size() - 1, constrainedEnd + 2);
-        return new Route(immutable, complete, constrained, constrainedStart, constrainedEnd,
+        return new Route(immutable, complete, constrained,
                 TacticalTerrainRevisions.snapshot(level, immutable));
     }
 
@@ -442,8 +434,8 @@ public final class TacticalPathfinder {
     private record SearchNode(Cell cell, double score) {}
 
     public record Route(List<Vec3> points, boolean complete, boolean constrained,
-                        int constrainedStart, int constrainedEnd, Map<Long, Long> terrainRevisions) {
-        public static final Route EMPTY = new Route(List.of(), false, false, -1, -1, Map.of());
+                        Map<Long, Long> terrainRevisions) {
+        public static final Route EMPTY = new Route(List.of(), false, false, Map.of());
 
         public boolean isValid(ServerLevel level) {
             return TacticalTerrainRevisions.valid(level, terrainRevisions);
