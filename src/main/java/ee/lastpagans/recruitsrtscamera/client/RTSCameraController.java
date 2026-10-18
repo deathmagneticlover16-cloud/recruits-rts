@@ -1,6 +1,5 @@
 package ee.lastpagans.recruitsrtscamera.client;
 
-import com.talhanation.recruits.CommandEvents;
 import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.CaptainEntity;
@@ -27,7 +26,7 @@ import ee.lastpagans.recruitsrtscamera.network.HaltGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.RouteGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.StrategicFirePacket;
 import ee.lastpagans.recruitsrtscamera.network.FireControlPacket;
-import ee.lastpagans.recruitsrtscamera.network.MoveGroupsPacket;
+import ee.lastpagans.recruitsrtscamera.network.MovementPacePacket;
 import ee.lastpagans.recruitsrtscamera.network.SetFormationPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.network.RTSModeStatePacket;
@@ -90,7 +89,7 @@ public final class RTSCameraController {
     private static final Map<UUID, GlowState> MODIFIED_GLOW = new HashMap<>();
     private static final Map<UUID, FormationKind> LOCAL_FORMATIONS = new HashMap<>();
     private static final Set<UUID> LOCAL_CUSTOM_GROUPS = new LinkedHashSet<>();
-    private static final Set<UUID> LOCAL_SLOW_MARCH_GROUPS = new LinkedHashSet<>();
+    private static final Set<UUID> LOCAL_RUNNING_GROUPS = new LinkedHashSet<>();
     private static final Set<UUID> LOCAL_LOOSE_SPACING_GROUPS = new LinkedHashSet<>();
     private static final Set<UUID> LOCAL_FIRE_AT_WILL_GROUPS = new LinkedHashSet<>();
     private static final Map<UUID, CurrentOrderPreview> CURRENT_ORDER_PREVIEWS = new HashMap<>();
@@ -99,6 +98,9 @@ public final class RTSCameraController {
 
     private static boolean active;
     private static boolean commandCursor = true;
+    private static boolean middleMousePanning;
+    private static double middlePanReturnX;
+    private static double middlePanReturnY;
     private static boolean draggingSelection;
     private static boolean draggingFrontage;
     private static boolean draggingCustom;
@@ -262,6 +264,21 @@ public final class RTSCameraController {
         updateGlow();
     }
 
+    static void commanderSelectGroups(Collection<UUID> groupIds) {
+        if (!active || groupIds == null) return;
+        SELECTED_GROUPS.clear();
+        for (UUID id : groupIds) {
+            if (id != null && findOwnedClientGroup(id) != null) SELECTED_GROUPS.add(id);
+        }
+        applySelectionToRecruits();
+        updateGlow();
+        RTSCommandFacade.invalidateCards();
+    }
+
+    static void commanderStatus(String text) {
+        setStatus(text);
+    }
+
     static void commanderCycleFormation() {
         cycleFormation();
     }
@@ -281,19 +298,20 @@ public final class RTSCameraController {
         return common;
     }
 
-    static boolean commanderSlowMarchEnabled() {
-        return !SELECTED_GROUPS.isEmpty() && SELECTED_GROUPS.stream().allMatch(LOCAL_SLOW_MARCH_GROUPS::contains);
+    static boolean commanderRunningEnabled() {
+        return !SELECTED_GROUPS.isEmpty() && SELECTED_GROUPS.stream().allMatch(LOCAL_RUNNING_GROUPS::contains);
     }
 
-    static void commanderToggleSlowMarch() {
+    static void commanderToggleMovementPace() {
         if (SELECTED_GROUPS.isEmpty()) {
             setStatus("Select at least one group first.");
             return;
         }
-        boolean enable = !commanderSlowMarchEnabled();
-        if (enable) LOCAL_SLOW_MARCH_GROUPS.addAll(SELECTED_GROUPS);
-        else LOCAL_SLOW_MARCH_GROUPS.removeAll(SELECTED_GROUPS);
-        setStatus(enable ? "Slow March enabled." : "Slow March disabled.");
+        boolean running = !commanderRunningEnabled();
+        if (running) LOCAL_RUNNING_GROUPS.addAll(SELECTED_GROUPS);
+        else LOCAL_RUNNING_GROUPS.removeAll(SELECTED_GROUPS);
+        RTSCameraNetwork.CHANNEL.sendToServer(new MovementPacePacket(new ArrayList<>(SELECTED_GROUPS), running));
+        setStatus(running ? "Run pace ordered." : "Walk pace ordered.");
     }
 
     static boolean commanderLooseSpacingEnabled() {
@@ -368,6 +386,9 @@ public final class RTSCameraController {
             return false;
         }
 
+        if (active && action == GLFW.GLFW_PRESS && SelectionGroupManager.awaitingHotkey()
+                && SelectionGroupManager.handleKeyPress(key, scanCode)) return true;
+
         if (RTSCameraKeyMappings.TOGGLE.matches(key, scanCode)) {
             if (action == GLFW.GLFW_PRESS) {
                 CAPTURED_COMMANDS.add(CapturedCommand.TOGGLE);
@@ -378,10 +399,11 @@ public final class RTSCameraController {
             return false;
         }
 
+        if (action == GLFW.GLFW_PRESS && SelectionGroupManager.handleKeyPress(key, scanCode)) return true;
+
         CapturedCommand command = null;
-        if (RTSCameraKeyMappings.CURSOR.matches(key, scanCode)) command = CapturedCommand.CURSOR;
-        else if (RTSCameraKeyMappings.CLEAR.matches(key, scanCode)) command = CapturedCommand.CLEAR;
-        else if (RTSCameraKeyMappings.GROUPS.matches(key, scanCode)) command = CapturedCommand.GROUPS;
+        if (RTSCameraKeyMappings.CLEAR.matches(key, scanCode)) command = CapturedCommand.CLEAR;
+        else if (RTSCameraKeyMappings.MOVEMENT_PACE.matches(key, scanCode)) command = CapturedCommand.MOVEMENT_PACE;
         else if (RTSCameraKeyMappings.FORMATION.matches(key, scanCode)) command = CapturedCommand.FORMATION;
         else if (RTSCameraKeyMappings.ROTATE.matches(key, scanCode)) command = CapturedCommand.ROTATE;
         else if (RTSCameraKeyMappings.ARMY_PRESET.matches(key, scanCode)) command = CapturedCommand.ARMY_PRESET;
@@ -421,9 +443,8 @@ public final class RTSCameraController {
         if (!active) {
             return;
         }
-        if (commands.contains(CapturedCommand.CURSOR)) setCommandCursor(!commandCursor);
         if (commands.contains(CapturedCommand.CLEAR)) clearSelection();
-        if (commands.contains(CapturedCommand.GROUPS) && MC.player != null) CommandEvents.openCommandScreen(MC.player);
+        if (commands.contains(CapturedCommand.MOVEMENT_PACE)) commanderToggleMovementPace();
         if (commands.contains(CapturedCommand.FORMATION)) cycleFormation();
         if (commands.contains(CapturedCommand.ARMY_PRESET)) applyArmyPreset();
         if (commands.contains(CapturedCommand.STRATEGIC_FIRE)) designateStrategicFire();
@@ -453,16 +474,11 @@ public final class RTSCameraController {
             return;
         }
 
-        while (RTSCameraKeyMappings.CURSOR.consumeClick()) {
-            setCommandCursor(!commandCursor);
-        }
         while (RTSCameraKeyMappings.CLEAR.consumeClick()) {
             clearSelection();
         }
-        while (RTSCameraKeyMappings.GROUPS.consumeClick()) {
-            if (MC.player != null) {
-                CommandEvents.openCommandScreen(MC.player);
-            }
+        while (RTSCameraKeyMappings.MOVEMENT_PACE.consumeClick()) {
+            commanderToggleMovementPace();
         }
         while (RTSCameraKeyMappings.FORMATION.consumeClick()) {
             cycleFormation();
@@ -626,6 +642,7 @@ public final class RTSCameraController {
         active = true;
         RTSCameraNetwork.CHANNEL.sendToServer(new RTSModeStatePacket(true));
         commandCursor = true;
+        middleMousePanning = false;
         CommanderOverlay.reset();
         draggingSelection = false;
         draggingFrontage = false;
@@ -653,7 +670,7 @@ public final class RTSCameraController {
             Freecam.switchControls();
         }
         updateCursorPosition();
-        message("RTS Camera enabled. X switches between command cursor and native Freecam look.");
+        message("RTS Camera enabled. Hold middle mouse to look around; WASD moves the camera.");
     }
 
     public static void stop(String reason) {
@@ -664,6 +681,7 @@ public final class RTSCameraController {
         applySelectionToRecruits();
         RTSCameraNetwork.CHANNEL.sendToServer(new RTSModeStatePacket(false));
         active = false;
+        middleMousePanning = false;
         CommanderOverlay.reset();
         draggingSelection = false;
         draggingFrontage = false;
@@ -700,27 +718,11 @@ public final class RTSCameraController {
         message(reason);
     }
 
-    private static void setCommandCursor(boolean enabled) {
-        commandCursor = enabled;
-        draggingSelection = false;
-        draggingFrontage = false;
-        draggingCustom = false;
-        rotatingFormation = false;
-        rotationDegrees = 0.0D;
-        ROTATION_PREVIEW.clear();
-        CUSTOM_STROKE.clear();
-        frontageStartGround = null;
-        applyMouseMode();
-        setStatus(enabled
-                ? "Command cursor enabled. Drag-select and right-click orders are active."
-                : "Camera-look enabled. Freecam now owns the mouse; press X to return to commands.");
-    }
-
     private static void applyMouseMode() {
         if (!active || MC.screen != null) {
             return;
         }
-        if (commandCursor) {
+        if (!middleMousePanning) {
             MC.mouseHandler.releaseMouse();
             updateCursorPosition();
         } else {
@@ -744,9 +746,27 @@ public final class RTSCameraController {
     }
 
     public static boolean handleMouseButton(int button, int action, int modifiers) {
-        if (!active || !commandCursor || MC.screen != null) {
+        if (!active || MC.screen != null) {
             return false;
         }
+        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
+            if (action == GLFW.GLFW_PRESS && !middleMousePanning) {
+                middlePanReturnX = MC.mouseHandler.xpos();
+                middlePanReturnY = MC.mouseHandler.ypos();
+                middleMousePanning = true;
+                draggingSelection = false;
+                draggingFrontage = false;
+                draggingCustom = false;
+                MC.mouseHandler.grabMouse();
+            } else if (action == GLFW.GLFW_RELEASE && middleMousePanning) {
+                middleMousePanning = false;
+                MC.mouseHandler.releaseMouse();
+                GLFW.glfwSetCursorPos(MC.getWindow().getWindow(), middlePanReturnX, middlePanReturnY);
+                updateCursorPosition();
+            }
+            return true;
+        }
+        if (middleMousePanning) return true;
         updateCursorPosition();
 
         // The Total War command layer owns clicks inside its panel. This check happens
@@ -832,12 +852,6 @@ public final class RTSCameraController {
             return true;
         }
 
-        if (button == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
-            if (action == GLFW.GLFW_PRESS) {
-                clearSelection();
-            }
-            return true;
-        }
         return false;
     }
 
@@ -1424,6 +1438,7 @@ public final class RTSCameraController {
         long now = System.currentTimeMillis();
         boolean hasty = isHastyDoubleClick(targetPos, now);
         if (hasty) {
+            LOCAL_RUNNING_GROUPS.addAll(SELECTED_GROUPS);
             RTSCameraNetwork.CHANNEL.sendToServer(new HastyMoveGroupsPacket(
                     new ArrayList<>(SELECTED_GROUPS),
                     targetPos
@@ -1434,14 +1449,14 @@ public final class RTSCameraController {
             setStatus("Hasty move sent to " + SELECTED_GROUPS.size() + " group(s): "
                     + targetPos.getX() + ", " + targetPos.getY() + ", " + targetPos.getZ());
         } else {
-            boolean slowMarch = commanderSlowMarchEnabled();
-            if (slowMarch) {
+            boolean running = commanderRunningEnabled();
+            if (!running) {
                 RTSCameraNetwork.CHANNEL.sendToServer(new SlowMoveGroupsPacket(
                         new ArrayList<>(SELECTED_GROUPS),
                         targetPos
                 ));
             } else {
-                RTSCameraNetwork.CHANNEL.sendToServer(new MoveGroupsPacket(
+                RTSCameraNetwork.CHANNEL.sendToServer(new HastyMoveGroupsPacket(
                         new ArrayList<>(SELECTED_GROUPS),
                         targetPos
                 ));
@@ -1449,7 +1464,7 @@ public final class RTSCameraController {
             rememberMoveOrderPreview(new Vec3(targetPos.getX() + 0.5D, groundHit.location().y, targetPos.getZ() + 0.5D));
             lastTerrainOrderMillis = now;
             lastTerrainOrderTarget = targetPos;
-            setStatus((slowMarch ? "Slow march" : "Move order") + " sent to " + SELECTED_GROUPS.size() + " group(s): "
+            setStatus((running ? "Run" : "Walk") + " order sent to " + SELECTED_GROUPS.size() + " group(s): "
                     + targetPos.getX() + ", " + targetPos.getY() + ", " + targetPos.getZ()
                     + " [" + groundHit.source() + "] · double-RMB for hasty move");
         }
@@ -2256,7 +2271,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.13.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.14.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2271,13 +2286,12 @@ public final class RTSCameraController {
         drawHudLine(graphics, "Mouse: LMB select · Ctrl+LMB additive · RMB move/attack · RMB drag frontage",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
-        drawHudLine(graphics, "Mouse: Alt+RMB custom · wheel ranks · MMB clear · 2×RMB hasty",
+        drawHudLine(graphics, "Mouse: Alt+RMB custom · wheel ranks · hold MMB look · 2×RMB run",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
         drawHudLine(graphics, "Keys: " + keyName(RTSCameraKeyMappings.TOGGLE) + " camera · "
-                        + keyName(RTSCameraKeyMappings.CURSOR) + " cursor/look · "
                         + keyName(RTSCameraKeyMappings.CLEAR) + " clear · "
-                        + keyName(RTSCameraKeyMappings.GROUPS) + " groups",
+                        + keyName(RTSCameraKeyMappings.MOVEMENT_PACE) + " walk/run",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
         drawHudLine(graphics, "Formation: " + keyName(RTSCameraKeyMappings.FORMATION) + " preset · "
@@ -2748,7 +2762,7 @@ public final class RTSCameraController {
 
     /**
      * Draw the selected army's current stencil translated to the pending RMB target.
-     * This intentionally previews the same normal-move semantics as MoveGroupsPacket:
+     * This previews the same formation-preserving semantics as a walk/run terrain order:
      * existing group spacing and internal arrangement are translated, not reformed.
      */
     private static void renderMovePreview(GuiGraphics graphics) {
@@ -3263,9 +3277,8 @@ public final class RTSCameraController {
 
     private enum CapturedCommand {
         TOGGLE,
-        CURSOR,
         CLEAR,
-        GROUPS,
+        MOVEMENT_PACE,
         FORMATION,
         ROTATE,
         ARMY_PRESET,

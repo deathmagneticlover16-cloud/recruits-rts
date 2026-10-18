@@ -1,3 +1,19 @@
+Recruits: RTS Camera 0.14.0-server.1
+Continuous movement, camera controls and selection bundles
+
+- Removed the post-tick formation-centre rewrite that made whole formations stop, snap back and jitter in sync. Walk/run pace is now applied before member slots are calculated.
+- Formation anchors slow elastically when many members lag, while individual laggards receive stronger catch-up movement. One stuck recruit cannot freeze the formation.
+- Ordinary elevation changes and broad stairs preserve formation frontage. A line enters column transit only near an actually narrow route cell, then reforms after it clears the restriction.
+- Moving slots keep their paths across small anchor changes, and manual steering stops native navigation only when control changes rather than every tick.
+- Cavalry explicitly jumps supported one-block rises instead of rotating at or stalling below an incline.
+- R now toggles selected groups between walk and run, including an order already in progress. The leftmost command-bar button shows one arrow for walk and two for run; double-RMB also selects run.
+- Removed the separate cursor/camera-look key. Hold middle mouse to turn the free camera while WASD remains available.
+- Added a top-right cog menu and moved Enemy Banners visibility into it.
+- Added selection bundles beside Army Presets. Bundles auto-assign 1-9/0, use distinct card borders and number tabs, and can be recalled by number. A single group may also receive a non-conflicting custom hotkey.
+- Ranged formations now face their ordered target before target locks are distributed and firing begins.
+- Network protocol is now rts-camera-140; update clients and server together.
+- Source version and packaging references are 0.14.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.13.0-server.1
 Commander control cleanup and formation persistence
 

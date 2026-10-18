@@ -20,13 +20,6 @@ public final class RTSCameraKeyMappings {
             CATEGORY
     );
 
-    public static final KeyMapping CURSOR = new KeyMapping(
-            "key.recruits_rts_camera.cursor",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_X,
-            CATEGORY
-    );
-
     public static final KeyMapping CLEAR = new KeyMapping(
             "key.recruits_rts_camera.clear",
             InputConstants.Type.KEYSYM,
@@ -34,8 +27,8 @@ public final class RTSCameraKeyMappings {
             CATEGORY
     );
 
-    public static final KeyMapping GROUPS = new KeyMapping(
-            "key.recruits_rts_camera.groups",
+    public static final KeyMapping MOVEMENT_PACE = new KeyMapping(
+            "key.recruits_rts_camera.movement_pace",
             InputConstants.Type.KEYSYM,
             GLFW.GLFW_KEY_R,
             CATEGORY
@@ -119,9 +112,8 @@ public final class RTSCameraKeyMappings {
     @SubscribeEvent
     public static void register(RegisterKeyMappingsEvent event) {
         event.register(TOGGLE);
-        event.register(CURSOR);
         event.register(CLEAR);
-        event.register(GROUPS);
+        event.register(MOVEMENT_PACE);
         event.register(FORMATION);
         event.register(ROTATE);
         event.register(ARMY_PRESET);
@@ -132,5 +124,22 @@ public final class RTSCameraKeyMappings {
         event.register(COMMIT_ROUTE);
         event.register(RESET_ROUTE);
         event.register(HALT);
+    }
+
+    /** True when a raw key is already owned by an RTS action. */
+    public static boolean isReserved(int key, int scanCode) {
+        return TOGGLE.matches(key, scanCode)
+                || CLEAR.matches(key, scanCode)
+                || MOVEMENT_PACE.matches(key, scanCode)
+                || FORMATION.matches(key, scanCode)
+                || ROTATE.matches(key, scanCode)
+                || ARMY_PRESET.matches(key, scanCode)
+                || STRATEGIC_FIRE.matches(key, scanCode)
+                || HOLD_FIRE.matches(key, scanCode)
+                || FIRE_AT_WILL.matches(key, scanCode)
+                || ROUTE_MODE.matches(key, scanCode)
+                || COMMIT_ROUTE.matches(key, scanCode)
+                || RESET_ROUTE.matches(key, scanCode)
+                || HALT.matches(key, scanCode);
     }
 }

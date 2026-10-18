@@ -348,12 +348,32 @@ public final class RTSCommandFacade {
         }
     }
 
-    public static boolean selectedSlowMarch() {
-        return RTSCameraController.commanderSlowMarchEnabled();
+    public static boolean selectedRunning() {
+        return RTSCameraController.commanderRunningEnabled();
     }
 
-    public static void toggleSlowMarch() {
-        RTSCameraController.commanderToggleSlowMarch();
+    public static void toggleMovementPace() {
+        RTSCameraController.commanderToggleMovementPace();
+    }
+
+    public static boolean makeSelectionGroup() {
+        return SelectionGroupManager.makeBundle(RTSCameraController.commanderSelectedGroups());
+    }
+
+    public static void beginGroupHotkeyAssignment() {
+        SelectionGroupManager.beginDirectAssignment(RTSCameraController.commanderSelectedGroups());
+    }
+
+    public static int selectionGroupSlot(UUID groupId) {
+        return SelectionGroupManager.bundleSlot(groupId);
+    }
+
+    public static int selectionGroupColor(UUID groupId) {
+        return SelectionGroupManager.bundleColor(groupId);
+    }
+
+    public static String selectionGroupLabel(int slot) {
+        return SelectionGroupManager.display(slot);
     }
 
     public static boolean selectedLooseSpacing() {

@@ -65,6 +65,7 @@ public final class RTSGroupAttackManager {
     private static final int EMPTY_TARGET_GRACE_TICKS = 40;
     private static final int MAX_APPROACH_TICKS = 20 * 45;
     private static final int MAX_ORDER_TICKS = 20 * 60 * 10;
+    private static final int RANGED_FACE_TICKS = 10;
 
     // These are edge-to-edge gaps, not centre distances.
     private static final double INFANTRY_ENGAGE_GAP = 3.25D;
@@ -119,13 +120,20 @@ public final class RTSGroupAttackManager {
             return 0;
         }
         cancel(List.of(attackingGroupId));
-        SINGLE_TARGETS.put(attackingGroupId, new SingleTargetState(
+        SingleTargetState state = new SingleTargetState(
                 sender, attackingGroupId, target.getId(), MAX_ORDER_TICKS
-        ));
+        );
+        SINGLE_TARGETS.put(attackingGroupId, state);
         // Ranged groups keep their slots while firing. Native Recruits used to release the
         // formation here, which made archers scatter as soon as their target died.
         if (classifyApproach(recruits) != ApproachKind.DIRECT) {
             releaseFormationForCombat(sender, attackingGroupId, recruits);
+        } else {
+            faceFormationToward(attackingGroupId, recruits, List.of(target));
+            for (var recruit : recruits) TacticalCombatManager.lock(recruit, attackingGroupId, null);
+            RecruitCommanderUtil.setRecruitsClearTargets(recruits);
+            state.facingTicks = RANGED_FACE_TICKS;
+            return recruits.size();
         }
         int ordered = 0;
         for (AbstractRecruitEntity recruit : recruits) {
@@ -262,6 +270,17 @@ public final class RTSGroupAttackManager {
                 continue;
             }
 
+            if (state.phase == Phase.FACING) {
+                faceFormationToward(state.sourceGroupId, attackers, candidates);
+                for (var attacker : attackers) TacticalCombatManager.lock(attacker, state.sourceGroupId, null);
+                RecruitCommanderUtil.setRecruitsClearTargets(attackers);
+                state.facingTicks -= RETARGET_INTERVAL_TICKS;
+                if (state.facingTicks > 0) continue;
+                state.phase = Phase.ENGAGED;
+                distributeTargets(state, attackers, candidates, true);
+                continue;
+            }
+
             retargetEngagedAttackers(state, attackers, candidates);
         }
 
@@ -292,6 +311,12 @@ public final class RTSGroupAttackManager {
             }
             List<AbstractRecruitEntity> attackers = loadedAttackers(sender, sourceGroup);
             if (attackers.isEmpty()) continue;
+            if (state.facingTicks > 0) {
+                faceFormationToward(state.sourceGroupId, attackers, List.of(target));
+                RecruitCommanderUtil.setRecruitsClearTargets(attackers);
+                state.facingTicks -= RETARGET_INTERVAL_TICKS;
+                if (state.facingTicks > 0) continue;
+            }
             boolean throwAllowed = fireAtWill(level, sourceGroupId);
             for (AbstractRecruitEntity attacker : attackers) {
                 if (throwAllowed && ThrowableWeaponManager.hasThrowable(attacker)
@@ -390,12 +415,31 @@ public final class RTSGroupAttackManager {
     ) {
         if (state.approachKind != ApproachKind.DIRECT) {
             releaseFormationForCombat(state.sender, state.sourceGroupId, attackers);
+        } else {
+            faceFormationToward(state.sourceGroupId, attackers, candidates);
+            for (var attacker : attackers) TacticalCombatManager.lock(attacker, state.sourceGroupId, null);
+            RecruitCommanderUtil.setRecruitsClearTargets(attackers);
+            state.phase = Phase.FACING;
+            state.facingTicks = RANGED_FACE_TICKS;
+            return;
         }
         state.phase = Phase.ENGAGED;
         state.approachTicks = 0;
         state.replanTicks = 0;
         state.lastApproachDestination = null;
         distributeTargets(state, attackers, candidates, true);
+    }
+
+    private static void faceFormationToward(
+            UUID groupId, List<AbstractRecruitEntity> attackers, List<? extends LivingEntity> targets
+    ) {
+        Vec3 source = averageControlledPosition(attackers);
+        Vec3 target = averagePosition(targets);
+        if (source == null || target == null) return;
+        double dx = target.x - source.x;
+        double dz = target.z - source.z;
+        if (dx * dx + dz * dz < 1.0E-5D) return;
+        FormationRuntime.faceFormation(groupId, (float) Math.toDegrees(Math.atan2(-dx, dz)));
     }
 
     private static void releaseFormationForCombat(
@@ -927,6 +971,7 @@ public final class RTSGroupAttackManager {
     private enum Phase {
         NEW,
         APPROACH,
+        FACING,
         ENGAGED
     }
 
@@ -941,6 +986,7 @@ public final class RTSGroupAttackManager {
         private final UUID sourceGroupId;
         private final int targetEntityId;
         private int remainingTicks;
+        private int facingTicks;
 
         private SingleTargetState(ServerPlayer sender, UUID sourceGroupId, int targetEntityId, int remainingTicks) {
             this.sender = sender;
@@ -959,6 +1005,7 @@ public final class RTSGroupAttackManager {
         private int emptyTicks;
         private int approachTicks;
         private int replanTicks;
+        private int facingTicks;
         private Phase phase = Phase.NEW;
         private ApproachKind approachKind = ApproachKind.DIRECT;
         private Vec3 lastApproachDestination;

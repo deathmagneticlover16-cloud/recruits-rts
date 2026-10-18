@@ -44,7 +44,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RTSMovementBoostManager {
-    private static final double BASE_FORMATION_CENTER_STEP = 0.14D;
     private static final double REGULAR_INFANTRY_NAV_SPEED = 0.78D;
     private static final double REGULAR_CAVALRY_NAV_SPEED = 1.50D;
     private static final double REGULAR_CAVALRY_MOUNT_MULTIPLIER = 0.35D;
@@ -53,14 +52,7 @@ public final class RTSMovementBoostManager {
     private static final double HASTY_CAVALRY_NAV_SPEED = 1.62D;
     private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 0.45D;
 
-    // Additional centre steps relative to the native formation runtime baseline.
-    private static double regularCavalryExtra() {
-        return RTSServerConfig.CAVALRY_FORMATION_SPEED.get() - BASE_FORMATION_CENTER_STEP;
-    }
     private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.10D;   // ~0.24 total
-    private static double hastyCavalryExtra() {
-        return RTSServerConfig.CAVALRY_HASTY_SPEED.get() - BASE_FORMATION_CENTER_STEP;
-    }
 
     private static final double HASTY_VARIATION = 0.06D;
     private static final double SLOW_MARCH_FACTOR = 0.55D;
@@ -362,10 +354,9 @@ public final class RTSMovementBoostManager {
 
         processForcedOrders();
 
-        // native formation runtime also ticks on ServerTickEvent.END at normal priority. LOWEST
-        // therefore sees the centre after runtime has decided whether it advanced normally.
-        // Ordinary pace boosts still require real runtime progress; only processForcedOrders()
-        // above may conservatively break a proven stall for an explicit player RTS order.
+        // Pace is consumed by NativeFormationController before it calculates moving slots.
+        // Keep only lifecycle bookkeeping here; post-tick centre rewrites caused the whole
+        // formation to chase one point and snap back on the next tick.
         if (!ACTIVE_GROUPS.isEmpty()) {
             for (Map.Entry<UUID, GroupBoostState> entry : List.copyOf(ACTIVE_GROUPS.entrySet())) {
                 UUID groupId = entry.getKey();
@@ -379,52 +370,7 @@ public final class RTSMovementBoostManager {
                     ACTIVE_GROUPS.remove(groupId, state);
                     continue;
                 }
-                double moved = horizontalDistance(current, state.lastCenter);
-                if (moved > 0.005D && moved < 0.75D) {
-                    if (state.mode == GroupMode.SLOW_MARCH) {
-                        double factor = Math.max(0.25D, Math.min(0.75D,
-                                SLOW_MARCH_FACTOR * state.externalSpeedScale));
-                        Vec3 adjusted = new Vec3(
-                                state.lastCenter.x + (current.x - state.lastCenter.x) * factor,
-                                current.y,
-                                state.lastCenter.z + (current.z - state.lastCenter.z) * factor
-                        );
-                        if (FormationRuntime.setFormationCenter(groupId, adjusted)) {
-                            state.lastCenter = adjusted;
-                        } else {
-                            state.lastCenter = current;
-                        }
-                    } else {
-                        // Armor Weight v1.1 is a movement-speed MULTIPLY_TOTAL modifier, but
-                        // native formation runtime advances its group centre directly. Scale the real
-                        // centre step first, then scale any Commander-added extra stride too.
-                        Vec3 scaledCurrent = current;
-                        if (state.externalSpeedScale < 0.999D) {
-                            Vec3 adjusted = new Vec3(
-                                    state.lastCenter.x + (current.x - state.lastCenter.x) * state.externalSpeedScale,
-                                    current.y,
-                                    state.lastCenter.z + (current.z - state.lastCenter.z) * state.externalSpeedScale
-                            );
-                            if (FormationRuntime.setFormationCenter(groupId, adjusted)) {
-                                scaledCurrent = adjusted;
-                            }
-                        }
-                        double extra = switch (state.mode) {
-                            case FORMATION_INFANTRY -> 0.0D;
-                            case FORMATION_CAVALRY -> regularCavalryExtra();
-                            case HASTY_INFANTRY -> GROUP_EXTRA_HASTY_INFANTRY;
-                            case HASTY_CAVALRY -> hastyCavalryExtra();
-                            case SLOW_MARCH -> 0.0D;
-                        };
-                        extra *= state.externalSpeedScale;
-                        Vec3 advanced = extra > 1.0E-6D
-                                ? FormationRuntime.advanceFormationCenter(groupId, extra)
-                                : scaledCurrent;
-                        state.lastCenter = advanced == null ? scaledCurrent : advanced;
-                    }
-                } else {
-                    state.lastCenter = current;
-                }
+                state.lastCenter = current;
             }
         }
     }
@@ -828,6 +774,20 @@ public final class RTSMovementBoostManager {
         if (groupId == null) return false;
         GroupBoostState state = ACTIVE_GROUPS.get(groupId);
         return state != null && (state.mode == GroupMode.HASTY_INFANTRY || state.mode == GroupMode.HASTY_CAVALRY);
+    }
+
+    /** Stable per-tick anchor step, read before the formation calculates member slots. */
+    public static double formationCenterStep(UUID groupId, double baseStep) {
+        GroupBoostState state = groupId == null ? null : ACTIVE_GROUPS.get(groupId);
+        if (state == null) return baseStep;
+        double step = switch (state.mode) {
+            case FORMATION_INFANTRY -> baseStep;
+            case FORMATION_CAVALRY -> RTSServerConfig.CAVALRY_FORMATION_SPEED.get();
+            case HASTY_INFANTRY -> baseStep + GROUP_EXTRA_HASTY_INFANTRY;
+            case HASTY_CAVALRY -> RTSServerConfig.CAVALRY_HASTY_SPEED.get();
+            case SLOW_MARCH -> baseStep * SLOW_MARCH_FACTOR;
+        };
+        return Math.max(0.035D, step * state.externalSpeedScale);
     }
 
     public static boolean isSlowMarchActive(UUID groupId) {

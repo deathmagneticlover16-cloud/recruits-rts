@@ -173,6 +173,12 @@ public final class TacticalPathfinder {
         return level != null && position != null && level.getBlockState(position).is(BlockTags.CLIMBABLE);
     }
 
+    /** Whether this immediate route cell is too narrow for formation frontage. */
+    public static boolean requiresColumn(ServerLevel level, Mob mover, Vec3 position) {
+        Cell cell = nearestCell(level, mover, position, 0, 2);
+        return cell != null && (cell.climbable || openSides(level, mover, cell) <= 2);
+    }
+
     private static List<Cell> neighbors(ServerLevel level, Mob mover, Cell current) {
         List<Cell> result = new ArrayList<>(12);
         for (int[] direction : CARDINALS) {
@@ -380,9 +386,9 @@ public final class TacticalPathfinder {
             boolean narrow = cell.climbable;
             // A broad stair or gentle height change can carry formation slots. Column mode is
             // reserved for a genuinely pinched route where the full frontage cannot pass.
-            if (i > 0 && i + 1 < reversed.size() && clearance <= 2) narrow = true;
-            if (previous != null && Math.abs(cell.position.y - previous.position.y) > 0.75D
-                    && clearance < 4) narrow = true;
+            boolean changingLevel = previous != null
+                    && Math.abs(cell.position.y - previous.position.y) > 0.40D;
+            if (!changingLevel && i > 0 && i + 1 < reversed.size() && clearance <= 2) narrow = true;
             if (narrow) constrained = true;
             previous = cell;
         }
@@ -403,16 +409,8 @@ public final class TacticalPathfinder {
         double dx = a.position.x - b.position.x;
         double dy = a.position.y - b.position.y;
         double dz = a.position.z - b.position.z;
-        int clearance = openSides(level, mover, b);
-        double pinchPenalty = switch (clearance) {
-            case 0, 1 -> 10.0D;
-            case 2 -> 5.0D;
-            case 3 -> 1.5D;
-            default -> 0.0D;
-        };
         return Math.sqrt(dx * dx + dz * dz)
-                + Math.abs(dy) * (a.climbable || b.climbable ? 2.0D : 4.0D)
-                + pinchPenalty;
+                + Math.abs(dy) * (a.climbable || b.climbable ? 1.1D : 1.8D);
     }
 
     private static double heuristic(Cell a, Cell b) {

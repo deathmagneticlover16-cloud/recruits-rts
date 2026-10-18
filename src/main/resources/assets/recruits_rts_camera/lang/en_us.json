@@ -1,9 +1,8 @@
 {
   "key.categories.recruits_rts_camera": "Recruits: RTS Camera",
   "key.recruits_rts_camera.toggle": "Toggle RTS Camera",
-  "key.recruits_rts_camera.cursor": "Toggle Command Cursor / Camera Look",
   "key.recruits_rts_camera.clear": "Clear RTS Selection",
-  "key.recruits_rts_camera.groups": "Open Recruits Groups",
+  "key.recruits_rts_camera.movement_pace": "Toggle Walk / Run",
   "key.recruits_rts_camera.formation": "Cycle Selected Formation",
   "key.recruits_rts_camera.rotate": "Hold to Rotate Selected Formation",
   "key.recruits_rts_camera.army_preset": "Apply / Cycle Army Deployment Preset",

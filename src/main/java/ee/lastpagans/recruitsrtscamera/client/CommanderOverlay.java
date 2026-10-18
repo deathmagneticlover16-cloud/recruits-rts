@@ -55,6 +55,8 @@ public final class CommanderOverlay {
 
     private static int page;
     private static boolean formationMenuOpen;
+    private static boolean selectionMenuOpen;
+    private static boolean settingsMenuOpen;
     private static Layout lastLayout = Layout.EMPTY;
     private static Boolean enemyBannersVisibleOverride;
 
@@ -64,6 +66,8 @@ public final class CommanderOverlay {
     public static void reset() {
         page = 0;
         formationMenuOpen = false;
+        selectionMenuOpen = false;
+        settingsMenuOpen = false;
         lastLayout = Layout.EMPTY;
         enemyBannersVisibleOverride = null;
     }
@@ -103,6 +107,10 @@ public final class CommanderOverlay {
             renderSelectedLabel(graphics, layout);
             renderCommandPanel(graphics, layout);
             if (formationMenuOpen) renderFormationMenu(graphics, layout);
+            updateSelectionMenuHover(layout);
+            if (selectionMenuOpen) renderSelectionMenu(graphics, layout);
+            renderSettingsButton(graphics);
+            if (settingsMenuOpen) renderSettingsMenu(graphics);
         } finally {
             graphics.pose().popPose();
         }
@@ -118,6 +126,18 @@ public final class CommanderOverlay {
         Layout layout = currentLayout();
         Bounds popup = formationPopupBounds(layout);
         boolean overPopup = formationMenuOpen && popup.contains(mouseX, mouseY);
+        boolean overSelectionPopup = selectionMenuOpen && selectionPopupBounds(layout).contains(mouseX, mouseY);
+        boolean overSettings = settingsButtonBounds().contains(mouseX, mouseY);
+        boolean overSettingsPopup = settingsMenuOpen && settingsPopupBounds().contains(mouseX, mouseY);
+
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && action == GLFW.GLFW_PRESS && overSettings) {
+            settingsMenuOpen = !settingsMenuOpen;
+            return true;
+        }
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && action == GLFW.GLFW_PRESS && overSettingsPopup) {
+            toggleEnemyBanners();
+            return true;
+        }
 
         // Floating banners are genuine RTS hit targets, not decoration. Friendly LMB selects;
         // hostile RMB issues the same attack order as right-clicking one of that group's recruits.
@@ -134,10 +154,11 @@ public final class CommanderOverlay {
             }
         }
 
-        if (!layout.contains(mouseX, mouseY) && !overPopup) {
+        if (!layout.contains(mouseX, mouseY) && !overPopup && !overSelectionPopup && !overSettings && !overSettingsPopup) {
             if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && action == GLFW.GLFW_PRESS && formationMenuOpen) {
                 formationMenuOpen = false;
             }
+            if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && action == GLFW.GLFW_PRESS) settingsMenuOpen = false;
             return false;
         }
 
@@ -157,6 +178,19 @@ public final class CommanderOverlay {
             return true;
         }
 
+        if (overSelectionPopup) {
+            List<Bounds> choices = selectionChoiceBounds(layout);
+            if (choices.get(0).contains(mouseX, mouseY)) {
+                RTSCommandFacade.makeSelectionGroup();
+                selectionMenuOpen = false;
+            } else if (choices.get(1).contains(mouseX, mouseY)
+                    && RTSCommandFacade.selectedGroupCount() == 1) {
+                RTSCommandFacade.beginGroupHotkeyAssignment();
+                selectionMenuOpen = false;
+            }
+            return true;
+        }
+
         if (layout.pageCount() > 1 && layout.prevButton().contains(mouseX, mouseY)) {
             page = Math.floorMod(page - 1, layout.pageCount());
             return true;
@@ -168,6 +202,12 @@ public final class CommanderOverlay {
 
         if (layout.formationButton().contains(mouseX, mouseY)) {
             formationMenuOpen = !formationMenuOpen;
+            settingsMenuOpen = false;
+            return true;
+        }
+        if (layout.selectionGroupButton().contains(mouseX, mouseY)) return true;
+        if (layout.paceButton().contains(mouseX, mouseY)) {
+            RTSCommandFacade.toggleMovementPace();
             return true;
         }
         if (layout.haltButton().contains(mouseX, mouseY)) {
@@ -180,10 +220,6 @@ public final class CommanderOverlay {
         }
         if (RTSCommandFacade.selectedHasCavalryMajority() && layout.mountButton().contains(mouseX, mouseY)) {
             RTSCommandFacade.toggleMount();
-            return true;
-        }
-        if (layout.slowMarchButton().contains(mouseX, mouseY)) {
-            RTSCommandFacade.toggleSlowMarch();
             return true;
         }
         if (layout.looseSpacingButton().contains(mouseX, mouseY)) {
@@ -206,10 +242,6 @@ public final class CommanderOverlay {
             RTSCommandFacade.toggleBodyguardFollow();
             return true;
         }
-        if (layout.enemyBannersButton().contains(mouseX, mouseY)) {
-            toggleEnemyBanners();
-            return true;
-        }
         List<RTSCommandFacade.UnitCardView> groups = RTSCommandFacade.unitCards();
         for (CardHitbox hitbox : cardHitboxes(groups, layout)) {
             if (hitbox.bounds().contains(mouseX, mouseY)) {
@@ -229,7 +261,10 @@ public final class CommanderOverlay {
         int mouseX = guiMouseX();
         int mouseY = guiMouseY();
         if (!layout.contains(mouseX, mouseY)
-                && !(formationMenuOpen && formationPopupBounds(layout).contains(mouseX, mouseY))) {
+                && !(formationMenuOpen && formationPopupBounds(layout).contains(mouseX, mouseY))
+                && !(selectionMenuOpen && selectionPopupBounds(layout).contains(mouseX, mouseY))
+                && !settingsButtonBounds().contains(mouseX, mouseY)
+                && !(settingsMenuOpen && settingsPopupBounds().contains(mouseX, mouseY))) {
             return false;
         }
         if (layout.pageCount() > 1 && Math.abs(delta) > 0.001D) {
@@ -242,7 +277,10 @@ public final class CommanderOverlay {
         Layout layout = currentLayout();
         int x = guiMouseX();
         int y = guiMouseY();
-        if (layout.contains(x, y) || (formationMenuOpen && formationPopupBounds(layout).contains(x, y))) return true;
+        if (layout.contains(x, y) || (formationMenuOpen && formationPopupBounds(layout).contains(x, y))
+                || (selectionMenuOpen && selectionPopupBounds(layout).contains(x, y))
+                || settingsButtonBounds().contains(x, y)
+                || (settingsMenuOpen && settingsPopupBounds().contains(x, y))) return true;
         for (BannerHitbox banner : bannerHitboxes(layout)) if (banner.bounds().contains(x, y)) return true;
         return false;
     }
@@ -301,9 +339,15 @@ public final class CommanderOverlay {
             Bounds b = hitbox.bounds();
             RTSCommandFacade.UnitCardView view = hitbox.view();
             boolean hovered = b.contains(mouseX, mouseY) && RTSCommandFacade.commandCursor();
+            int bundleSlot = RTSCommandFacade.selectionGroupSlot(view.groupId());
+            int bundleColor = RTSCommandFacade.selectionGroupColor(view.groupId());
 
             // Never draw an opaque selection texture over the user's card artwork.
             // Selection/hover live outside the exact runtime card texture.
+            if (bundleSlot > 0) {
+                drawBorder(graphics, new Bounds(b.x1() - 3, b.y1() - 3, b.x2() + 3, b.y2() + 3), bundleColor);
+                drawBorder(graphics, new Bounds(b.x1() - 2, b.y1() - 2, b.x2() + 2, b.y2() + 2), bundleColor);
+            }
             if (view.selected()) {
                 drawBorder(graphics, new Bounds(b.x1() - 2, b.y1() - 2, b.x2() + 2, b.y2() + 2), 0xFFFFE58A);
                 drawBorder(graphics, new Bounds(b.x1() - 1, b.y1() - 1, b.x2() + 1, b.y2() + 1), GOLD);
@@ -361,6 +405,15 @@ public final class CommanderOverlay {
             if (view.averageFatigue() >= 0.0F) {
                 renderFatigueBar(graphics, b.x1() + 5, b.y2() + 4,
                         CARD_WIDTH - 10, view.averageFatigue());
+            }
+            if (bundleSlot > 0) {
+                int tabX = b.x1() - 3;
+                int tabY = b.y1() - 13;
+                graphics.fill(tabX, tabY, tabX + 13, b.y1() - 2, bundleColor);
+                drawBorder(graphics, new Bounds(tabX, tabY, tabX + 13, b.y1() - 2), 0xFF171714);
+                String label = RTSCommandFacade.selectionGroupLabel(bundleSlot);
+                graphics.drawString(MC.font, label, tabX + (13 - MC.font.width(label)) / 2, tabY + 1,
+                        0xFFFFFFFF, false);
             }
         }
 
@@ -504,6 +557,74 @@ public final class CommanderOverlay {
         enemyBannersVisibleOverride = !enemyBannersVisible();
     }
 
+    private static void updateSelectionMenuHover(Layout layout) {
+        int x = guiMouseX();
+        int y = guiMouseY();
+        selectionMenuOpen = layout.selectionGroupButton().contains(x, y)
+                || selectionMenuOpen && selectionPopupBounds(layout).contains(x, y);
+    }
+
+    private static Bounds selectionPopupBounds(Layout layout) {
+        int width = 142;
+        int height = 39;
+        int x1 = layout.selectionGroupButton().x1();
+        int y2 = layout.selectionGroupButton().y1();
+        return new Bounds(x1, y2 - height, x1 + width, y2);
+    }
+
+    private static List<Bounds> selectionChoiceBounds(Layout layout) {
+        Bounds popup = selectionPopupBounds(layout);
+        return List.of(
+                new Bounds(popup.x1() + 3, popup.y1() + 3, popup.x2() - 3, popup.y1() + 19),
+                new Bounds(popup.x1() + 3, popup.y1() + 20, popup.x2() - 3, popup.y2() - 3)
+        );
+    }
+
+    private static void renderSelectionMenu(GuiGraphics graphics, Layout layout) {
+        Bounds popup = selectionPopupBounds(layout);
+        graphics.fill(popup.x1(), popup.y1(), popup.x2(), popup.y2(), 0xEE181816);
+        drawBorder(graphics, popup, GOLD);
+        List<Bounds> choices = selectionChoiceBounds(layout);
+        String[] labels = {"Make Selection Group", "Add hotkey to Group"};
+        for (int i = 0; i < choices.size(); i++) {
+            Bounds row = choices.get(i);
+            boolean enabled = i == 0 ? RTSCommandFacade.selectedGroupCount() > 0
+                    : RTSCommandFacade.selectedGroupCount() == 1;
+            boolean hovered = enabled && row.contains(guiMouseX(), guiMouseY());
+            graphics.fill(row.x1(), row.y1(), row.x2(), row.y2(), hovered ? 0xCC3A3934 : 0xAA24231F);
+            graphics.drawString(MC.font, labels[i], row.x1() + 4, row.y1() + 4,
+                    enabled ? TEXT : 0xFF68645D, false);
+        }
+    }
+
+    private static Bounds settingsButtonBounds() {
+        int right = virtualGuiWidth() - 5;
+        return new Bounds(right - 18, 5, right, 23);
+    }
+
+    private static Bounds settingsPopupBounds() {
+        Bounds button = settingsButtonBounds();
+        return new Bounds(button.x2() - 112, button.y2() + 2, button.x2(), button.y2() + 23);
+    }
+
+    private static void renderSettingsButton(GuiGraphics graphics) {
+        Bounds button = settingsButtonBounds();
+        boolean hovered = button.contains(guiMouseX(), guiMouseY());
+        graphics.fill(button.x1(), button.y1(), button.x2(), button.y2(), hovered ? 0xDD3A3934 : 0xCC181816);
+        drawBorder(graphics, button, settingsMenuOpen ? GOLD : 0xFF8F825C);
+        graphics.drawCenteredString(MC.font, "⚙", (button.x1() + button.x2()) / 2, button.y1() + 5, TEXT);
+    }
+
+    private static void renderSettingsMenu(GuiGraphics graphics) {
+        Bounds popup = settingsPopupBounds();
+        boolean hovered = popup.contains(guiMouseX(), guiMouseY());
+        graphics.fill(popup.x1(), popup.y1(), popup.x2(), popup.y2(), hovered ? 0xEE34332F : 0xEE181816);
+        drawBorder(graphics, popup, 0xFF8F825C);
+        String label = "Enemy Banners: " + (enemyBannersVisible() ? "ON" : "OFF");
+        graphics.drawString(MC.font, label, popup.x1() + 5, popup.y1() + 6,
+                enemyBannersVisible() ? GOLD : MUTED, false);
+    }
+
     private static void renderFormationMenu(GuiGraphics graphics, Layout layout) {
         Bounds popup = formationPopupBounds(layout);
         graphics.fill(popup.x1(), popup.y1(), popup.x2(), popup.y2(), 0xE0181816);
@@ -617,7 +738,7 @@ public final class CommanderOverlay {
     private static void renderCommandPanel(GuiGraphics graphics, Layout layout) {
         boolean hasSelection = RTSCommandFacade.selectedGroupCount() > 0;
         boolean aggressive = RTSCommandFacade.selectedAggroState() == 2;
-        boolean slowMarch = RTSCommandFacade.selectedSlowMarch();
+        boolean running = RTSCommandFacade.selectedRunning();
         boolean loose = RTSCommandFacade.selectedLooseSpacing();
         boolean ranged = RTSCommandFacade.selectedHasRangedWeapons();
         boolean rangedMajority = RTSCommandFacade.selectedHasRangedMajority();
@@ -629,10 +750,11 @@ public final class CommanderOverlay {
         boolean bodyguard = RTSCommandFacade.selectedIsBodyguard();
         boolean canFollowBodyguard = RTSCommandFacade.canToggleBodyguardFollow();
         boolean followBodyguard = RTSCommandFacade.bodyguardFollowsPlayer();
-        boolean enemyBanners = enemyBannersVisible();
 
+        renderTextCommandButton(graphics, layout.paceButton(), running ? "<<" : "<", hasSelection, running);
         renderIconCommandButton(graphics, layout.formationButton(),
                 CommanderGuiTextures.COMMAND_FORMATION, hasSelection, formationMenuOpen);
+        renderItemButton(graphics, layout.selectionGroupButton(), net.minecraft.world.item.Items.NAME_TAG, false);
         renderIconCommandButton(graphics, layout.haltButton(),
                 CommanderGuiTextures.COMMAND_HALT, hasSelection, false);
         renderIconCommandButton(graphics, layout.aggressionButton(),
@@ -641,8 +763,6 @@ public final class CommanderOverlay {
                 hasSelection, aggressive);
         if (cavalryMajority) renderItemButton(graphics, layout.mountButton(),
                 net.minecraft.world.item.Items.SADDLE, mounted);
-        renderIconCommandButton(graphics, layout.slowMarchButton(),
-                CommanderGuiTextures.COMMAND_SLOW_MARCH, hasSelection, slowMarch);
         renderIconCommandButton(graphics, layout.looseSpacingButton(),
                 CommanderGuiTextures.COMMAND_LOOSE_SPACING, hasSelection, loose);
         if (ranged) renderIconCommandButton(graphics, layout.fireControlButton(),
@@ -654,15 +774,18 @@ public final class CommanderOverlay {
                 CommanderGuiTextures.COMMAND_BODYGUARD, canBodyguard, bodyguard);
         renderIconCommandButton(graphics, layout.bodyguardFollowButton(),
                 CommanderGuiTextures.COMMAND_BODYGUARD_FOLLOW, canFollowBodyguard, followBodyguard);
-        renderIconCommandButton(graphics, layout.enemyBannersButton(),
-                CommanderGuiTextures.COMMAND_ENEMY_BANNERS, true, enemyBanners);
 
         if (!RTSCommandFacade.commandCursor()) return;
         int mx = guiMouseX();
         int my = guiMouseY();
-        if (layout.formationButton().contains(mx, my)) {
+        if (layout.paceButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, running ? "Run" : "Walk",
+                    "Toggle the selected groups' current and next movement pace (R).");
+        } else if (layout.formationButton().contains(mx, my)) {
             renderCommandTooltip(graphics, "Army Presets",
                     formationMenuOpen ? "Close the army preset menu." : "Arrange selected groups as a combined army.");
+        } else if (layout.selectionGroupButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, "Selection Groups", "Create a numbered bundle or assign one group a hotkey.");
         } else if (layout.haltButton().contains(mx, my)) {
             renderCommandTooltip(graphics, "Halt", "Stop the selected groups immediately.");
         } else if (layout.aggressionButton().contains(mx, my)) {
@@ -672,9 +795,6 @@ public final class CommanderOverlay {
             renderCommandTooltip(graphics, mounted ? "Dismount" : "Mount",
                     mounted ? "Dismount the selected cavalry-majority groups."
                             : "Mount the selected cavalry-majority groups.");
-        } else if (layout.slowMarchButton().contains(mx, my)) {
-            renderCommandTooltip(graphics, slowMarch ? "Slow March: ON" : "Slow March",
-                    "Toggle reduced formation movement speed.");
         } else if (layout.looseSpacingButton().contains(mx, my)) {
             renderCommandTooltip(graphics, loose ? "Loose Spacing: ON" : "Loose Spacing",
                     "Toggle wider spacing for preset formations.");
@@ -694,10 +814,19 @@ public final class CommanderOverlay {
             renderCommandTooltip(graphics, followBodyguard ? "Bodyguard Follows: ON" : "Bodyguard Follows",
                     canFollowBodyguard ? "Toggle whether the Bodyguard follows your real player."
                             : "Assign a General's Bodyguard first.");
-        } else if (layout.enemyBannersButton().contains(mx, my)) {
-            renderCommandTooltip(graphics, enemyBanners ? "Enemy Banners: ON" : "Enemy Banners: OFF",
-                    "Toggle hostile battlefield banners.");
         }
+    }
+
+    private static void renderTextCommandButton(
+            GuiGraphics graphics, Bounds bounds, String text, boolean enabled, boolean selected
+    ) {
+        boolean hovered = enabled && bounds.contains(guiMouseX(), guiMouseY());
+        int fill = !enabled ? 0xAA181816 : selected ? 0xCC554817 : hovered ? 0xCC3A3934 : 0xB824231F;
+        int border = !enabled ? 0xFF4D4A43 : selected ? GOLD : hovered ? 0xFF9B927F : 0xFF6F6544;
+        graphics.fill(bounds.x1(), bounds.y1(), bounds.x2(), bounds.y2(), fill);
+        drawBorder(graphics, bounds, border);
+        graphics.drawCenteredString(MC.font, text, (bounds.x1() + bounds.x2()) / 2, bounds.y1() + 5,
+                enabled ? TEXT : MUTED);
     }
 
     private static void renderIconCommandButton(
@@ -927,7 +1056,11 @@ public final class CommanderOverlay {
         int buttonY1 = panelBottom - COMMAND_BAR_HEIGHT + 2;
         int buttonY2 = buttonY1 + COMMAND_BUTTON_SIZE;
 
+        Bounds pace = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
+        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds formation = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
+        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
+        Bounds selectionGroup = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds halt = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
@@ -938,8 +1071,6 @@ public final class CommanderOverlay {
             mount = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
             buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         }
-        Bounds slowMarch = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
-        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds looseSpacing = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds fireControl = new Bounds(0, 0, 0, 0);
@@ -955,16 +1086,14 @@ public final class CommanderOverlay {
         Bounds bodyguard = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds bodyguardFollow = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
-        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
-        Bounds enemyBanners = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
 
         return new Layout(
                 panelX, panelY, panelRight, panelBottom,
                 0, 0,
                 cardsX, cardsRight - navSpace,
                 cardsPerPage, pageCount,
-                prev, next, formation, halt, aggression, mount,
-                slowMarch, looseSpacing, fireControl, skirmish, bodyguard, bodyguardFollow, enemyBanners
+                prev, next, pace, formation, selectionGroup, halt, aggression, mount,
+                looseSpacing, fireControl, skirmish, bodyguard, bodyguardFollow
         );
     }
 
@@ -1082,17 +1211,17 @@ public final class CommanderOverlay {
             int pageCount,
             Bounds prevButton,
             Bounds nextButton,
+            Bounds paceButton,
             Bounds formationButton,
+            Bounds selectionGroupButton,
             Bounds haltButton,
             Bounds aggressionButton,
             Bounds mountButton,
-            Bounds slowMarchButton,
             Bounds looseSpacingButton,
             Bounds fireControlButton,
             Bounds skirmishButton,
             Bounds bodyguardButton,
-            Bounds bodyguardFollowButton,
-            Bounds enemyBannersButton
+            Bounds bodyguardFollowButton
     ) {
         private static final Layout EMPTY = new Layout(0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
@@ -1100,8 +1229,8 @@ public final class CommanderOverlay {
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
-                new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
-                new Bounds(0, 0, 0, 0));
+                new Bounds(0, 0, 0, 0),
+                new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0));
 
         boolean contains(int x, int y) {
             return x >= panelX && x < panelRight && y >= panelY && y < panelBottom;

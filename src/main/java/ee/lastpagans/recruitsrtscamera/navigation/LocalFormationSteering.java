@@ -14,7 +14,7 @@ public final class LocalFormationSteering {
     private LocalFormationSteering() {
     }
 
-    public static void steer(
+    public static boolean steer(
             ServerLevel level,
             AbstractRecruitEntity recruit,
             Mob mover,
@@ -38,19 +38,36 @@ public final class LocalFormationSteering {
 
         Vec3 probe = position.add(requested.scale(2.5D));
         Vec3 safe = TacticalPathfinder.standableAt(level, mover, probe);
-        mover.getNavigation().stop();
         // Never fall back to an unchecked desired point. A moving formation can shift
         // its slot after the staggered direct-route probe; stopping for one update is
         // preferable to letting MoveControl step into newly unsupported space.
-        if (safe == null) return;
+        if (safe == null) {
+            if (desired.y > mover.getY() + 0.45D) mover.getJumpControl().jump();
+            mover.getNavigation().moveTo(desired.x, desired.y, desired.z,
+                    (recruit.getVehicle() == null ? 0.78D : 0.86D) * safeScale);
+            return false;
+        }
         // The probe only proves the next part of the route. A farther look-ahead keeps
         // MoveControl from being reset to a point under half a block away every tick.
         double lookAhead = Math.min(1.75D, Math.sqrt(error.x * error.x + error.z * error.z));
         Vec3 target = lookAhead <= 1.0E-5D ? safe
                 : position.add(error.x / Math.hypot(error.x, error.z) * lookAhead,
                 safe.y - position.y, error.z / Math.hypot(error.x, error.z) * lookAhead);
+        // Horses do not reliably invoke their jump controller when MoveControl is aimed
+        // at the top of a full block. Trigger the same supported one-block step explicitly.
+        if (safe.y > mover.getY() + 0.45D
+                && horizontalDistanceSq(position, safe) < 1.60D * 1.60D) {
+            mover.getJumpControl().jump();
+        }
         mover.getMoveControl().setWantedPosition(target.x, target.y, target.z,
                 (recruit.getVehicle() == null ? 0.78D : 0.72D) * safeScale);
+        return true;
+    }
+
+    private static double horizontalDistanceSq(Vec3 a, Vec3 b) {
+        double dx = a.x - b.x;
+        double dz = a.z - b.z;
+        return dx * dx + dz * dz;
     }
 
     private static Vec3 separation(AbstractRecruitEntity recruit) {
