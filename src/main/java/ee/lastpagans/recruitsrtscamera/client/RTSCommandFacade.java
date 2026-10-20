@@ -33,6 +33,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.LinkedHashSet;
 import java.util.UUID;
 
 /**
@@ -285,6 +286,30 @@ public final class RTSCommandFacade {
     public static void selectUnit(UUID groupId, boolean additive) {
         RTSCameraController.commanderSelectGroup(groupId, additive);
         invalidateCards();
+    }
+
+    /** Select the inclusive interval in the full ordered card list, across pages. */
+    public static boolean selectCardRange(UUID anchor, UUID clicked, boolean additive) {
+        if (anchor == null || clicked == null) return false;
+        List<UnitCardView> cards = unitCards();
+        int anchorIndex = -1;
+        int clickedIndex = -1;
+        for (int i = 0; i < cards.size(); i++) {
+            UUID id = cards.get(i).groupId();
+            if (anchor.equals(id)) anchorIndex = i;
+            if (clicked.equals(id)) clickedIndex = i;
+        }
+        if (anchorIndex < 0 || clickedIndex < 0) return false;
+        int from = Math.min(anchorIndex, clickedIndex);
+        int to = Math.max(anchorIndex, clickedIndex);
+        LinkedHashSet<UUID> selected = additive
+                ? new LinkedHashSet<>(RTSCameraController.commanderSelectedGroups())
+                : new LinkedHashSet<>();
+        for (int i = from; i <= to; i++) selected.add(cards.get(i).groupId());
+        RTSCameraController.commanderSelectGroups(selected);
+        RTSCameraController.commanderStatus("Selected card range: " + (to - from + 1) + " groups.");
+        invalidateCards();
+        return true;
     }
 
     public static void clearSelection() {

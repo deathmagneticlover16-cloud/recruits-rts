@@ -1,13 +1,23 @@
 RECRUITS: RTS CAMERA / COMMANDER - REGENERATION CONTEXT
-Current source version: 0.13.0-server.1
+Current source version: 0.15.1-server.1
 Minecraft/loader: Forge 1.20.1, Forge 47.2.0
 Base dependency: Villager Recruits 1.15.2. Formation geometry, slot execution and tactical navigation are native to this mod. Freecam is bundled as a compile dependency. Order Relay, Serious Player Animations, Siege Weapons and Small Ships integrations must remain optional.
 VERSION POLICY: Every source behavior change must increment the semantic version in gradle.properties. Use a patch increment unless the change adds a backward-compatible feature (minor) or breaks compatibility (major), and keep CHANGELOG.txt, BUILD.bat, the debug HUD and this file synchronized.
 
+0.15.1 HEADLINE CHANGES (CURRENT)
+- Formation movement has one rotation owner: all moving recruits, riders and mounts face the shared route tangent, and ordered final facing returns only after each member settles.
+- Cavalry actively jumps safe supported one-block rises. Tactical A* makes those rises inexpensive for horses while retaining collision, fluid, hole and drop rejection.
+- Completed routes preserve their collision-resolved elevation and exact commanded horizontal destination.
+- RTS camera vertical controls are E up and Q down. Space and Ctrl are not vertical movement controls.
+- The moving RTS crosshair and attack cursor artwork are hidden; cursor raycasting, hover and order targeting remain active.
+- Holding Space shows all available synchronized friendly planned orders, including unselected formations. Releasing Space hides the global preview.
+- Commander unit cards support Shift range selection from the last plain-click anchor across the full ordered card list; Ctrl-click keeps toggle selection.
+- Network protocol remains rts-camera-150 because packet compatibility is unchanged.
+
 PROJECT GOAL
 Turn Recruits combat into a Total War: Rome II-like RTS commander mode while preserving normal Minecraft outside RTS. Server authority and 100v100+ reliability matter more than flashy hacks. Use native Recruits mechanics where practical, but Commander may override broken attack/formation behavior.
 
-0.13.0 HEADLINE CHANGES (CURRENT)
+0.13.0 HISTORICAL HEADLINE CHANGES
 - The Tactics & Abilities window is removed. Second Wind, Hold the Line, War Cry, shield stance commands, weapon-mode commands and the legacy Use/Hold Missiles feature have no registered command or packet path.
 - Eligibility-filtered controls live directly on the command bar. Cavalry-majority groups receive Mount/Dismount; a group with any loaded member carrying a ranged or tagged throwable weapon receives Fire At Will/Hold Fire; ranged-majority groups receive Skirmish. Mixed selections send each command only to eligible groups, and the server validates the same rules.
 - The old single-group Formations drop-up is replaced by Army Presets: Balanced infantry-front/ranged-rear, Double Line, Cavalry Vanguard, Skirmish Screen and Reserve. Individual groups retain their current internal formation while the preset arranges group centres.
@@ -115,8 +125,8 @@ Commander owns tactical route/escape. It must not silently decide campaign conse
 The native group is removed at initial rout, before the escape hook. The hook still exposes ServerLevel, original group UUID, original owner UUID, living survivor UUID list and escape position. Process the supplied UUID list, not a lookup of the already-removed native group. Stragglers and previously unloaded members may escape in later batches under the same original group UUID. Each living survivor is emitted once during normal save/reload operation; campaign consumers should also deduplicate by survivor UUID. Dead recruits are casualties, not deserter-event survivors. Do not turn this into a silent campaign conversion.
 
 BUILD / TEST CAVEAT
-0.12.2 source verification: all main Java files pass Java 17 syntax parsing. All nine dependency-free suites pass, including 37 formation-slot checks with a 1,200-unit assignment case plus the tactical, custom-formation, frontage, artillery, cavalry and projection suites. Native formation/goal method descriptors were inspected against the bundled Recruits JAR.
-At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.13.0-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
+0.15.1 source verification: all main Java files pass Java 17 syntax parsing. All nine dependency-free suites pass, including 37 formation-slot checks with a 1,200-unit assignment case plus the tactical, custom-formation, frontage, artillery, cavalry and projection suites. Targeted source contracts cover rotation ownership, mounted rises, exact destinations, camera bindings, global order previews, hidden cursor art and card range selection.
+At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.15.1-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
 dev-tests/TacticalSystemsSelfTest.java covers the live production maneuver plan, target movement/death during commitment, both turn directions, recovery decisions, skirmish hysteresis, armor scaling and independent settings. It does not simulate Minecraft terrain, networking or shield hit resolution.
 
 FOCUSED IN-GAME CHECKS FOR 0.12.2

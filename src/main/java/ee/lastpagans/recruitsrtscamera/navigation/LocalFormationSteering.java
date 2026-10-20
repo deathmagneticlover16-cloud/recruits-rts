@@ -58,6 +58,14 @@ public final class LocalFormationSteering {
         if (safe.y > mover.getY() + 0.45D
                 && horizontalDistanceSq(position, safe) < 1.60D * 1.60D) {
             mover.getJumpControl().jump();
+            // Mounted MoveControl often waits at the lower face of a full block without
+            // advancing its jump control. Reassert the supported jump while grounded;
+            // `safe` came from the collision/fluid checked target column above.
+            if (recruit.getVehicle() == mover && mover.onGround()) {
+                Vec3 motion = mover.getDeltaMovement();
+                mover.setDeltaMovement(motion.x, Math.max(motion.y, 0.42D), motion.z);
+                mover.hasImpulse = true;
+            }
         }
         mover.getMoveControl().setWantedPosition(target.x, target.y, target.z,
                 (recruit.getVehicle() == null ? 0.78D : 0.72D) * safeScale);

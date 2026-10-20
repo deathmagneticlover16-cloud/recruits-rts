@@ -96,7 +96,7 @@ public final class NativeFormationController {
                 plan.destination(), assigned, Map.of(), intent.hold());
         STATES.put(plan.groupId(), state);
         for (AbstractRecruitEntity unit : units) {
-            claim(unit, heading);
+            claim(unit);
             FormationSlotMath.Offset offset = assigned.get(unit.getUUID());
             if (offset != null) RecruitRuntimeRegistry.claimFormation(unit, worldSlot(start, heading, offset), Vec3.ZERO);
         }
@@ -137,7 +137,7 @@ public final class NativeFormationController {
                 destination, offsets, facings == null ? Map.of() : facings, true);
         STATES.put(groupId, state);
         for (AbstractRecruitEntity unit : units) {
-            claim(unit, state.facings.getOrDefault(unit.getUUID(), 0.0F));
+            claim(unit);
             FormationSlotMath.Offset offset = offsets.get(unit.getUUID());
             if (offset != null) RecruitRuntimeRegistry.claimFormation(unit, worldSlot(start, 0.0F, offset), Vec3.ZERO);
         }
@@ -406,7 +406,7 @@ public final class NativeFormationController {
             state.dispersed = false;
         }
         state.velocity = state.center.subtract(previousCenter);
-        float travelHeading = travelling ? movementHeading(state) : state.heading;
+        if (travelling) state.travelHeading = movementHeading(state);
 
         int laggards = 0;
         int index = 0;
@@ -415,8 +415,7 @@ public final class NativeFormationController {
             if (offset == null) continue;
             RecruitRuntimeMetrics.BRAIN_UPDATES.increment();
             float memberHeading = state.facings.getOrDefault(recruit.getUUID(), state.heading);
-            float controlledHeading = travelling ? travelHeading : memberHeading;
-            claim(recruit, controlledHeading);
+            claim(recruit);
             Mob mover = controlledMob(recruit);
             if (mover == null) continue;
             int transitIndex = index++;
@@ -433,8 +432,15 @@ public final class NativeFormationController {
                     : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.20D : 1.0D;
             recruit.setHoldPos(desired);
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
-            boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit, controlledHeading,
+            boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit,
                     state.velocity, catchUpScale);
+            // Formation movement owns rotation in exactly one place. Native MoveControl,
+            // ownerRot and mount/rider body rotation previously received competing values
+            // during the same tick, producing constant alternating yaw. Keep every moving
+            // body on the shared route tangent; restore the ordered per-member facing only
+            // after both the anchor and this member have settled.
+            applyFormationFacing(recruit, mover,
+                    travelling || !arrived ? state.travelHeading : memberHeading);
             if (arrived) {
                 state.locked.add(recruit.getUUID());
                 RecruitRuntimeRegistry.brain(recruit).settle(level.getGameTime());
@@ -476,10 +482,13 @@ public final class NativeFormationController {
     }
 
     private static float movementHeading(State state) {
-        Vec3 direction = state.velocity;
-        if (direction.x * direction.x + direction.z * direction.z < 1.0E-6D
-                && state.routeIndex < state.route.points().size()) {
+        Vec3 direction = Vec3.ZERO;
+        if (state.routeIndex < state.route.points().size()) {
             direction = state.route.points().get(state.routeIndex).subtract(state.center);
+        }
+        if (direction.x * direction.x + direction.z * direction.z < 1.0E-6D) direction = state.velocity;
+        if (direction.x * direction.x + direction.z * direction.z < 1.0E-6D) {
+            direction = effectiveDestination(state).subtract(state.center);
         }
         if (direction.x * direction.x + direction.z * direction.z < 1.0E-6D) return state.heading;
         return (float) Math.toDegrees(Math.atan2(-direction.x, direction.z));
@@ -505,7 +514,6 @@ public final class NativeFormationController {
             Vec3 desired,
             Agent agent,
             boolean dispersed,
-            float finalHeading,
             Vec3 slotVelocity,
             double catchUpScale
     ) {
@@ -519,7 +527,6 @@ public final class NativeFormationController {
             mover.setDeltaMovement(0.0D, velocity.y, 0.0D);
             agent.clearPath();
             agent.manualControl = false;
-            enforceFacing(recruit, mover, finalHeading);
             return true;
         }
 
@@ -619,11 +626,15 @@ public final class NativeFormationController {
             mover.setDeltaMovement(clamp(dx * 0.16D * catchUpScale, -0.14D, 0.14D),
                     Math.max(0.14D * catchUpScale, velocity.y),
                     clamp(dz * 0.16D * catchUpScale, -0.14D, 0.14D));
-            faceMovement(recruit, mover, waypoint);
         } else {
             if (waypoint.y > mover.getY() + 0.45D
                     && horizontalDistanceSq(mover.position(), waypoint) < 1.45D * 1.45D) {
                 mover.getJumpControl().jump();
+                if (recruit.getVehicle() == mover && mover.onGround()) {
+                    Vec3 motion = mover.getDeltaMovement();
+                    mover.setDeltaMovement(motion.x, Math.max(motion.y, 0.42D), motion.z);
+                    mover.hasImpulse = true;
+                }
             }
             mover.getMoveControl().setWantedPosition(waypoint.x, waypoint.y, waypoint.z,
                     navigationSpeed(recruit) * catchUpScale);
@@ -668,7 +679,11 @@ public final class NativeFormationController {
 
     private static Vec3 effectiveDestination(State state) {
         if (state.route.complete() && !state.route.points().isEmpty()) {
-            return state.route.points().get(state.route.points().size() - 1);
+            // Path cells are centered for safe traversal, but a translated formation may
+            // have a sub-block destination. Preserve the resolved safe elevation while
+            // completing the order at its exact commanded horizontal position.
+            Vec3 resolved = state.route.points().get(state.route.points().size() - 1);
+            return new Vec3(state.destination.x, resolved.y, state.destination.z);
         }
         return state.destination;
     }
@@ -702,12 +717,11 @@ public final class NativeFormationController {
         return null;
     }
 
-    private static void claim(AbstractRecruitEntity recruit, float heading) {
+    private static void claim(AbstractRecruitEntity recruit) {
         recruit.setShouldMovePos(false);
         recruit.clearMovePos();
         recruit.setShouldHoldPos(true);
         recruit.setFollowState(3);
-        recruit.ownerRot = heading;
         recruit.isInFormation = true;
         recruit.holdFormation = true;
     }
@@ -798,21 +812,8 @@ public final class NativeFormationController {
         return center.add(right.scale(offset.right())).add(forward.scale(-offset.back()));
     }
 
-    private static void faceMovement(AbstractRecruitEntity recruit, Mob mover, Vec3 target) {
-        double dx = target.x - mover.getX();
-        double dz = target.z - mover.getZ();
-        if (dx * dx + dz * dz < 1.0E-5D) return;
-        float targetYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-        float delta = net.minecraft.util.Mth.wrapDegrees(targetYaw - mover.getYRot());
-        float yaw = mover.getYRot() + (float) clamp(delta, -12.0D, 12.0D);
-        mover.setYRot(yaw);
-        mover.setYBodyRot(yaw);
-        mover.setYHeadRot(yaw);
-        recruit.ownerRot = yaw;
-    }
-
-    /** Keep native look/move controls from immediately overwriting an explicit face order. */
-    private static void enforceFacing(AbstractRecruitEntity recruit, Mob mover, float yaw) {
+    /** Single rotation owner for both stable route travel and ordered final facing. */
+    private static void applyFormationFacing(AbstractRecruitEntity recruit, Mob mover, float yaw) {
         recruit.ownerRot = yaw;
         recruit.setYRot(yaw);
         recruit.setYBodyRot(yaw);
@@ -868,6 +869,7 @@ public final class NativeFormationController {
         TacticalPathfinder.Route route = TacticalPathfinder.Route.EMPTY;
         int routeIndex;
         int laggards;
+        float travelHeading;
         int emptyTicks;
         int consecutiveFailures;
         boolean dispersed;
@@ -884,6 +886,7 @@ public final class NativeFormationController {
             this.levelKey = levelKey;
             this.kind = kind;
             this.heading = heading;
+            this.travelHeading = heading;
             this.center = center;
             this.destination = destination;
             this.offsets = new LinkedHashMap<>(offsets);

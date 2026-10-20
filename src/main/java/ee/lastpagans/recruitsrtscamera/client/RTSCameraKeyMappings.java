@@ -106,6 +106,27 @@ public final class RTSCameraKeyMappings {
             CATEGORY
     );
 
+    public static final KeyMapping CAMERA_UP = new KeyMapping(
+            "key.recruits_rts_camera.camera_up",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_E,
+            CATEGORY
+    );
+
+    public static final KeyMapping CAMERA_DOWN = new KeyMapping(
+            "key.recruits_rts_camera.camera_down",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_Q,
+            CATEGORY
+    );
+
+    public static final KeyMapping SHOW_PLANNED_ORDERS = new KeyMapping(
+            "key.recruits_rts_camera.show_planned_orders",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_SPACE,
+            CATEGORY
+    );
+
     private RTSCameraKeyMappings() {
     }
 
@@ -124,6 +145,9 @@ public final class RTSCameraKeyMappings {
         event.register(COMMIT_ROUTE);
         event.register(RESET_ROUTE);
         event.register(HALT);
+        event.register(CAMERA_UP);
+        event.register(CAMERA_DOWN);
+        event.register(SHOW_PLANNED_ORDERS);
     }
 
     /** True when a raw key is already owned by an RTS action. */
@@ -140,6 +164,9 @@ public final class RTSCameraKeyMappings {
                 || ROUTE_MODE.matches(key, scanCode)
                 || COMMIT_ROUTE.matches(key, scanCode)
                 || RESET_ROUTE.matches(key, scanCode)
-                || HALT.matches(key, scanCode);
+                || HALT.matches(key, scanCode)
+                || CAMERA_UP.matches(key, scanCode)
+                || CAMERA_DOWN.matches(key, scanCode)
+                || SHOW_PLANNED_ORDERS.matches(key, scanCode);
     }
 }

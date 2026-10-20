@@ -12,5 +12,8 @@
   "key.recruits_rts_camera.route_mode": "Toggle Route Planning Mode",
   "key.recruits_rts_camera.commit_route": "Commit Planned Route",
   "key.recruits_rts_camera.reset_route": "Cancel Current Planning",
-  "key.recruits_rts_camera.halt": "Halt Selected Groups"
+  "key.recruits_rts_camera.halt": "Halt Selected Groups",
+  "key.recruits_rts_camera.camera_up": "Move RTS Camera Up",
+  "key.recruits_rts_camera.camera_down": "Move RTS Camera Down",
+  "key.recruits_rts_camera.show_planned_orders": "Hold to Show All Planned Orders"
 }

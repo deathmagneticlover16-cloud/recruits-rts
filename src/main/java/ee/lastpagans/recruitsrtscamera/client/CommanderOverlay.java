@@ -13,6 +13,7 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Private-server Total War command interface.
@@ -60,6 +61,7 @@ public final class CommanderOverlay {
     private static boolean settingsMenuOpen;
     private static Layout lastLayout = Layout.EMPTY;
     private static Boolean enemyBannersVisibleOverride;
+    private static UUID cardSelectionAnchor;
 
     private CommanderOverlay() {
     }
@@ -71,6 +73,7 @@ public final class CommanderOverlay {
         settingsMenuOpen = false;
         lastLayout = Layout.EMPTY;
         enemyBannersVisibleOverride = null;
+        cardSelectionAnchor = null;
     }
 
     public static void render(GuiGraphics graphics) {
@@ -249,7 +252,15 @@ public final class CommanderOverlay {
         for (CardHitbox hitbox : cardHitboxes(groups, layout)) {
             if (hitbox.bounds().contains(mouseX, mouseY)) {
                 boolean additive = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
-                RTSCommandFacade.selectUnit(hitbox.view().groupId(), additive);
+                boolean range = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
+                UUID clicked = hitbox.view().groupId();
+                if (range && cardSelectionAnchor != null
+                        && RTSCommandFacade.selectCardRange(cardSelectionAnchor, clicked, additive)) {
+                    return true;
+                }
+                RTSCommandFacade.selectUnit(clicked, additive);
+                // Ctrl toggles and Shift ranges preserve the last plain-click anchor.
+                if (!additive && !range) cardSelectionAnchor = clicked;
                 return true;
             }
         }

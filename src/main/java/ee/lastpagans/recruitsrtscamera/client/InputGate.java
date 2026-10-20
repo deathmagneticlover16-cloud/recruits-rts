@@ -24,8 +24,6 @@ public final class InputGate {
             "key.back",
             "key.left",
             "key.right",
-            "key.jump",
-            "key.sneak",
             "key.sprint"
     );
 

@@ -1,3 +1,16 @@
+Recruits: RTS Camera 0.15.1-server.1
+Stable facing, cavalry rises and Commander input previews
+
+- Consolidated formation rotation ownership. Moving recruits, riders and mounts share one route-tangent facing; ordered final facing is restored only after each member settles.
+- Mounted formation members actively jump collision-backed one-block rises, and cavalry tactical routing treats those safe rises as inexpensive without weakening fluid, pit, drop or collision rejection.
+- Completed formation routes retain safe resolved elevation while reaching the exact commanded horizontal destination instead of stopping at a nearby path-cell centre.
+- RTS camera vertical movement now uses E for up and Q for down. Space and Ctrl no longer move the camera.
+- Removed the RTS mouse crosshair and attack cursor artwork while retaining cursor raycasts, hover detection and order targeting.
+- Holding Space now previews every available active friendly order, including unselected formations, from its live position along the synchronized route to its destination stencil.
+- Shift-clicking Commander unit cards selects the inclusive range from the last plain-click anchor across the full ordered card list. Ctrl-click remains additive/toggle selection and preserves the anchor.
+- Network protocol remains rts-camera-150 because no packet registration or wire format changed.
+- Source version and packaging references are 0.15.1-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.0-server.1
 Stable travel, safe routes and direct formation dragging
 

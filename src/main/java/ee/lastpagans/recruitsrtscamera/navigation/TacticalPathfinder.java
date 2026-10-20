@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.animal.horse.AbstractHorse;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -432,8 +433,14 @@ public final class TacticalPathfinder {
         double dy = a.position.y - b.position.y;
         double dz = a.position.z - b.position.z;
         double descentPenalty = !a.climbable && !b.climbable && dy > 0.60D ? 7.0D * dy : 0.0D;
+        // A supported one-block rise is an ordinary horse jump, not a reason to route
+        // cavalry around an entire ledge. This changes only the cost of an already-safe
+        // collision-backed transition; dry/support/drop checks remain unchanged.
+        double elevationCost = a.climbable || b.climbable ? 1.1D
+                : mover instanceof AbstractHorse && dy < -0.40D && dy >= -MAX_STEP_UP ? 0.65D
+                : 1.8D;
         return Math.sqrt(dx * dx + dz * dz)
-                + Math.abs(dy) * (a.climbable || b.climbable ? 1.1D : 1.8D)
+                + Math.abs(dy) * elevationCost
                 + descentPenalty;
     }
 
