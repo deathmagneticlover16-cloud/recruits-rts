@@ -1,5 +1,6 @@
 package ee.lastpagans.recruitsrtscamera.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.CaptainEntity;
@@ -561,7 +562,7 @@ public final class RTSCameraController {
         }
         if (setupTicks > 0) {
             setupTicks--;
-            freeCamera.setPos(anchor.x, anchor.y + 40.0D, anchor.z);
+            freeCamera.setPos(anchor.x, anchor.y + 9.0D, anchor.z);
             freeCamera.setYRot(MC.player.getYRot());
             freeCamera.setXRot(65.0F);
             if (setupTicks == 0) {
@@ -580,8 +581,7 @@ public final class RTSCameraController {
                 cancelRotation();
             }
             screenWasOpen = true;
-            capturedCameraUpDown = false;
-            capturedCameraDownDown = false;
+            releaseVerticalCameraInput();
             capturedShowOrdersDown = false;
             recruitsScreenWasOpen |= isRecruitsScreenOpen();
             return;
@@ -692,8 +692,7 @@ public final class RTSCameraController {
         rotatingFormation = false;
         rotateKeyWasDown = false;
         capturedRotateDown = false;
-        capturedCameraUpDown = false;
-        capturedCameraDownDown = false;
+        releaseVerticalCameraInput();
         capturedShowOrdersDown = false;
         CAPTURED_COMMANDS.clear();
         rotationDegrees = 0.0D;
@@ -715,7 +714,7 @@ public final class RTSCameraController {
             Freecam.switchControls();
         }
         updateCursorPosition();
-        message("RTS Camera enabled. WASD moves; E/Q move up/down; hold middle mouse to look.");
+        message("RTS Camera enabled. WASD moves; E/Q or the wheel move up/down; hold middle mouse to look.");
     }
 
     public static void stop(String reason) {
@@ -737,8 +736,7 @@ public final class RTSCameraController {
         rotatingFormation = false;
         rotateKeyWasDown = false;
         capturedRotateDown = false;
-        capturedCameraUpDown = false;
-        capturedCameraDownDown = false;
+        releaseVerticalCameraInput();
         capturedShowOrdersDown = false;
         CAPTURED_COMMANDS.clear();
         rotationDegrees = 0.0D;
@@ -798,11 +796,33 @@ public final class RTSCameraController {
 
     private static void moveCameraVertically(FreeCamera camera) {
         if (camera == null || MC.screen != null) return;
-        boolean up = capturedCameraUpDown || RTSCameraKeyMappings.CAMERA_UP.isDown();
-        boolean down = capturedCameraDownDown || RTSCameraKeyMappings.CAMERA_DOWN.isDown();
+        boolean up = physicalKeyState(RTSCameraKeyMappings.CAMERA_UP);
+        boolean down = physicalKeyState(RTSCameraKeyMappings.CAMERA_DOWN);
+        if (!up) {
+            capturedCameraUpDown = false;
+            RTSCameraKeyMappings.CAMERA_UP.setDown(false);
+        }
+        if (!down) {
+            capturedCameraDownDown = false;
+            RTSCameraKeyMappings.CAMERA_DOWN.setDown(false);
+        }
         if (up == down) return;
         double speed = Math.max(0.05D, FreecamConfig.VERTICAL_SPEED.get());
         camera.move(MoverType.SELF, new Vec3(0.0D, up ? speed : -speed, 0.0D));
+    }
+
+    private static boolean physicalKeyState(net.minecraft.client.KeyMapping mapping) {
+        if (mapping == null) return false;
+        InputConstants.Key key = mapping.getKey();
+        if (key.getType() != InputConstants.Type.KEYSYM) return mapping.isDown();
+        return InputConstants.isKeyDown(MC.getWindow().getWindow(), key.getValue());
+    }
+
+    private static void releaseVerticalCameraInput() {
+        capturedCameraUpDown = false;
+        capturedCameraDownDown = false;
+        RTSCameraKeyMappings.CAMERA_UP.setDown(false);
+        RTSCameraKeyMappings.CAMERA_DOWN.setDown(false);
     }
 
     public static boolean handleMouseButton(int button, int action, int modifiers) {
@@ -1030,6 +1050,13 @@ public final class RTSCameraController {
             customRanks = Math.max(1, Math.min(CustomFormationMath.MAX_RANKS, customRanks + direction));
             status = "Custom formation depth: " + customRanks + (customRanks == 1 ? " rank" : " ranks");
             statusTicks = 40;
+            return true;
+        }
+        FreeCamera camera = Freecam.getFreeCamera();
+        if (camera != null && Math.abs(scrollDelta) > 0.001D) {
+            double step = Math.max(0.75D, FreecamConfig.VERTICAL_SPEED.get() * 4.0D);
+            camera.move(MoverType.SELF, new Vec3(0.0D, scrollDelta * step, 0.0D));
+            clampCamera(camera);
         }
         // Command mode owns the wheel so the hotbar and unrelated mod bindings cannot
         // change underneath an RTS order. Screens are excluded above.
@@ -1883,9 +1910,8 @@ public final class RTSCameraController {
                 || MC.options.keyDown.isDown()
                 || MC.options.keyLeft.isDown()
                 || MC.options.keyRight.isDown()
-                || capturedCameraUpDown || capturedCameraDownDown
-                || RTSCameraKeyMappings.CAMERA_UP.isDown()
-                || RTSCameraKeyMappings.CAMERA_DOWN.isDown();
+                || physicalKeyState(RTSCameraKeyMappings.CAMERA_UP)
+                || physicalKeyState(RTSCameraKeyMappings.CAMERA_DOWN);
     }
 
     /**
@@ -2429,7 +2455,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.2-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.3-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2444,7 +2470,7 @@ public final class RTSCameraController {
         drawHudLine(graphics, "Mouse: LMB select · Ctrl+LMB toggle · Shift+card range · RMB move/attack",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
-        drawHudLine(graphics, "Mouse: Alt+RMB custom · wheel ranks · hold MMB look · 2×RMB run",
+        drawHudLine(graphics, "Mouse: wheel height (custom draw: ranks) · hold MMB look · 2×RMB run",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
         drawHudLine(graphics, "Keys: " + keyName(RTSCameraKeyMappings.TOGGLE) + " camera · "
@@ -2453,7 +2479,7 @@ public final class RTSCameraController {
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
         drawHudLine(graphics, "Camera: WASD pan · " + keyName(RTSCameraKeyMappings.CAMERA_UP) + " up · "
-                        + keyName(RTSCameraKeyMappings.CAMERA_DOWN) + " down · hold "
+                        + keyName(RTSCameraKeyMappings.CAMERA_DOWN) + " down · wheel up/down · hold "
                         + keyName(RTSCameraKeyMappings.SHOW_PLANNED_ORDERS) + " all orders",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;

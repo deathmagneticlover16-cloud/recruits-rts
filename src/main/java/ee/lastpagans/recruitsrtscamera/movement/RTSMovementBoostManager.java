@@ -44,19 +44,20 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RTSMovementBoostManager {
-    private static final double REGULAR_INFANTRY_NAV_SPEED = 0.78D;
+    private static final double REGULAR_INFANTRY_NAV_SPEED = 1.17D;
     private static final double REGULAR_CAVALRY_NAV_SPEED = 1.50D;
     private static final double REGULAR_CAVALRY_MOUNT_MULTIPLIER = 0.35D;
-    private static final double HASTY_INFANTRY_SPEED = 1.08D;
+    private static final double HASTY_INFANTRY_SPEED = 1.62D;
     private static final double HASTY_INFANTRY_ATTRIBUTE_MULTIPLIER = 0.08D;
     private static final double HASTY_CAVALRY_NAV_SPEED = 1.62D;
     private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 0.45D;
 
-    private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.10D;   // ~0.24 total
+    private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.15D;   // ~0.36 total
 
     private static final double HASTY_VARIATION = 0.06D;
     private static final double SLOW_MARCH_FACTOR = 0.55D;
-    private static final double SLOW_MARCH_NAV_SPEED = 0.68D;
+    private static final double SLOW_MARCH_INFANTRY_NAV_SPEED = 1.02D;
+    private static final double SLOW_MARCH_CAVALRY_NAV_SPEED = 0.68D;
     private static final double SLOW_MARCH_ATTRIBUTE_MULTIPLIER = -0.22D;
     private static final double CAVALRY_GROUP_RATIO = 0.70D;
     private static final int MAX_FORMATION_TICKS = 20 * 55;
@@ -335,10 +336,11 @@ public final class RTSMovementBoostManager {
                         mountAttributeAmount = HASTY_CAVALRY_MOUNT_MULTIPLIER + (state.runnerFactor - 1.0D);
                     }
                     case SLOW_MARCH -> {
-                        navigationSpeed = SLOW_MARCH_NAV_SPEED;
                         if (isCavalry(recruit)) {
+                            navigationSpeed = SLOW_MARCH_CAVALRY_NAV_SPEED;
                             mountAttributeAmount = SLOW_MARCH_ATTRIBUTE_MULTIPLIER;
                         } else {
+                            navigationSpeed = SLOW_MARCH_INFANTRY_NAV_SPEED;
                             selfAttributeAmount = SLOW_MARCH_ATTRIBUTE_MULTIPLIER;
                         }
                     }

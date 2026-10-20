@@ -2,6 +2,7 @@ package ee.lastpagans.recruitsrtscamera.mixin;
 
 import com.talhanation.recruits.network.MessageFaceCommand;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
+import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,6 +21,10 @@ public abstract class NativeFaceCommandMixin {
     @Inject(method = "executeServerSide", at = @At("TAIL"))
     private void rts$faceFormation(NetworkEvent.Context context, CallbackInfo callback) {
         ServerPlayer sender = context.getSender();
-        if (sender != null && group != null) FormationRuntime.faceFormation(group, sender.getYRot());
+        if (sender != null && group != null) {
+            float lockedFacing = sender.getYRot();
+            FormationService.rememberFacing(sender.serverLevel(), group, lockedFacing);
+            FormationRuntime.faceFormation(group, lockedFacing);
+        }
     }
 }

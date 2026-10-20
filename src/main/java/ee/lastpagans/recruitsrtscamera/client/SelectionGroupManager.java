@@ -25,7 +25,7 @@ final class SelectionGroupManager {
         if (selected == null || selected.isEmpty()) return false;
         int slot = 0;
         for (int candidate = 1; candidate <= 10; candidate++) {
-            if (!BUNDLES.containsKey(candidate)) {
+            if (!BUNDLES.containsKey(candidate) && !DIRECT_HOTKEYS.containsKey(keyForBundleSlot(candidate))) {
                 slot = candidate;
                 break;
             }
@@ -48,7 +48,7 @@ final class SelectionGroupManager {
             return;
         }
         pendingDirectGroup = selected.iterator().next();
-        RTSCameraController.commanderStatus("Press an unused key for this group.");
+        RTSCameraController.commanderStatus("Press an unused key, or Backspace to unbind this group.");
     }
 
     static boolean awaitingHotkey() {
@@ -57,13 +57,22 @@ final class SelectionGroupManager {
 
     static boolean handleKeyPress(int key, int scanCode) {
         if (pendingDirectGroup != null) {
+            if (key == GLFW.GLFW_KEY_BACKSPACE) {
+                boolean removed = DIRECT_HOTKEYS.entrySet().removeIf(
+                        entry -> entry.getValue().equals(pendingDirectGroup));
+                pendingDirectGroup = null;
+                RTSCameraController.commanderStatus(removed
+                        ? "Group hotkey removed." : "This group had no direct hotkey.");
+                return true;
+            }
             if (key == GLFW.GLFW_KEY_ESCAPE) {
                 pendingDirectGroup = null;
                 RTSCameraController.commanderStatus("Hotkey assignment cancelled.");
                 return true;
             }
+            int bundleSlot = bundleSlotForKey(key);
             if (invalidAssignmentKey(key) || RTSCameraKeyMappings.isReserved(key, scanCode)
-                    || bundleSlotForKey(key) != 0 || DIRECT_HOTKEYS.containsKey(key)) {
+                    || (bundleSlot != 0 && BUNDLES.containsKey(bundleSlot)) || DIRECT_HOTKEYS.containsKey(key)) {
                 RTSCameraController.commanderStatus("That key is already reserved. Choose another key.");
                 return true;
             }
@@ -112,6 +121,10 @@ final class SelectionGroupManager {
     private static int bundleSlotForKey(int key) {
         if (key >= GLFW.GLFW_KEY_1 && key <= GLFW.GLFW_KEY_9) return key - GLFW.GLFW_KEY_0;
         return key == GLFW.GLFW_KEY_0 ? 10 : 0;
+    }
+
+    private static int keyForBundleSlot(int slot) {
+        return slot == 10 ? GLFW.GLFW_KEY_0 : GLFW.GLFW_KEY_0 + slot;
     }
 
     private static boolean invalidAssignmentKey(int key) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.2 behavior."""
+"""Targeted source contracts for Commander 0.15.3 behavior."""
 
 from pathlib import Path
 
@@ -35,6 +35,9 @@ translate_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network
 ui_ids = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CommanderUiElementIds.java")
 ui_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CommanderUiRegistry.java")
 cavalry = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryTacticalController.java")
+selection_groups = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/SelectionGroupManager.java")
+face_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/NativeFaceCommandMixin.java")
+movement = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/RTSMovementBoostManager.java")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -71,6 +74,12 @@ require(controller, "deliberately has no moving crosshair/attack artwork",
         "the visible moving cursor must stay removed")
 require(controller, "translationRotationDegrees", "Alt translation needs retained Ctrl rotation")
 require(controller, "GLFW.GLFW_KEY_LEFT_CONTROL", "Ctrl must rotate during Alt translation")
+require(controller, "freeCamera.setPos(anchor.x, anchor.y + 9.0D, anchor.z)",
+        "RTS camera must begin close to the player")
+require(controller, "scrollDelta * step", "the wheel must move the camera vertically")
+require(controller, "InputConstants.isKeyDown", "vertical movement must use physical key state")
+require(controller, "RTSCameraKeyMappings.CAMERA_UP.setDown(false)",
+        "released vertical keys must clear stale mapping state")
 require(translate_packet, "RotateFormationPacket.markTranslated", "combined transforms must compose in packet order")
 require(rotate_packet, "FormationRuntime.formationDestination", "combined rotation must use translated destinations")
 
@@ -81,8 +90,19 @@ require(facade, "Select the inclusive interval in the full ordered card list, ac
 require(ui_ids, 'MAIN_COMMAND_BAR = "main.command_bar"', "command bar needs a stable semantic ID")
 require(ui_ids, 'STAT_FATIGUE = "stat.fatigue"', "fatigue bar needs a stable semantic ID")
 require(ui_registry, "public static List<Element> snapshot()", "UI editor needs a public element snapshot")
+require(selection_groups, "key == GLFW.GLFW_KEY_BACKSPACE", "Backspace must unbind a direct group hotkey")
+require(selection_groups, "BUNDLES.containsKey(bundleSlot)",
+        "number hotkeys must only be blocked by an occupied bundle slot")
+require(selection_groups, "!DIRECT_HOTKEYS.containsKey(keyForBundleSlot(candidate))",
+        "bundle creation must skip numbers occupied by direct hotkeys")
+require(face_mixin, "FormationService.rememberFacing", "native Face must persist its facing lock")
+require(formation, "CENTER_SPEED = 0.21D", "foot formation travel must be 1.5x faster")
+require(formation, "FOOT_NAV_SPEED = 1.17D", "foot slot movement and rotation must be 1.5x faster")
+require(movement, "REGULAR_INFANTRY_NAV_SPEED = 1.17D", "regular foot navigation must be 1.5x faster")
+require(movement, "HASTY_INFANTRY_SPEED = 1.62D", "running foot navigation must be 1.5x faster")
+require(movement, "SLOW_MARCH_CAVALRY_NAV_SPEED = 0.68D", "cavalry slow pace must remain unchanged")
 
 require(network, 'PROTOCOL = "rts-camera-150"', "wire-compatible release must retain protocol 150")
-require(source("gradle.properties"), "mod_version=0.15.2-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.3-server.1", "semantic version must be updated")
 
-print("0.15.2 source contracts passed")
+print("0.15.3 source contracts passed")

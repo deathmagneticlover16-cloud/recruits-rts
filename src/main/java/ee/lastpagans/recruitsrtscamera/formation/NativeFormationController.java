@@ -57,9 +57,9 @@ public final class NativeFormationController {
     private static final Map<UUID, State> STATES = new LinkedHashMap<>();
     private static final int MAX_FORMATION_SEARCH = 18_000;
     private static final int MAX_AGENT_SEARCH = 3_500;
-    private static final double CENTER_SPEED = 0.14D;
+    private static final double CENTER_SPEED = 0.21D;
     private static final double SLOT_LOCK_DISTANCE_SQ = 0.30D * 0.30D;
-    private static final double FOOT_NAV_SPEED = 0.78D;
+    private static final double FOOT_NAV_SPEED = 1.17D;
     private static final double MOUNTED_NAV_SPEED = 0.72D;
     private static final double SLOT_JITTER_RIGHT = 0.11D;
     private static final double SLOT_JITTER_BACK = 0.08D;

@@ -643,7 +643,7 @@ public final class CommanderOverlay {
         } else if (choices.get(1).contains(guiMouseX(), guiMouseY())) {
             renderCommandTooltip(graphics, "Add Hotkey",
                     RTSCommandFacade.selectedGroupCount() == 1
-                            ? "Assigns one unused key to the selected group."
+                            ? "Press an unused key to assign it; Backspace removes its hotkey."
                             : "Select exactly one group first.");
         }
     }

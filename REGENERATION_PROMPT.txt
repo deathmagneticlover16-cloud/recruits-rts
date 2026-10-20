@@ -1,10 +1,18 @@
 RECRUITS: RTS CAMERA / COMMANDER - REGENERATION CONTEXT
-Current source version: 0.15.2-server.1
+Current source version: 0.15.3-server.1
 Minecraft/loader: Forge 1.20.1, Forge 47.2.0
 Base dependency: Villager Recruits 1.15.2. Formation geometry, slot execution and tactical navigation are native to this mod. Freecam is bundled as a compile dependency. Order Relay, Serious Player Animations, Siege Weapons and Small Ships integrations must remain optional.
 VERSION POLICY: Every source behavior change must increment the semantic version in gradle.properties. Use a patch increment unless the change adds a backward-compatible feature (minor) or breaks compatibility (major), and keep CHANGELOG.txt, BUILD.bat, the debug HUD and this file synchronized.
 
-0.15.2 HEADLINE CHANGES (CURRENT)
+0.15.3 HEADLINE CHANGES (CURRENT)
+- Direct group hotkeys accept currently free number keys and can be removed with Backspace. Selection Group creation skips numbers already assigned directly.
+- The wheel raises/lowers the camera outside UI and custom-rank gestures; RTS entry begins nine blocks above the player.
+- E/Q vertical movement is reconciled against physical keyboard state every tick, clearing stale capture and KeyMapping state on release, screen transitions and shutdown.
+- Native Face directions persist in formation memory and remain the final locked facing for later move orders.
+- Foot formation anchors and navigation, including in-place slot rotation, are 1.5x faster; cavalry values are unchanged.
+- Network protocol remains rts-camera-150 because packet compatibility is unchanged.
+
+0.15.2 HEADLINE CHANGES
 - Rotation orders no longer freeze stationary formations: members relocating around a stationary anchor face their live slot path, then restore the commanded final yaw after arrival.
 - While a rider has formation authority, a high-priority flag-only mount goal suppresses the horse's movement, look, jump and target goals. The rider brain exclusively drives MoveControl and JumpControl; normal horse AI returns on release.
 - Alt-left-drag supports Ctrl rotation in place. Ctrl release retains the accumulated rotation and the drag may continue before the combined order is committed.
@@ -133,8 +141,8 @@ Commander owns tactical route/escape. It must not silently decide campaign conse
 The native group is removed at initial rout, before the escape hook. The hook still exposes ServerLevel, original group UUID, original owner UUID, living survivor UUID list and escape position. Process the supplied UUID list, not a lookup of the already-removed native group. Stragglers and previously unloaded members may escape in later batches under the same original group UUID. Each living survivor is emitted once during normal save/reload operation; campaign consumers should also deduplicate by survivor UUID. Dead recruits are casualties, not deserter-event survivors. Do not turn this into a silent campaign conversion.
 
 BUILD / TEST CAVEAT
-0.15.2 source verification: all main Java files pass Java 17 syntax parsing. Dependency-free suites cover formation slots, tactical math, custom formations, frontage, artillery, cavalry and projection. Targeted source contracts cover stationary rotation, rider-owned mounts, deterministic slot variation, Alt+Ctrl transforms, semantic UI IDs and retained 0.15.1 behavior.
-At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.15.2-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
+0.15.3 source verification: all main Java files pass Java 17 syntax parsing. Dependency-free suites cover formation slots, tactical math, custom formations, frontage, artillery, cavalry and projection. Targeted source contracts cover hotkey unbinding/occupancy, wheel height, nine-block entry, physical vertical-key recovery, persistent facing lock and 1.5x foot movement while retaining earlier safety behavior.
+At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.15.3-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
 dev-tests/TacticalSystemsSelfTest.java covers the live production maneuver plan, target movement/death during commitment, both turn directions, recovery decisions, skirmish hysteresis, armor scaling and independent settings. It does not simulate Minecraft terrain, networking or shield hit resolution.
 
 FOCUSED IN-GAME CHECKS FOR 0.12.2

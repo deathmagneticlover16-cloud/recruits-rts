@@ -1,3 +1,16 @@
+Recruits: RTS Camera 0.15.3-server.1
+Camera input recovery, available hotkeys and faster infantry
+
+- Direct unit-group hotkeys can be removed by opening Add Hotkey for the group and pressing Backspace.
+- Number keys may be assigned directly when their numbered Selection Group slot and normal Commander binding are currently unused. New Selection Groups skip numbers already occupied by direct hotkeys.
+- The mouse wheel moves the RTS camera vertically: scroll up ascends and scroll down descends. Custom-formation drawing keeps its existing wheel-to-change-ranks behavior.
+- RTS Camera now opens nine blocks above the player instead of forty blocks overhead.
+- Vertical camera input reads the physical bound key state each tick and clears stale E/Q mapping state after releases, screens and shutdown, preventing latched vertical movement.
+- Native Recruits Face commands now persist the selected group direction in formation memory, so later move orders retain the locked facing and restore it after travel.
+- Foot formation travel, slot rotation and walk/run navigation are 1.5x faster. Cavalry pacing remains unchanged.
+- Network protocol remains rts-camera-150 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.15.3-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.2-server.1
 Rider-owned cavalry, reliable rotation and semantic Commander UI
 
