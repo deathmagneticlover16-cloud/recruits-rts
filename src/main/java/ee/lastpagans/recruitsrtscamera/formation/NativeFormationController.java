@@ -4,6 +4,7 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.compat.TerrainSurfaceResolver;
+import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
 import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
 import ee.lastpagans.recruitsrtscamera.navigation.LocalFormationSteering;
 import ee.lastpagans.recruitsrtscamera.navigation.TacticalTerrainRevisions;
@@ -22,6 +23,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -40,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.EnumSet;
 
 /**
  * Built-in server-authoritative formation runtime.
@@ -58,6 +61,8 @@ public final class NativeFormationController {
     private static final double SLOT_LOCK_DISTANCE_SQ = 0.30D * 0.30D;
     private static final double FOOT_NAV_SPEED = 0.78D;
     private static final double MOUNTED_NAV_SPEED = 0.72D;
+    private static final double SLOT_JITTER_RIGHT = 0.11D;
+    private static final double SLOT_JITTER_BACK = 0.08D;
 
     private NativeFormationController() {
     }
@@ -98,7 +103,8 @@ public final class NativeFormationController {
         for (AbstractRecruitEntity unit : units) {
             claim(unit);
             FormationSlotMath.Offset offset = assigned.get(unit.getUUID());
-            if (offset != null) RecruitRuntimeRegistry.claimFormation(unit, worldSlot(start, heading, offset), Vec3.ZERO);
+            if (offset != null) RecruitRuntimeRegistry.claimFormation(unit,
+                    worldSlot(start, heading, offset, unit.getUUID()), Vec3.ZERO);
         }
         return true;
     }
@@ -139,7 +145,8 @@ public final class NativeFormationController {
         for (AbstractRecruitEntity unit : units) {
             claim(unit);
             FormationSlotMath.Offset offset = offsets.get(unit.getUUID());
-            if (offset != null) RecruitRuntimeRegistry.claimFormation(unit, worldSlot(start, 0.0F, offset), Vec3.ZERO);
+            if (offset != null) RecruitRuntimeRegistry.claimFormation(unit,
+                    worldSlot(start, 0.0F, offset, unit.getUUID()), Vec3.ZERO);
         }
         return true;
     }
@@ -318,6 +325,8 @@ public final class NativeFormationController {
         if (!(event.getEntity() instanceof AbstractRecruitEntity recruit)) return;
         UUID id = recruit.getUUID();
         for (State state : STATES.values()) {
+            MountControl mountControl = state.mountControls.remove(id);
+            if (mountControl != null) mountControl.release();
             state.offsets.remove(id);
             state.facings.remove(id);
             state.agents.remove(id);
@@ -329,7 +338,9 @@ public final class NativeFormationController {
     private static void tick(MinecraftServer server, State state) {
         List<AbstractRecruitEntity> members = resolveMembers(server, state);
         if (members.isEmpty()) {
-            if (++state.emptyTicks > 20 * 300) STATES.remove(state.groupId);
+            if (++state.emptyTicks > 20 * 300 && STATES.remove(state.groupId, state)) {
+                releaseMembers(server, state, false);
+            }
             return;
         }
         state.emptyTicks = 0;
@@ -418,11 +429,12 @@ public final class NativeFormationController {
             claim(recruit);
             Mob mover = controlledMob(recruit);
             if (mover == null) continue;
+            syncMountControl(state, recruit, mover);
             int transitIndex = index++;
             boolean columnTransit = state.dispersed && travelling;
             Vec3 desired = columnTransit
                     ? trailPosition(state, transitIndex)
-                    : worldSlot(state.center, state.heading, offset);
+                    : worldSlot(state.center, state.heading, offset, recruit.getUUID());
             Agent agent = state.agents.computeIfAbsent(recruit.getUUID(), Agent::new);
             Vec3 grounded = agent.grounded(level, mover, desired);
             if (grounded != null) desired = grounded;
@@ -439,8 +451,10 @@ public final class NativeFormationController {
             // during the same tick, producing constant alternating yaw. Keep every moving
             // body on the shared route tangent; restore the ordered per-member facing only
             // after both the anchor and this member have settled.
-            applyFormationFacing(recruit, mover,
-                    travelling || !arrived ? state.travelHeading : memberHeading);
+            float controlledHeading = travelling
+                    ? state.travelHeading
+                    : arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading);
+            applyFormationFacing(recruit, mover, controlledHeading);
             if (arrived) {
                 state.locked.add(recruit.getUUID());
                 RecruitRuntimeRegistry.brain(recruit).settle(level.getGameTime());
@@ -728,6 +742,7 @@ public final class NativeFormationController {
 
     private static void releaseMembers(MinecraftServer server, State state, boolean stop) {
         if (server == null) return;
+        releaseMountControls(state);
         for (UUID id : state.offsets.keySet()) {
             AbstractRecruitEntity recruit = resolve(server, id);
             if (recruit == null) continue;
@@ -812,6 +827,61 @@ public final class NativeFormationController {
         return center.add(right.scale(offset.right())).add(forward.scale(-offset.back()));
     }
 
+    /** Stable per-member offsets soften perfect geometry without allowing slots to wander each tick. */
+    private static Vec3 worldSlot(Vec3 center, float heading, FormationSlotMath.Offset offset, UUID memberId) {
+        Vec3 slot = worldSlot(center, heading, offset);
+        long seed = memberId.getMostSignificantBits() ^ Long.rotateLeft(memberId.getLeastSignificantBits(), 23);
+        double rightJitter = signedUnit(seed) * SLOT_JITTER_RIGHT;
+        double backJitter = signedUnit(Long.rotateLeft(seed, 31) ^ 0x9E3779B97F4A7C15L) * SLOT_JITTER_BACK;
+        double yaw = Math.toRadians(heading);
+        Vec3 forward = new Vec3(-Math.sin(yaw), 0.0D, Math.cos(yaw));
+        Vec3 right = new Vec3(forward.z, 0.0D, -forward.x);
+        return slot.add(right.scale(rightJitter)).add(forward.scale(-backJitter));
+    }
+
+    private static double signedUnit(long bits) {
+        long mixed = bits ^ (bits >>> 33);
+        mixed *= 0xFF51AFD7ED558CCDL;
+        mixed ^= mixed >>> 33;
+        return ((mixed >>> 11) * 0x1.0p-53) * 2.0D - 1.0D;
+    }
+
+    private static float headingTo(Vec3 from, Vec3 to, float fallback) {
+        double dx = to.x - from.x;
+        double dz = to.z - from.z;
+        return dx * dx + dz * dz < 1.0E-6D
+                ? fallback : (float) Math.toDegrees(Math.atan2(-dx, dz));
+    }
+
+    /**
+     * A mounted formation owns the horse's locomotion. This high-priority, flag-only goal
+     * prevents horse wandering and panic goals from competing with the rider's formation
+     * brain while leaving MoveControl, JumpControl and animation ticking available.
+     */
+    private static void syncMountControl(State state, AbstractRecruitEntity rider, Mob mover) {
+        UUID riderId = rider.getUUID();
+        MountControl lease = state.mountControls.get(riderId);
+        if (mover == rider) {
+            if (lease != null) {
+                lease.release();
+                state.mountControls.remove(riderId);
+            }
+            return;
+        }
+        if (lease == null || lease.mount != mover) {
+            if (lease != null) lease.release();
+            lease = new MountControl(rider, mover);
+            state.mountControls.put(riderId, lease);
+            ((MobGoalAccess) mover).rts$getGoals().addGoal(-10, lease.goal);
+        }
+        mover.setTarget(null);
+    }
+
+    private static void releaseMountControls(State state) {
+        for (MountControl control : state.mountControls.values()) control.release();
+        state.mountControls.clear();
+    }
+
     /** Single rotation owner for both stable route travel and ordered final facing. */
     private static void applyFormationFacing(AbstractRecruitEntity recruit, Mob mover, float yaw) {
         recruit.ownerRot = yaw;
@@ -859,6 +929,7 @@ public final class NativeFormationController {
         final Map<UUID, Float> facings;
         final Map<UUID, Integer> order = new HashMap<>();
         final Map<UUID, Agent> agents = new HashMap<>();
+        final Map<UUID, MountControl> mountControls = new HashMap<>();
         final Set<UUID> locked = new HashSet<>();
         final List<Vec3> trail = new ArrayList<>();
         final boolean hold;
@@ -900,6 +971,41 @@ public final class NativeFormationController {
             int index = 0;
             for (Map.Entry<UUID, FormationSlotMath.Offset> entry : transitOrder) order.put(entry.getKey(), index++);
             rememberTrail(this, center);
+        }
+    }
+
+    private static final class MountControl {
+        final AbstractRecruitEntity rider;
+        final Mob mount;
+        final Goal goal;
+
+        MountControl(AbstractRecruitEntity rider, Mob mount) {
+            this.rider = rider;
+            this.mount = mount;
+            this.goal = new Goal() {
+                {
+                    setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK, Flag.JUMP, Flag.TARGET));
+                }
+
+                @Override
+                public boolean canUse() {
+                    return rider.isAlive() && !rider.isRemoved() && rider.getVehicle() == mount;
+                }
+
+                @Override
+                public boolean canContinueToUse() {
+                    return canUse();
+                }
+
+                @Override
+                public void tick() {
+                    mount.setTarget(null);
+                }
+            };
+        }
+
+        void release() {
+            ((MobGoalAccess) mount).rts$getGoals().removeGoal(goal);
         }
     }
 

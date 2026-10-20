@@ -8,6 +8,7 @@ import com.talhanation.recruits.util.RecruitCommanderUtil;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRotationMath;
+import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import net.minecraft.core.BlockPos;
@@ -22,9 +23,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.HashMap;
 
 /** Rotates the selected army stencil around its own centre without rebuilding it. */
 public record RotateFormationPacket(List<UUID> groupIds, float deltaDegrees) {
+    private static final Map<UUID, Long> JUST_TRANSLATED = new HashMap<>();
+
+    static void markTranslated(UUID groupId, long gameTime) {
+        JUST_TRANSLATED.entrySet().removeIf(entry -> entry.getValue() < gameTime - 1L);
+        if (groupId != null) JUST_TRANSLATED.put(groupId, gameTime);
+    }
     public RotateFormationPacket {
         int size = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);
         groupIds = List.copyOf(groupIds.subList(0, size));
@@ -80,7 +88,10 @@ public record RotateFormationPacket(List<UUID> groupIds, float deltaDegrees) {
         double pivotY = 0.0D;
         double pivotZ = 0.0D;
         for (UUID id : ids) {
-            Vec3 centre = groupCenter(groups.get(id));
+            Long translatedAt = JUST_TRANSLATED.remove(id);
+            Vec3 planned = translatedAt != null && translatedAt == sender.level().getGameTime()
+                    ? FormationRuntime.formationDestination(id) : null;
+            Vec3 centre = planned != null ? planned : groupCenter(groups.get(id));
             centres.add(centre);
             pivotX += centre.x;
             pivotY += centre.y;

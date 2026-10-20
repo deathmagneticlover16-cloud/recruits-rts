@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.15.2-server.1
+Rider-owned cavalry, reliable rotation and semantic Commander UI
+
+- Fixed in-place formation rotation freezing: when the anchor is stationary, relocating members now face their assigned slots instead of being forced sideways at the final ordered yaw.
+- Mounted formation movement now installs an exclusive horse goal lock for movement, look, jump and targeting. The rider's formation brain owns MoveControl and JumpControl until formation authority is released.
+- Mounted tactical combat applies the same exclusive horse control flags, preventing native horse goals from overriding a committed cavalry pass.
+- Alt-left-drag now accepts Ctrl as an in-place rotation modifier. Releasing Ctrl preserves the planned rotation and resumes translation without jumping; releasing the mouse commits the combined transform.
+- Formation slots receive small deterministic per-member lateral and depth offsets, giving settled ranks human variation without per-tick wandering or loss of cohesion.
+- Commander panels, command buttons, unit cards, morale bars and fatigue bars now publish stable semantic IDs through CommanderUiRegistry, including `main.command_bar` and `stat.fatigue`.
+- Network protocol remains rts-camera-150 because combined translation and rotation compose the existing compatible packets.
+- Source version and packaging references are 0.15.2-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.1-server.1
 Stable facing, cavalry rises and Commander input previews
 

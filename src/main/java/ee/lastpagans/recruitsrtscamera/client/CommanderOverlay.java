@@ -87,6 +87,7 @@ public final class CommanderOverlay {
     }
 
     private static void renderInternal(GuiGraphics graphics, boolean chatMode) {
+        CommanderUiRegistry.beginFrame();
         if (!RTSCommandFacade.active() || MC.font == null) {
             lastLayout = Layout.EMPTY;
             return;
@@ -317,6 +318,8 @@ public final class CommanderOverlay {
     private static void renderShell(GuiGraphics graphics, Layout layout) {
         int panelWidth = layout.panelRight() - layout.panelX();
         int panelHeight = layout.panelBottom() - layout.panelY();
+        CommanderUiRegistry.record(CommanderUiElementIds.MAIN_PANEL,
+                layout.panelX(), layout.panelY(), panelWidth, panelHeight);
         blitScaled(graphics, CommanderGuiTextures.MAIN_COMMAND_BAR,
                 layout.panelX(), layout.panelY(), panelWidth, panelHeight, 512, 110);
 
@@ -324,6 +327,7 @@ public final class CommanderOverlay {
         // or a right orders column. Unit cards own the full upper strip, while one long
         // Total War-style command bar spans underneath them.
         Bounds commandBar = commandBarBounds(layout);
+        recordUi(CommanderUiElementIds.MAIN_COMMAND_BAR, commandBar);
         // Keep this prototype bar pixel-clean. Stretching the old tall orders-panel texture
         // down to a thin strip eats one-pixel borders, so the strip is drawn directly until
         // the dedicated human-made command-bar asset arrives.
@@ -346,12 +350,16 @@ public final class CommanderOverlay {
         }
 
         List<CardHitbox> hitboxes = cardHitboxes(groups, layout);
+        CommanderUiRegistry.record(CommanderUiElementIds.MAIN_UNIT_CARDS,
+                layout.cardsX(), layout.panelY(), layout.cardsRight() - layout.cardsX(), CARD_HEIGHT + 6);
         int mouseX = guiMouseX();
         int mouseY = guiMouseY();
 
         for (CardHitbox hitbox : hitboxes) {
             Bounds b = hitbox.bounds();
             RTSCommandFacade.UnitCardView view = hitbox.view();
+            CommanderUiRegistry.record(CommanderUiElementIds.UNIT_CARD, view.groupId(),
+                    b.x1(), b.y1(), b.width(), b.height(), Float.NaN);
             boolean hovered = b.contains(mouseX, mouseY) && RTSCommandFacade.commandCursor();
 
             // Never draw an opaque selection texture over the user's card artwork.
@@ -407,10 +415,14 @@ public final class CommanderOverlay {
                     view.selected() ? GOLD : 0xFFC8C3B7, false);
 
             if (view.averageMorale() >= 0.0F) {
+                CommanderUiRegistry.record(CommanderUiElementIds.STAT_MORALE, view.groupId(),
+                        b.x1() + 5, b.y2() + 1, CARD_WIDTH - 10, CARD_MORALE_HEIGHT, view.averageMorale());
                 renderMoraleBar(graphics, b.x1() + 5, b.y2() + 1,
                         CARD_WIDTH - 10, view.averageMorale());
             }
             if (view.averageFatigue() >= 0.0F) {
+                CommanderUiRegistry.record(CommanderUiElementIds.STAT_FATIGUE, view.groupId(),
+                        b.x1() + 5, b.y2() + 4, CARD_WIDTH - 10, CARD_FATIGUE_HEIGHT, view.averageFatigue());
                 renderFatigueBar(graphics, b.x1() + 5, b.y2() + 4,
                         CARD_WIDTH - 10, view.averageFatigue());
             }
@@ -656,6 +668,7 @@ public final class CommanderOverlay {
 
     private static void renderSettingsButton(GuiGraphics graphics) {
         Bounds button = settingsButtonBounds();
+        recordUi(CommanderUiElementIds.SETTINGS_BUTTON, button);
         boolean hovered = button.contains(guiMouseX(), guiMouseY());
         graphics.fill(button.x1(), button.y1(), button.x2(), button.y2(), hovered ? 0xDD3A3934 : 0xCC181816);
         drawBorder(graphics, button, settingsMenuOpen ? GOLD : 0xFF8F825C);
@@ -664,6 +677,7 @@ public final class CommanderOverlay {
 
     private static void renderSettingsMenu(GuiGraphics graphics) {
         Bounds popup = settingsPopupBounds();
+        recordUi(CommanderUiElementIds.SETTINGS_PANEL, popup);
         graphics.fill(popup.x1(), popup.y1(), popup.x2(), popup.y2(), 0xEE181816);
         drawBorder(graphics, popup, 0xFF8F825C);
         List<Bounds> rows = settingsChoiceBounds();
@@ -802,6 +816,18 @@ public final class CommanderOverlay {
         boolean bodyguard = RTSCommandFacade.selectedIsBodyguard();
         boolean canFollowBodyguard = RTSCommandFacade.canToggleBodyguardFollow();
         boolean followBodyguard = RTSCommandFacade.bodyguardFollowsPlayer();
+
+        recordUi(CommanderUiElementIds.COMMAND_PACE, layout.paceButton());
+        recordUi(CommanderUiElementIds.COMMAND_FORMATION, layout.formationButton());
+        recordUi(CommanderUiElementIds.COMMAND_SELECTION_GROUP, layout.selectionGroupButton());
+        recordUi(CommanderUiElementIds.COMMAND_HALT, layout.haltButton());
+        recordUi(CommanderUiElementIds.COMMAND_AGGRESSION, layout.aggressionButton());
+        if (cavalryMajority) recordUi(CommanderUiElementIds.COMMAND_MOUNT, layout.mountButton());
+        recordUi(CommanderUiElementIds.COMMAND_SPACING, layout.looseSpacingButton());
+        if (ranged) recordUi(CommanderUiElementIds.COMMAND_FIRE_CONTROL, layout.fireControlButton());
+        if (rangedMajority) recordUi(CommanderUiElementIds.COMMAND_SKIRMISH, layout.skirmishButton());
+        recordUi(CommanderUiElementIds.COMMAND_BODYGUARD, layout.bodyguardButton());
+        recordUi(CommanderUiElementIds.COMMAND_BODYGUARD_FOLLOW, layout.bodyguardFollowButton());
 
         renderTextCommandButton(graphics, layout.paceButton(), running ? "<<" : "<", hasSelection, running);
         renderIconCommandButton(graphics, layout.formationButton(),
@@ -1244,6 +1270,10 @@ public final class CommanderOverlay {
         graphics.fill(b.x1(), b.y2() - 1, b.x2(), b.y2(), color);
         graphics.fill(b.x1(), b.y1(), b.x1() + 1, b.y2(), color);
         graphics.fill(b.x2() - 1, b.y1(), b.x2(), b.y2(), color);
+    }
+
+    private static void recordUi(String id, Bounds bounds) {
+        CommanderUiRegistry.record(id, bounds.x1(), bounds.y1(), bounds.width(), bounds.height());
     }
 
     private record CardHitbox(Bounds bounds, RTSCommandFacade.UnitCardView view) {

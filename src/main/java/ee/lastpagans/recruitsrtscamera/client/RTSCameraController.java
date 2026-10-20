@@ -130,6 +130,12 @@ public final class RTSCameraController {
     private static double selectionCurrentY;
     private static Vec3 translationStartGround;
     private static Vec3 translationCurrentGround;
+    private static Vec3 translationFrozenDelta = Vec3.ZERO;
+    private static Vec3 translationRotationPivot = Vec3.ZERO;
+    private static Vec3 translationRotationStart = Vec3.ZERO;
+    private static double translationRotationDegrees;
+    private static double translationRotationBaseDegrees;
+    private static boolean translationControlWasDown;
     private static double frontageStartX;
     private static double frontageStartY;
     private static double frontageCurrentX;
@@ -614,8 +620,7 @@ public final class RTSCameraController {
             selectionCurrentY = cursorY;
         }
         if (draggingTranslation) {
-            GroundHit hit = raycastGroundHit(cursorX, cursorY);
-            if (hit != null) translationCurrentGround = hit.location();
+            updateTranslationDrag();
         }
         if (draggingFrontage) {
             frontageCurrentX = cursorX;
@@ -938,26 +943,79 @@ public final class RTSCameraController {
         draggingTranslation = true;
         translationStartGround = hit.location();
         translationCurrentGround = hit.location();
+        translationFrozenDelta = Vec3.ZERO;
+        translationRotationPivot = Vec3.ZERO;
+        translationRotationStart = Vec3.ZERO;
+        translationRotationDegrees = 0.0D;
+        translationRotationBaseDegrees = 0.0D;
+        translationControlWasDown = false;
         return true;
+    }
+
+    private static void updateTranslationDrag() {
+        GroundHit hit = raycastGroundHit(cursorX, cursorY);
+        if (hit == null || translationStartGround == null) return;
+        Vec3 current = hit.location();
+        boolean controlDown = GLFW.glfwGetKey(MC.getWindow().getWindow(), GLFW.GLFW_KEY_LEFT_CONTROL)
+                == GLFW.GLFW_PRESS
+                || GLFW.glfwGetKey(MC.getWindow().getWindow(), GLFW.GLFW_KEY_RIGHT_CONTROL) == GLFW.GLFW_PRESS;
+        if (controlDown) {
+            if (!translationControlWasDown) {
+                translationFrozenDelta = (translationCurrentGround == null ? current : translationCurrentGround)
+                        .subtract(translationStartGround);
+                Vec3 armyCenter = selectedArmyCenter();
+                translationRotationPivot = armyCenter == null
+                        ? current : armyCenter.add(translationFrozenDelta);
+                translationRotationStart = current;
+                translationRotationBaseDegrees = translationRotationDegrees;
+            }
+            double ax = translationRotationStart.x - translationRotationPivot.x;
+            double az = translationRotationStart.z - translationRotationPivot.z;
+            double bx = current.x - translationRotationPivot.x;
+            double bz = current.z - translationRotationPivot.z;
+            if (Math.hypot(ax, az) >= ROTATE_MIN_RADIUS && Math.hypot(bx, bz) >= ROTATE_MIN_RADIUS) {
+                translationRotationDegrees = translationRotationBaseDegrees
+                        + FormationRotationMath.signedAngle(ax, az, bx, bz);
+            }
+            translationCurrentGround = translationStartGround.add(translationFrozenDelta);
+        } else {
+            if (translationControlWasDown) {
+                // Rebase the translation anchor so releasing Ctrl preserves both the
+                // accumulated rotation and the current move delta without a cursor jump.
+                translationStartGround = current.subtract(translationFrozenDelta);
+            }
+            translationCurrentGround = current;
+        }
+        translationControlWasDown = controlDown;
     }
 
     private static void finishTranslationDrag() {
         draggingTranslation = false;
-        GroundHit hit = raycastGroundHit(cursorX, cursorY);
-        if (hit != null) translationCurrentGround = hit.location();
+        updateTranslationDrag();
         if (translationStartGround == null || translationCurrentGround == null) return;
         Vec3 delta = translationCurrentGround.subtract(translationStartGround);
-        if (delta.x * delta.x + delta.z * delta.z < 0.20D * 0.20D) {
+        boolean moved = delta.x * delta.x + delta.z * delta.z >= 0.20D * 0.20D;
+        boolean rotated = Math.abs(translationRotationDegrees) >= 1.0D;
+        if (!moved && !rotated) {
             translationStartGround = null;
             translationCurrentGround = null;
             return;
         }
         LOCAL_RUNNING_GROUPS.removeAll(SELECTED_GROUPS);
-        RTSCameraNetwork.CHANNEL.sendToServer(new TranslateGroupsPacket(new ArrayList<>(SELECTED_GROUPS), delta));
-        rememberTranslationOrderPreview(delta);
-        setStatus("Formation translation ordered for " + SELECTED_GROUPS.size() + " group(s).");
+        if (moved) {
+            RTSCameraNetwork.CHANNEL.sendToServer(new TranslateGroupsPacket(new ArrayList<>(SELECTED_GROUPS), delta));
+        }
+        if (rotated) {
+            RTSCameraNetwork.CHANNEL.sendToServer(new RotateFormationPacket(
+                    new ArrayList<>(SELECTED_GROUPS), (float) translationRotationDegrees));
+        }
+        rememberTranslationOrderPreview(delta, translationRotationDegrees);
+        setStatus("Formation transform ordered for " + SELECTED_GROUPS.size() + " group(s)."
+                + (rotated ? " · " + Math.round(translationRotationDegrees) + "°" : ""));
         translationStartGround = null;
         translationCurrentGround = null;
+        translationControlWasDown = false;
+        translationRotationDegrees = 0.0D;
     }
 
     public static boolean handleMouseScroll(double scrollDelta) {
@@ -2371,7 +2429,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.1-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.2-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2654,16 +2712,25 @@ public final class RTSCameraController {
         }
     }
 
-    private static void rememberTranslationOrderPreview(Vec3 delta) {
+    private static void rememberTranslationOrderPreview(Vec3 delta, double degrees) {
         if (delta == null) return;
         Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
         Map<UUID, Vec3> centers = clientGroupCenters(groups);
+        Vec3 armyCenter = averageCenters(centers.values());
         long now = System.currentTimeMillis();
         for (Map.Entry<UUID, Vec3> entry : centers.entrySet()) {
-            Vec3 destination = entry.getValue().add(delta);
+            Vec3 destination = rotateAround(entry.getValue(), armyCenter, degrees).add(delta);
             CURRENT_ORDER_PREVIEWS.put(entry.getKey(), new CurrentOrderPreview(
                     List.of(destination), destination, null, null, now));
         }
+    }
+
+    private static Vec3 rotateAround(Vec3 point, Vec3 pivot, double degrees) {
+        if (point == null || pivot == null || Math.abs(degrees) < 1.0E-6D) return point;
+        FormationRotationMath.Point rotated = FormationRotationMath.rotate(
+                new FormationRotationMath.Point(point.x, point.z),
+                new FormationRotationMath.Point(pivot.x, pivot.z), degrees);
+        return new Vec3(rotated.x(), point.y, rotated.z());
     }
 
     public static void applyFormationRouteSync(UUID groupId, Vec3 serverCenter, Vec3 destination,
@@ -2791,8 +2858,9 @@ public final class RTSCameraController {
             for (AbstractRecruitEntity recruit : recruits) {
                 if (drawn++ >= 384) return;
                 Vec3 source = visualUnitPosition(recruit);
+                Vec3 transformed = rotateAround(source, armyCenter, translationRotationDegrees).add(delta);
                 drawYellowWorldPoint(graphics, camera,
-                        source.x + delta.x, source.y + delta.y + 0.15D, source.z + delta.z, false);
+                        transformed.x, transformed.y + 0.15D, transformed.z, false);
             }
         }
     }

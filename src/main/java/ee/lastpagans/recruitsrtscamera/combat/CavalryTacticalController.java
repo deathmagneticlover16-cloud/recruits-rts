@@ -149,9 +149,14 @@ public final class CavalryTacticalController {
     }
     private static final class MountControlGoal extends Goal {
         final State state;
-        MountControlGoal(State state) { this.state = state; setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK)); }
+        MountControlGoal(State state) {
+            this.state = state;
+            setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK, Flag.JUMP, Flag.TARGET));
+        }
         @Override public boolean canUse() { return state.active && eligible(state.rider) && state.rider.getVehicle() == state.mount; }
         @Override public boolean canContinueToUse() { return canUse(); }
+        @Override public boolean requiresUpdateEveryTick() { return true; }
+        @Override public void tick() { state.mount.setTarget(null); }
         @Override public void stop() { state.mount.getNavigation().stop(); }
     }
     private static final class CavalryGoal extends Goal {

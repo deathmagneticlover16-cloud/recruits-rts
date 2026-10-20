@@ -61,7 +61,10 @@ public record TranslateGroupsPacket(List<UUID> groupIds, Vec3 delta) {
                 moved = center != null && FormationService.movePreserved(
                         sender, entry.getKey(), entry.getValue(), center.add(delta));
             }
-            if (moved) RTSMovementBoostManager.registerSlowMove(sender, entry.getKey(), entry.getValue());
+            if (moved) {
+                RotateFormationPacket.markTranslated(entry.getKey(), sender.level().getGameTime());
+                RTSMovementBoostManager.registerSlowMove(sender, entry.getKey(), entry.getValue());
+            }
         }
     }
 
