@@ -102,6 +102,7 @@ public final class CavalryTacticalController {
         }
         CavalryManeuver.Point destination = s.maneuver.tick(point(s.mount.position()),
                 liveTarget == null ? null : point(liveTarget));
+        matchRiderAndMountFacing(s, destination);
         if (s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
                 || s.maneuver.phase() == CavalryManeuver.Phase.PASS) attack(s);
         if (++s.samples % 20 == 0) {
@@ -123,6 +124,26 @@ public final class CavalryTacticalController {
         s.mount.getNavigation().moveTo(destination.x(), ground.getY(), destination.z(),
                 s.maneuver.phase() == CavalryManeuver.Phase.CHARGE ? 1.15 : 1.0);
         s.mount.getLookControl().setLookAt(destination.x(), ground.getY(), destination.z());
+    }
+
+    private static void matchRiderAndMountFacing(State state, CavalryManeuver.Point destination) {
+        double dx = destination.x() - state.mount.getX();
+        double dz = destination.z() - state.mount.getZ();
+        if (dx * dx + dz * dz < 1.0E-5D) return;
+        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        state.rider.ownerRot = yaw;
+        state.rider.setYRot(yaw);
+        state.rider.setYBodyRot(yaw);
+        state.rider.setYHeadRot(yaw);
+        state.rider.yRotO = yaw;
+        state.rider.yBodyRotO = yaw;
+        state.rider.yHeadRotO = yaw;
+        state.mount.setYRot(yaw);
+        state.mount.setYBodyRot(yaw);
+        state.mount.setYHeadRot(yaw);
+        state.mount.yRotO = yaw;
+        state.mount.yBodyRotO = yaw;
+        state.mount.yHeadRotO = yaw;
     }
     private static void attack(State s) {
         if (valid(s.rider, s.target)) {

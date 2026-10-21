@@ -61,7 +61,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class RTSGroupAttackManager {
     private static final double MAX_TACTICAL_DISTANCE = 144.0D;
     private static final int RETARGET_INTERVAL_TICKS = 5;
-    private static final int APPROACH_REPLAN_TICKS = 20;
+    private static final int APPROACH_REPLAN_TICKS = 40;
     private static final int EMPTY_TARGET_GRACE_TICKS = 40;
     private static final int MAX_APPROACH_TICKS = 20 * 45;
     private static final int MAX_ORDER_TICKS = 20 * 60 * 10;
@@ -73,7 +73,8 @@ public final class RTSGroupAttackManager {
     // Give mounted lines room to leave formation and build a real run-up before the
     // first contact. Infantry releases much closer to the opposing frontage.
     private static final double CAVALRY_RELEASE_GAP = 20.0D;
-    private static final double APPROACH_REPLAN_DISTANCE_SQ = 1.75D * 1.75D;
+    private static final double CHARGE_CONTACT_GAP = 1.0D;
+    private static final double APPROACH_REPLAN_DISTANCE_SQ = 3.50D * 3.50D;
     private static final double CAVALRY_HEAVY_RATIO = 0.60D;
     private static final double MELEE_APPROACH_RATIO = 0.50D;
 
@@ -230,8 +231,10 @@ public final class RTSGroupAttackManager {
 
             if (state.phase == Phase.NEW) {
                 state.approachKind = classifyApproach(attackers);
-                if (state.charge || (state.approachKind == ApproachKind.DIRECT
-                        && formationEdgeGap(attackers, candidates) <= RANGED_ENGAGE_GAP)) {
+                double openingGap = formationEdgeGap(attackers, candidates);
+                boolean alreadyAtChargeContact = state.charge && openingGap <= CHARGE_CONTACT_GAP;
+                if (alreadyAtChargeContact || (state.approachKind == ApproachKind.DIRECT
+                        && openingGap <= RANGED_ENGAGE_GAP)) {
                     beginEngagement(state, attackers, candidates);
                 } else {
                     state.phase = Phase.APPROACH;
@@ -252,7 +255,7 @@ public final class RTSGroupAttackManager {
                 }
 
                 double edgeGap = formationEdgeGap(attackers, candidates);
-                double releaseGap = switch (state.approachKind) {
+                double releaseGap = state.charge ? CHARGE_CONTACT_GAP : switch (state.approachKind) {
                     case DIRECT -> RANGED_ENGAGE_GAP;
                     case CAVALRY -> CAVALRY_RELEASE_GAP;
                     case INFANTRY -> INFANTRY_ENGAGE_GAP;
@@ -374,7 +377,7 @@ public final class RTSGroupAttackManager {
         Vec3 direction = new Vec3(delta.x / distance, 0.0D, delta.z / distance);
         double sourceExtent = forwardExtent(attackers, sourceCenter, direction);
         double targetExtent = backwardExtent(targets, targetCenter, direction);
-        double desiredGap = switch (state.approachKind) {
+        double desiredGap = state.charge ? CHARGE_CONTACT_GAP : switch (state.approachKind) {
             case DIRECT -> RANGED_ENGAGE_GAP;
             case CAVALRY -> CAVALRY_RELEASE_GAP;
             case INFANTRY -> INFANTRY_ENGAGE_GAP;
@@ -396,15 +399,16 @@ public final class RTSGroupAttackManager {
         Vec3 destination = new Vec3(desired.x, surface.getY(), desired.z);
         for (var attacker : attackers) TacticalCombatManager.lock(attacker, state.sourceGroupId, null);
         RecruitCommanderUtil.setRecruitsClearTargets(attackers);
-        boolean preserved = FormationService.movePreserved(
-                state.sender, state.sourceGroupId, attackers, destination
-        );
+        boolean preserved = FormationRuntime.retargetFormation(state.sourceGroupId, destination)
+                || FormationService.movePreserved(state.sender, state.sourceGroupId, attackers, destination);
         if (!preserved) {
             RecruitCommanderUtil.setRecruitsMove(attackers, surface);
         }
-        RTSMovementBoostManager.registerFormationMove(
-                state.sender, state.sourceGroupId, attackers
-        );
+        if (state.charge) {
+            RTSMovementBoostManager.registerHastyMove(state.sender, state.sourceGroupId, attackers);
+        } else {
+            RTSMovementBoostManager.registerFormationMove(state.sender, state.sourceGroupId, attackers);
+        }
         state.lastApproachDestination = destination;
     }
 
@@ -413,7 +417,11 @@ public final class RTSGroupAttackManager {
             List<AbstractRecruitEntity> attackers,
             List<LivingEntity> candidates
     ) {
-        if (state.approachKind != ApproachKind.DIRECT) {
+        if (state.charge && state.approachKind == ApproachKind.INFANTRY) {
+            // Infantry charges keep their ranks through first contact. Target locks are
+            // spread across the hostile frontage while the formation runtime owns both
+            // locomotion and the travel-facing-to-ordered-facing transition.
+        } else if (state.approachKind != ApproachKind.DIRECT) {
             releaseFormationForCombat(state.sender, state.sourceGroupId, attackers);
         } else {
             faceFormationToward(state.sourceGroupId, attackers, candidates);

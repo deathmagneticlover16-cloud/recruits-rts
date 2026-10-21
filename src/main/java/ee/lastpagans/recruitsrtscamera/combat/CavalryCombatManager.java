@@ -73,7 +73,8 @@ public final class CavalryCombatManager {
                 // multiply it a second time. Outside formations this affects native horse AI.
                 double speed = rider.getShouldMovePos() || rider.getShouldHoldPos()
                         || RTSMovementBoostManager.isSlowMarchActive(rider.getGroup())
-                        ? 1.0D : RTSServerConfig.CAVALRY_COMBAT_SPEED_MULTIPLIER.get();
+                        ? 1.0D : Math.max(2.10D, RTSServerConfig.CAVALRY_COMBAT_SPEED_MULTIPLIER.get())
+                        * (1.0D + 0.30D * state.momentum.runupProgress(RTSServerConfig.CAVALRY_CHARGE_RUNUP.get()));
                 setSpeed(mount, speed - 1.0D);
                 sample(rider, state);
             }
@@ -201,7 +202,8 @@ public final class CavalryCombatManager {
             // The strongest contact in this wave sets the total shock. A weak first
             // rider cannot block a proper charge, and 100 simultaneous horses do not
             // multiply group morale damage by 100.
-            double desired = shock * state.hitQuality;
+            double desired = shock * state.hitQuality
+                    * (TacticalCombatManager.rearImpact(rider, victim) ? 2.0D : 1.0D);
             double extra = Math.max(0.0D, desired - window.applied);
             window.applied = Math.max(window.applied, desired);
             BattleMechanicsManager.adjustGroupMorale(level, group, (float) -extra);

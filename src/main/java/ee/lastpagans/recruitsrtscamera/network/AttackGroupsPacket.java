@@ -111,7 +111,8 @@ public record AttackGroupsPacket(List<UUID> groupIds, int targetEntityId, boolea
                 );
             }
             var data = ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData.get(sender.serverLevel());
-            data.setTimer(groupId, "chargeUntil", packet.charge ? sender.serverLevel().getGameTime() + 160 : 0);
+            data.setTimer(groupId, "chargeUntil", packet.charge
+                    ? sender.serverLevel().getGameTime() + TacticalCombatManager.CHARGE_ORDER_TICKS : 0);
         }
 
         if (ordered == 0) {

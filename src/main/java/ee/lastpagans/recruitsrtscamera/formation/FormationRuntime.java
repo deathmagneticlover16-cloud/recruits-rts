@@ -33,6 +33,11 @@ public final class FormationRuntime {
         return NativeFormationController.translate(groupId, delta);
     }
 
+    /** Retarget an active formation without rebuilding slots or resetting member controllers. */
+    public static boolean retargetFormation(UUID groupId, Vec3 destination) {
+        return NativeFormationController.retarget(groupId, destination);
+    }
+
     public static Vec3 advanceFormationCenter(UUID groupId, double extraStep) {
         return NativeFormationController.advance(groupId, extraStep);
     }

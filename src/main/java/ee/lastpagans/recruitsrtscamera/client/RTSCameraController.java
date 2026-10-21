@@ -562,7 +562,7 @@ public final class RTSCameraController {
         }
         if (setupTicks > 0) {
             setupTicks--;
-            freeCamera.setPos(anchor.x, anchor.y + 9.0D, anchor.z);
+            freeCamera.setPos(anchor.x, anchor.y + 14.0D, anchor.z);
             freeCamera.setYRot(MC.player.getYRot());
             freeCamera.setXRot(65.0F);
             if (setupTicks == 0) {
@@ -714,7 +714,7 @@ public final class RTSCameraController {
             Freecam.switchControls();
         }
         updateCursorPosition();
-        message("RTS Camera enabled. WASD moves; E/Q or the wheel move up/down; hold middle mouse to look.");
+        message("RTS Camera enabled. WASD moves; E/Q move up/down; wheel down rises and wheel up lowers; hold middle mouse to look.");
     }
 
     public static void stop(String reason) {
@@ -1055,7 +1055,7 @@ public final class RTSCameraController {
         FreeCamera camera = Freecam.getFreeCamera();
         if (camera != null && Math.abs(scrollDelta) > 0.001D) {
             double step = Math.max(0.75D, FreecamConfig.VERTICAL_SPEED.get() * 4.0D);
-            camera.move(MoverType.SELF, new Vec3(0.0D, scrollDelta * step, 0.0D));
+            camera.move(MoverType.SELF, new Vec3(0.0D, -scrollDelta * step, 0.0D));
             clampCamera(camera);
         }
         // Command mode owns the wheel so the hotbar and unrelated mod bindings cannot
@@ -2455,7 +2455,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.3-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.4-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2470,7 +2470,7 @@ public final class RTSCameraController {
         drawHudLine(graphics, "Mouse: LMB select · Ctrl+LMB toggle · Shift+card range · RMB move/attack",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
-        drawHudLine(graphics, "Mouse: wheel height (custom draw: ranks) · hold MMB look · 2×RMB run",
+        drawHudLine(graphics, "Mouse: wheel down rises / up lowers (custom draw: ranks) · hold MMB look · 2×RMB run",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
         drawHudLine(graphics, "Keys: " + keyName(RTSCameraKeyMappings.TOGGLE) + " camera · "
@@ -2479,7 +2479,7 @@ public final class RTSCameraController {
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
         drawHudLine(graphics, "Camera: WASD pan · " + keyName(RTSCameraKeyMappings.CAMERA_UP) + " up · "
-                        + keyName(RTSCameraKeyMappings.CAMERA_DOWN) + " down · wheel up/down · hold "
+                        + keyName(RTSCameraKeyMappings.CAMERA_DOWN) + " down · wheel down rises/up lowers · hold "
                         + keyName(RTSCameraKeyMappings.SHOW_PLANNED_ORDERS) + " all orders",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
@@ -2889,6 +2889,11 @@ public final class RTSCameraController {
                         transformed.x, transformed.y + 0.15D, transformed.z, false);
             }
         }
+        if (armyCenter != null && (translationControlWasDown || Math.abs(translationRotationDegrees) >= 0.25D)) {
+            drawFacingArrow(graphics, camera, armyCenter.add(delta),
+                    FormationRotationMath.normalizeYaw(
+                            selectedArmyFacing() + (float) translationRotationDegrees));
+        }
     }
 
     private static void drawWorldPathSegment(GuiGraphics graphics, ScreenProjection.CameraSpec camera, Vec3 from, Vec3 to) {
@@ -3156,19 +3161,24 @@ public final class RTSCameraController {
             graphics.fill(x - 2, yy - 2, x + 3, yy + 3, 0xB8FFD36A);
         }
 
-        // One clear army-facing arrow: the preview dots show where the formation goes,
-        // while this shows which direction the recruits will face after release.
-        float previewYaw = FormationRotationMath.normalizeYaw(
-                rotationBaseFacingYaw + (float) rotationDegrees
-        );
+        drawFacingArrow(graphics, camera, rotationPivot, FormationRotationMath.normalizeYaw(
+                rotationBaseFacingYaw + (float) rotationDegrees));
+    }
+
+    /** Shared FACING arrow for Z rotation and Alt+Ctrl transform previews. */
+    private static void drawFacingArrow(
+            GuiGraphics graphics, ScreenProjection.CameraSpec camera, Vec3 pivot, float previewYaw
+    ) {
+        ScreenProjection.ProjectedPoint pivotPoint = ScreenProjection.project(
+                camera, pivot.x, pivot.y + 0.25D, pivot.z);
         double radians = Math.toRadians(previewYaw);
         double facingX = -Math.sin(radians);
         double facingZ = Math.cos(radians);
         ScreenProjection.ProjectedPoint facingTip = ScreenProjection.project(
                 camera,
-                rotationPivot.x + facingX * 8.0D,
-                rotationPivot.y + 0.35D,
-                rotationPivot.z + facingZ * 8.0D
+                pivot.x + facingX * 8.0D,
+                pivot.y + 0.35D,
+                pivot.z + facingZ * 8.0D
         );
         if (pivotPoint != null && facingTip != null) {
             int fromX = toGuiX(pivotPoint.x());

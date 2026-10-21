@@ -35,6 +35,10 @@ public final class ChargeMomentum {
 
     public double quality() { return contacts >= 3 ? 0.0D : quality; }
 
+    public double runupProgress(double fullRunup) {
+        return fullRunup <= 0.0D ? 0.0D : clamp(distance / fullRunup);
+    }
+
     public boolean hasImpactMomentum() { return contacts > 0 && impactAge <= 12 && quality() > 0.0D; }
 
     public double consumeImpact() {

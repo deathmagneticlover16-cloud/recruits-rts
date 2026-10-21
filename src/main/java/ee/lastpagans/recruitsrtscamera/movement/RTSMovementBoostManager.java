@@ -9,6 +9,7 @@ import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.formation.NativeFormationController;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
+import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -46,11 +47,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class RTSMovementBoostManager {
     private static final double REGULAR_INFANTRY_NAV_SPEED = 1.17D;
     private static final double REGULAR_CAVALRY_NAV_SPEED = 1.50D;
-    private static final double REGULAR_CAVALRY_MOUNT_MULTIPLIER = 0.35D;
+    private static final double REGULAR_CAVALRY_MOUNT_MULTIPLIER = 1.10D;
     private static final double HASTY_INFANTRY_SPEED = 1.62D;
     private static final double HASTY_INFANTRY_ATTRIBUTE_MULTIPLIER = 0.08D;
     private static final double HASTY_CAVALRY_NAV_SPEED = 1.62D;
-    private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 0.45D;
+    private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 1.10D;
 
     private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.15D;   // ~0.36 total
 
@@ -345,6 +346,11 @@ public final class RTSMovementBoostManager {
                         }
                     }
                     default -> navigationSpeed = 1.0D;
+                }
+                if (isCavalry(recruit)) {
+                    double chargeAcceleration = TacticalCombatManager.chargeAcceleration(recruit);
+                    navigationSpeed *= chargeAcceleration;
+                    mountAttributeAmount = (1.0D + mountAttributeAmount) * chargeAcceleration - 1.0D;
                 }
                 applySpeed(state, navigationSpeed, selfAttributeAmount, mountAttributeAmount);
                 if (state.mode == Mode.FORMATION_CAVALRY || state.mode == Mode.HASTY_CAVALRY

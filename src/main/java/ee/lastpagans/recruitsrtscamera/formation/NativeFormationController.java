@@ -56,6 +56,8 @@ import java.util.EnumSet;
 public final class NativeFormationController {
     private static final Map<UUID, State> STATES = new LinkedHashMap<>();
     private static final int MAX_FORMATION_SEARCH = 18_000;
+    private static final int QUICK_FORMATION_SEARCH = 2_500;
+    private static final long QUICK_PATH_BUDGET_NANOS = 20_000_000L;
     private static final int MAX_AGENT_SEARCH = 3_500;
     private static final double CENTER_SPEED = 0.21D;
     private static final double SLOT_LOCK_DISTANCE_SQ = 0.30D * 0.30D;
@@ -213,6 +215,18 @@ public final class NativeFormationController {
         return true;
     }
 
+    public static boolean retarget(UUID groupId, Vec3 destination) {
+        State state = STATES.get(groupId);
+        if (state == null || destination == null) return false;
+        state.destination = destination;
+        // Keep following the already-safe route instead of resetting every member. Once
+        // its published segment is consumed, advanceAlongRoute requests the continuation.
+        if (state.route.points().isEmpty() || state.routeIndex >= state.route.points().size()) {
+            invalidateRoutes(state);
+        }
+        return true;
+    }
+
     public static Vec3 advance(UUID groupId, double step) {
         State state = STATES.get(groupId);
         if (state == null) return null;
@@ -367,6 +381,7 @@ public final class NativeFormationController {
         if (state.route.points().isEmpty() && (horizontalDistanceSq(state.center, state.destination) > 0.16D
                 || Math.abs(state.center.y - state.destination.y) > 0.65D)
                 && !state.routePending && level.getGameTime() >= state.nextRouteAt) {
+            Vec3 requestedDestination = state.destination;
             state.routePending = RecruitAIScheduler.submit(
                     RecruitAIScheduler.Priority.HIGH,
                     RecruitAIScheduler.WorkType.FORMATION_PATH,
@@ -374,8 +389,20 @@ public final class NativeFormationController {
                     () -> {
                         try {
                             if (STATES.get(state.groupId) != state || !representative.isAlive()) return;
-                            state.route = TacticalPathfinder.find(
-                                    level, representative, state.center, state.destination, MAX_FORMATION_SEARCH);
+                            long started = System.nanoTime();
+                            TacticalPathfinder.Route planned = TacticalPathfinder.find(
+                                    level, representative, state.center, requestedDestination, QUICK_FORMATION_SEARCH);
+                            long quickElapsed = System.nanoTime() - started;
+                            // Easy routes are usually complete inside the quick pass. If a
+                            // partial pass stayed under 20 ms, finish the difficult route
+                            // before movement. A pass that already consumed the budget is
+                            // published as a safe partial route and continued on the run.
+                            if (!planned.complete() && quickElapsed < QUICK_PATH_BUDGET_NANOS) {
+                                planned = TacticalPathfinder.find(
+                                        level, representative, state.center, requestedDestination, MAX_FORMATION_SEARCH);
+                            }
+                            state.route = planned;
+                            state.routeGoal = requestedDestination;
                             RecruitRuntimeMetrics.FORMATION_PATHS.increment();
                             if (state.route.points().isEmpty()) RecruitRuntimeMetrics.PATH_FAILURES.increment();
                             if (state.route.constrained()) RecruitRuntimeMetrics.CONSTRAINED_ROUTES.increment();
@@ -418,6 +445,7 @@ public final class NativeFormationController {
         }
         state.velocity = state.center.subtract(previousCenter);
         if (travelling) state.travelHeading = movementHeading(state);
+        float slotHeading = travelling ? state.travelHeading : state.heading;
 
         int laggards = 0;
         int index = 0;
@@ -434,7 +462,7 @@ public final class NativeFormationController {
             boolean columnTransit = state.dispersed && travelling;
             Vec3 desired = columnTransit
                     ? trailPosition(state, transitIndex)
-                    : worldSlot(state.center, state.heading, offset, recruit.getUUID());
+                    : worldSlot(state.center, slotHeading, offset, recruit.getUUID());
             Agent agent = state.agents.computeIfAbsent(recruit.getUUID(), Agent::new);
             Vec3 grounded = agent.grounded(level, mover, desired);
             if (grounded != null) desired = grounded;
@@ -485,9 +513,10 @@ public final class NativeFormationController {
             Vec3 point = points.get(i);
             if (horizontalDistanceSq(state.center, point) > 0.20D * 0.20D) remaining.add(point);
         }
+        Vec3 routeEnd = effectiveDestination(state);
         if (travelling && (remaining.isEmpty()
-                || remaining.get(remaining.size() - 1).distanceToSqr(state.destination) > 0.25D)) {
-            remaining.add(state.destination);
+                || remaining.get(remaining.size() - 1).distanceToSqr(routeEnd) > 0.25D)) {
+            remaining.add(routeEnd);
         }
         RTSCameraNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> owner),
                 new FormationRouteSyncPacket(state.groupId, state.center, state.destination, remaining, travelling));
@@ -675,9 +704,16 @@ public final class NativeFormationController {
         if (state.routeIndex >= state.route.points().size() && state.route.complete()) {
             state.center = effectiveDestination(state);
             rememberTrail(state, state.center);
+            if (horizontalDistanceSq(state.center, state.destination) > 0.16D
+                    || Math.abs(state.center.y - state.destination.y) > 0.65D) {
+                state.route = TacticalPathfinder.Route.EMPTY;
+                state.routeIndex = 0;
+                state.routeGoal = null;
+            }
         } else if (state.routeIndex >= state.route.points().size()) {
             state.route = TacticalPathfinder.Route.EMPTY;
             state.routeIndex = 0;
+            state.routeGoal = null;
         }
     }
 
@@ -697,7 +733,8 @@ public final class NativeFormationController {
             // have a sub-block destination. Preserve the resolved safe elevation while
             // completing the order at its exact commanded horizontal position.
             Vec3 resolved = state.route.points().get(state.route.points().size() - 1);
-            return new Vec3(state.destination.x, resolved.y, state.destination.z);
+            Vec3 goal = state.routeGoal == null ? state.destination : state.routeGoal;
+            return new Vec3(goal.x, resolved.y, goal.z);
         }
         return state.destination;
     }
@@ -769,6 +806,7 @@ public final class NativeFormationController {
 
     private static void invalidateRoutes(State state) {
         state.route = TacticalPathfinder.Route.EMPTY;
+        state.routeGoal = null;
         state.routeIndex = 0;
         state.dispersed = false;
         state.agents.values().forEach(Agent::clearPath);
@@ -938,6 +976,7 @@ public final class NativeFormationController {
         Vec3 destination;
         Vec3 velocity = Vec3.ZERO;
         TacticalPathfinder.Route route = TacticalPathfinder.Route.EMPTY;
+        Vec3 routeGoal;
         int routeIndex;
         int laggards;
         float travelHeading;

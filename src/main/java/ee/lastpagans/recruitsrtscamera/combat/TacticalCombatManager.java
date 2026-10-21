@@ -5,6 +5,7 @@ import com.talhanation.recruits.entities.IRangedRecruit;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
+import ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager;
 import ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import net.minecraft.server.level.ServerLevel;
@@ -13,6 +14,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.item.*;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.living.*;
@@ -28,6 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class TacticalCombatManager {
     private static final Map<UUID, Lease> LOCKS = new ConcurrentHashMap<>();
     private static final UUID CHARGE_SPEED = UUID.fromString("e238b2c5-1c46-4aef-83de-e2cf59a920ee");
+    public static final int CHARGE_ORDER_TICKS = 20 * 30;
+    private static final Map<UUID, ShockWindow> LAST_CHARGE_SHOCK = new HashMap<>();
     private TacticalCombatManager() {}
     private record Lease(AbstractRecruitEntity recruit, UUID group, LivingEntity target, long expires) {}
 
@@ -96,10 +100,60 @@ public final class TacticalCombatManager {
             long now = recruit.level().getGameTime();
             boolean charging = ownsTarget(recruit) && recruit.getVehicle() == null && !ranged(recruit)
                     && RTSGroupTacticsSavedData.get((ServerLevel) recruit.level()).timer(recruit.getGroup(), "chargeUntil") > now;
-            if (charging && speed.getModifier(CHARGE_SPEED) == null)
-                speed.addTransientModifier(new AttributeModifier(CHARGE_SPEED, "Commander infantry charge", 0.20, AttributeModifier.Operation.MULTIPLY_TOTAL));
-            else if (!charging) speed.removeModifier(CHARGE_SPEED);
+            if (charging) {
+                double amount = chargeAcceleration(recruit) - 1.0D;
+                AttributeModifier old = speed.getModifier(CHARGE_SPEED);
+                if (old == null || Math.abs(old.getAmount() - amount) > 0.001D) {
+                    speed.removeModifier(CHARGE_SPEED);
+                    speed.addTransientModifier(new AttributeModifier(CHARGE_SPEED,
+                            "Commander progressive charge", amount, AttributeModifier.Operation.MULTIPLY_TOTAL));
+                }
+            } else speed.removeModifier(CHARGE_SPEED);
         }
+    }
+
+    /** A sustained charge grows from +10% to +40% over twelve seconds. */
+    public static double chargeAcceleration(AbstractRecruitEntity recruit) {
+        if (recruit == null || recruit.getGroup() == null || !(recruit.level() instanceof ServerLevel level)) return 1.0D;
+        long now = level.getGameTime();
+        long until = RTSGroupTacticsSavedData.get(level).timer(recruit.getGroup(), "chargeUntil");
+        if (until <= now) return 1.0D;
+        long elapsed = Math.max(0L, CHARGE_ORDER_TICKS - (until - now));
+        double progress = Math.min(1.0D, elapsed / (20.0D * 12.0D));
+        return 1.10D + 0.30D * progress;
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onChargeDamage(LivingDamageEvent event) {
+        if (!(event.getEntity().level() instanceof ServerLevel level) || event.getAmount() <= 0.0F
+                || !(event.getSource().getEntity() instanceof AbstractRecruitEntity attacker)
+                || attacker.getVehicle() != null || ranged(attacker)
+                || !(event.getEntity() instanceof AbstractRecruitEntity victim) || victim.getGroup() == null
+                || attacker.getGroup() == null || attacker.isAlliedTo(victim)) return;
+        long now = level.getGameTime();
+        if (RTSGroupTacticsSavedData.get(level).timer(attacker.getGroup(), "chargeUntil") <= now) return;
+        if (LAST_CHARGE_SHOCK.size() > 256) {
+            LAST_CHARGE_SHOCK.values().removeIf(window -> now - window.started > 200L);
+        }
+        double progress = Math.max(0.0D, Math.min(1.0D, (chargeAcceleration(attacker) - 1.10D) / 0.30D));
+        double desired = 8.0D * (0.35D + 0.65D * progress) * (rearImpact(attacker, victim) ? 2.0D : 1.0D);
+        ShockWindow window = LAST_CHARGE_SHOCK.computeIfAbsent(victim.getGroup(), ignored -> new ShockWindow(now));
+        if (now - window.started >= 40L) {
+            window.started = now;
+            window.applied = 0.0D;
+        }
+        double extra = Math.max(0.0D, desired - window.applied);
+        window.applied = Math.max(window.applied, desired);
+        if (extra > 0.0D) BattleMechanicsManager.adjustGroupMorale(level, victim.getGroup(), (float) -extra);
+    }
+
+    public static boolean rearImpact(LivingEntity attacker, LivingEntity victim) {
+        if (attacker == null || victim == null) return false;
+        Vec3 toAttacker = attacker.position().subtract(victim.position()).multiply(1.0D, 0.0D, 1.0D);
+        if (toAttacker.lengthSqr() < 1.0E-6D) return false;
+        double yaw = Math.toRadians(victim.getYRot());
+        Vec3 victimForward = new Vec3(-Math.sin(yaw), 0.0D, Math.cos(yaw));
+        return victimForward.dot(toAttacker.normalize()) < -0.50D;
     }
     @SubscribeEvent(priority = EventPriority.LOW)
     public static void onTarget(LivingChangeTargetEvent event) {
@@ -137,5 +191,15 @@ public final class TacticalCombatManager {
         }
     }
     @SubscribeEvent
-    public static void onStop(ServerStoppedEvent event) { LOCKS.clear(); SkirmishController.clear(); }
+    public static void onStop(ServerStoppedEvent event) {
+        LOCKS.clear();
+        LAST_CHARGE_SHOCK.clear();
+        SkirmishController.clear();
+    }
+
+    private static final class ShockWindow {
+        long started;
+        double applied;
+        ShockWindow(long started) { this.started = started; }
+    }
 }

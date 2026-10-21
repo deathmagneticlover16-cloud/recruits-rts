@@ -184,7 +184,7 @@ public final class RTSServerConfig {
         CAVALRY_HASTY_SPEED = BUILDER.comment("Mounted Hasty Move target in blocks/tick. 0.72 is 14.4 blocks/second before terrain and armor penalties.")
                 .defineInRange("hastySpeed", 0.72D, 0.30D, 1.2D);
         CAVALRY_COMBAT_SPEED_MULTIPLIER = BUILDER.comment("Temporary mount movement multiplier during native combat/follow movement. Does not change the horse's base attributes.")
-                .defineInRange("combatSpeedMultiplier", 1.60D, 1.0D, 3.0D);
+                .defineInRange("combatSpeedMultiplier", 2.10D, 1.0D, 3.5D);
         CAVALRY_CHARGE_DAMAGE = BUILDER.comment("Maximum extra damage on a full-speed, full-run-up cavalry impact, before normal armor and damage mitigation. Later contacts spend momentum. Zero disables impact damage.")
                 .defineInRange("maxChargeBonusDamage", 48.0D, 0.0D, 120.0D);
         CAVALRY_CHARGE_RUNUP = BUILDER.comment("Uninterrupted advance distance required for full charge momentum.")
