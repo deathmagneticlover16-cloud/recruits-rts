@@ -42,6 +42,7 @@ attack = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/RTSGroupAt
 tactical = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/TacticalCombatManager.java")
 cavalry_combat = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryCombatManager.java")
 mode_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/RTSModeStatePacket.java")
+attack_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/AttackGroupsPacket.java")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -128,8 +129,10 @@ require(attack, "state.charge && state.approachKind == ApproachKind.INFANTRY",
         "melee charges must retain formation through first contact")
 require(mode_packet, "FormationStateSyncPacket.forPlayer(sender)",
         "entering RTS mode must restore saved loose-spacing state")
+require(attack_packet, "import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;",
+        "charge-order timing must import its declaring combat manager")
 
 require(network, 'PROTOCOL = "rts-camera-150"', "wire-compatible release must retain protocol 150")
-require(source("gradle.properties"), "mod_version=0.15.4-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.4-server.2", "semantic version must be updated")
 
 print("0.15.4 source contracts passed")

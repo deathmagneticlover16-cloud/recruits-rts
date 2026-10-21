@@ -4,6 +4,7 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.world.RecruitsGroup;
 import com.talhanation.recruits.world.RecruitsGroupsSaveData;
 import ee.lastpagans.recruitsrtscamera.combat.RTSGroupAttackManager;
+import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
 import ee.lastpagans.recruitsrtscamera.compat.OrderRelayCompat;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.server.RTSVision;

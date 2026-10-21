@@ -1,6 +1,7 @@
-Recruits: RTS Camera 0.15.4-server.1
+Recruits: RTS Camera 0.15.4-server.2
 Cavalry pace, progressive charges and continuous formation travel
 
+- Added the missing TacticalCombatManager import required to compile charge-order timing.
 - Formation cavalry now receives an approximately 2.10x mount movement multiplier. Riders and mounts share the same travel facing.
 - Sustained melee and mounted charges progressively accelerate to a bounded bonus. Charge impacts apply group morale shock, doubled when the attack lands from behind.
 - Charge orders preserve the attacking formation through the approach and distribute targets across the enemy group instead of collapsing on the clicked recruit.
@@ -9,7 +10,7 @@ Cavalry pace, progressive charges and continuous formation travel
 - Entering RTS mode resends the server's saved formation state, preserving loose spacing across client state loss and reconnect-style transitions.
 - Mouse-wheel camera height is inverted, RTS Camera starts fourteen blocks above the commander, and Alt+Ctrl translation/rotation displays the same FACING arrow as Z rotation.
 - Network protocol remains rts-camera-150 because packet registration and wire formats are unchanged.
-- Source version and packaging references are 0.15.4-server.1. The Forge build remains for the packager by request.
+- Source version and packaging references are 0.15.4-server.2. The Forge build remains for the packager by request.
 
 Recruits: RTS Camera 0.15.3-server.1
 Camera input recovery, available hotkeys and faster infantry
