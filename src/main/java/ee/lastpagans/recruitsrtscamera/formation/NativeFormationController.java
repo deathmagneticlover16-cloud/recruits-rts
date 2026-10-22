@@ -65,8 +65,6 @@ public final class NativeFormationController {
     private static final double SLOT_LOCK_DISTANCE_SQ = 0.30D * 0.30D;
     private static final double FOOT_NAV_SPEED = 1.17D;
     private static final double MOUNTED_NAV_SPEED = 0.72D;
-    private static final double SLOT_JITTER_RIGHT = 0.11D;
-    private static final double SLOT_JITTER_BACK = 0.08D;
 
     private NativeFormationController() {
     }
@@ -111,7 +109,7 @@ public final class NativeFormationController {
             claim(unit);
             FormationSlotMath.Offset offset = assigned.get(unit.getUUID());
             if (offset != null) RecruitRuntimeRegistry.claimFormation(unit,
-                    worldSlot(start, heading, offset, unit.getUUID()), Vec3.ZERO);
+                    worldSlot(start, heading, offset), Vec3.ZERO);
         }
         return true;
     }
@@ -153,7 +151,7 @@ public final class NativeFormationController {
             claim(unit);
             FormationSlotMath.Offset offset = offsets.get(unit.getUUID());
             if (offset != null) RecruitRuntimeRegistry.claimFormation(unit,
-                    worldSlot(start, 0.0F, offset, unit.getUUID()), Vec3.ZERO);
+                    worldSlot(start, 0.0F, offset), Vec3.ZERO);
         }
         return true;
     }
@@ -216,7 +214,6 @@ public final class NativeFormationController {
         // the virtual centre itself would make every slot jump, and translating an older
         // destination would make an already-moving formation continue beyond the preview.
         state.destination = state.center.add(delta);
-        state.rotateForTravel = horizontalDistanceSq(state.center, state.destination) > 4.0D * 4.0D;
         invalidateRoutes(state);
         return true;
     }
@@ -225,7 +222,6 @@ public final class NativeFormationController {
         State state = STATES.get(groupId);
         if (state == null || destination == null) return false;
         state.destination = destination;
-        state.rotateForTravel = horizontalDistanceSq(state.center, destination) > 4.0D * 4.0D;
         // Keep following the already-safe route instead of resetting every member. Once
         // its published segment is consumed, advanceAlongRoute requests the continuation.
         if (state.route.points().isEmpty() || state.routeIndex >= state.route.points().size()) {
@@ -443,17 +439,20 @@ public final class NativeFormationController {
         if (travelling && !state.route.points().isEmpty()) {
             double laggardShare = state.offsets.isEmpty() ? 0.0D
                     : state.laggards / (double) state.offsets.size();
-            double cohesionScale = Math.max(0.45D, 1.0D - laggardShare * 1.35D);
+            double cohesionTarget = Math.max(0.20D, 1.0D - laggardShare * 1.35D);
+            // Let the formation assemble before its virtual centre outruns the physical
+            // mounts. Ease this value so gaining/losing one laggard cannot pulse the pace.
+            state.cohesionScale += clamp(cohesionTarget - state.cohesionScale, -0.04D, 0.04D);
             // Pace is applied before slots are calculated. Adjusting the centre after this
             // tick made every member chase a forward point and then snap back together.
             advanceAlongRoute(state, RTSMovementBoostManager.formationCenterStep(state.groupId, CENTER_SPEED)
-                    * cohesionScale);
+                    * state.cohesionScale);
         } else if (!travelling) {
             state.dispersed = false;
         }
         state.velocity = state.center.subtract(previousCenter);
         if (travelling) state.travelHeading = movementHeading(state);
-        updateSlotHeading(state, members, travelling);
+        updateSlotHeading(state);
         float slotHeading = state.slotHeading;
 
         int laggards = 0;
@@ -471,7 +470,7 @@ public final class NativeFormationController {
             boolean columnTransit = state.dispersed && travelling;
             Vec3 desired = columnTransit
                     ? trailPosition(state, transitIndex)
-                    : worldSlot(state.center, slotHeading, offset, recruit.getUUID());
+                    : worldSlot(state.center, slotHeading, offset);
             Agent agent = state.agents.computeIfAbsent(recruit.getUUID(), Agent::new);
             Vec3 grounded = agent.grounded(level, mover, desired);
             if (grounded != null) desired = grounded;
@@ -480,7 +479,7 @@ public final class NativeFormationController {
             boolean mountedMember = mover != recruit;
             double catchUpScale = mountedMember
                     ? slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.08D
-                    : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.04D : 1.0D
+                    : slotError > 0.85D * 0.85D || heightError > 0.85D ? 1.04D : 1.0D
                     : slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.40D
                     : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.20D : 1.0D;
             recruit.setHoldPos(desired);
@@ -494,9 +493,8 @@ public final class NativeFormationController {
             // during the same tick, producing constant alternating yaw. Keep every moving
             // body on the shared route tangent; restore the ordered per-member facing only
             // after both the anchor and this member have settled.
-            // rotateForTravel controls the slot stencil only. Every moving body still
-            // follows the route tangent, including short moves, or MoveControl and this
-            // rotation owner pull a horse in different directions and recreate spinning.
+            // Every moving body follows the route tangent. The authored slot stencil stays
+            // fixed, so a route bend cannot throw outside members across the formation.
             float controlledHeading;
             if (mover != recruit && (travelling || !arrived)) {
                 // A slow formation centre often arrives before its horses finish settling.
@@ -518,7 +516,8 @@ public final class NativeFormationController {
             else {
                 state.locked.remove(recruit.getUUID());
                 RecruitRuntimeRegistry.brain(recruit).markMoving(level.getGameTime());
-                if (slotError > 1.55D * 1.55D || heightError > 0.85D) laggards++;
+                double cohesionDistance = mountedMember ? 0.85D : 1.55D;
+                if (slotError > cohesionDistance * cohesionDistance || heightError > 0.85D) laggards++;
             }
         }
         state.laggards = laggards;
@@ -565,61 +564,11 @@ public final class NativeFormationController {
         return (float) Math.toDegrees(Math.atan2(-direction.x, direction.z));
     }
 
-    private static void updateSlotHeading(
-            State state, List<AbstractRecruitEntity> members, boolean travelling
-    ) {
-        boolean orientToTravel = travelling && state.rotateForTravel;
-        float target = orientToTravel ? state.travelHeading : state.heading;
-        if (orientToTravel != state.wasTravelling) {
-            // A 180-degree order should make horses turn in their current places instead
-            // of preserving abstract row identities and crossing the full formation.
-            stabilizeMountedSlots(state, members, target);
-            state.slotHeading = target;
-        } else if (orientToTravel) {
-            // Route-cell corners otherwise rotate far slots several blocks in one tick.
-            // Ease the stencil through bends while every member retains its chosen slot.
-            // At walking pace, cap angular speed by formation radius: the outside slot
-            // of a large line must not travel several blocks sideways in one tick merely
-            // because the route tangent changed by a few degrees.
-            state.slotHeading = approachHeading(state.slotHeading, target,
-                    mountedSlotHeadingStep(state, members));
-        } else {
-            state.slotHeading = target;
-        }
-        state.wasTravelling = orientToTravel;
-    }
-
-    private static float mountedSlotHeadingStep(State state, List<AbstractRecruitEntity> members) {
-        boolean mounted = members.stream().anyMatch(member -> member.getVehicle() instanceof Mob);
-        if (!mounted) return 9.0F;
-        double radius = 1.0D;
-        for (FormationSlotMath.Offset offset : state.offsets.values()) {
-            radius = Math.max(radius, Math.hypot(offset.right(), offset.back()));
-        }
-        return (float) clamp(Math.toDegrees(0.14D / radius), 0.35D, 3.0D);
-    }
-
-    private static void stabilizeMountedSlots(
-            State state, List<AbstractRecruitEntity> members, float heading
-    ) {
-        if (members.size() != state.offsets.size()
-                || members.stream().filter(member -> member.getVehicle() instanceof Mob).count() * 2L
-                < members.size()) return;
-        List<FormationSlotMath.Offset> available = new ArrayList<>(state.offsets.values());
-        List<FormationSlotMath.Point> positions = members.stream()
-                .map(member -> controlled(member).position())
-                .map(position -> new FormationSlotMath.Point(position.x, position.z))
-                .toList();
-        int[] assignment = FormationSlotMath.assign(
-                positions, worldSlotPoints(state.center, heading, available));
-        Map<UUID, FormationSlotMath.Offset> stable = new LinkedHashMap<>();
-        for (int i = 0; i < members.size() && i < assignment.length; i++) {
-            stable.put(members.get(i).getUUID(), available.get(assignment[i]));
-        }
-        if (stable.size() != state.offsets.size()) return;
-        state.offsets.clear();
-        state.offsets.putAll(stable);
-        rebuildTransitOrder(state);
+    private static void updateSlotHeading(State state) {
+        // The ordered stencil is immutable in transit. Rotating a wide stencil around every
+        // route bend moves its outside slots by several blocks and makes units chase a shape
+        // that no longer resembles the authored frontage. Bodies still face travel below.
+        state.slotHeading = state.heading;
     }
 
     private static void rebuildTransitOrder(State state) {
@@ -983,25 +932,6 @@ public final class NativeFormationController {
         return center.add(right.scale(offset.right())).add(forward.scale(-offset.back()));
     }
 
-    /** Stable per-member offsets soften perfect geometry without allowing slots to wander each tick. */
-    private static Vec3 worldSlot(Vec3 center, float heading, FormationSlotMath.Offset offset, UUID memberId) {
-        Vec3 slot = worldSlot(center, heading, offset);
-        long seed = memberId.getMostSignificantBits() ^ Long.rotateLeft(memberId.getLeastSignificantBits(), 23);
-        double rightJitter = signedUnit(seed) * SLOT_JITTER_RIGHT;
-        double backJitter = signedUnit(Long.rotateLeft(seed, 31) ^ 0x9E3779B97F4A7C15L) * SLOT_JITTER_BACK;
-        double yaw = Math.toRadians(heading);
-        Vec3 forward = new Vec3(-Math.sin(yaw), 0.0D, Math.cos(yaw));
-        Vec3 right = new Vec3(forward.z, 0.0D, -forward.x);
-        return slot.add(right.scale(rightJitter)).add(forward.scale(-backJitter));
-    }
-
-    private static double signedUnit(long bits) {
-        long mixed = bits ^ (bits >>> 33);
-        mixed *= 0xFF51AFD7ED558CCDL;
-        mixed ^= mixed >>> 33;
-        return ((mixed >>> 11) * 0x1.0p-53) * 2.0D - 1.0D;
-    }
-
     private static float headingTo(Vec3 from, Vec3 to, float fallback) {
         double dx = to.x - from.x;
         double dz = to.z - from.z;
@@ -1107,8 +1037,7 @@ public final class NativeFormationController {
         long lastRouteSyncAt = Long.MIN_VALUE;
         boolean lastSyncedMoving;
         float slotHeading;
-        boolean wasTravelling;
-        boolean rotateForTravel;
+        double cohesionScale = 0.20D;
 
         State(UUID groupId, UUID ownerId, ResourceKey<Level> levelKey, FormationKind kind,
               float heading, Vec3 center, Vec3 destination,
@@ -1122,7 +1051,6 @@ public final class NativeFormationController {
             this.slotHeading = heading;
             this.center = center;
             this.destination = destination;
-            this.rotateForTravel = horizontalDistanceSq(center, destination) > 4.0D * 4.0D;
             this.offsets = new LinkedHashMap<>(offsets);
             this.facings = new HashMap<>(facings);
             this.hold = hold;

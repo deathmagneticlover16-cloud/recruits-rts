@@ -10,9 +10,22 @@ public final class FormationSlotMathSelfTest {
 
     public static void main(String[] args) {
         geometry();
+        frontageFit();
         assignment();
         largeAssignment();
         System.out.println("FormationSlotMathSelfTest passed " + checks + " checks.");
+    }
+
+    private static void frontageFit() {
+        int footRanks = FormationSlotMath.bestRanksForWidth(40, 20.0D, 1.0D, false);
+        int mountedRanks = FormationSlotMath.bestRanksForWidth(40, 20.0D, 1.0D, true);
+        truth(mountedRanks > footRanks, "mounted frontage accounts for wider production slots");
+        var slots = FormationSlotMath.create(
+                FormationKind.LINE, 40, 1.0D, mountedRanks, 20.0D, true);
+        double minimum = slots.stream().mapToDouble(FormationSlotMath.Offset::right).min().orElseThrow();
+        double maximum = slots.stream().mapToDouble(FormationSlotMath.Offset::right).max().orElseThrow();
+        truth(Math.abs((maximum - minimum) - 20.0D) < 2.25D,
+                "mounted line uses the closest achievable authored width");
     }
 
     private static void geometry() {

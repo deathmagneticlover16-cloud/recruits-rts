@@ -1,3 +1,18 @@
+Recruits: RTS Camera 0.15.14-server.1
+Exact formations and single-owner cavalry motion
+
+- Fixed the failed Wedge toggle implementation. Wedge and Square now execute through the same native formation runtime, so an external Square command cannot remain active alongside the native wedge and make two controllers fight over each horse.
+- Removed the per-recruit slot randomizer from movement. Drawn frontages and preset formations now use their exact authored positions rather than slightly displaced destinations that cohesion continually tried to correct.
+- Fixed the frontage ghost/runtime mismatch for cavalry. Both now use the same production slot generator and mounted scale, choose ranks against the actual dragged width, center incomplete rows identically, and preview an active Wedge as a wedge instead of a line.
+- Formation slot geometry no longer rotates around route bends or gets reassigned when travel starts and stops. The stencil keeps its ordered orientation while riders and mounts face the stable route tangent.
+- Replaced mounted open-ground MoveControl targeting with one damped velocity controller. Longitudinal movement follows the shared formation velocity and small lateral corrections converge on each fixed slot without steering the horse's body side to side.
+- The direct mounted controller still requires a supported, fluid-safe, collision-safe tactical corridor. Unsafe ground, drops, water, canyons and blocked rises continue through tactical navigation; supported one-block rises retain active jumping.
+- Cohesion now treats mounted members beyond 0.85 blocks from their slots as laggards, slows the virtual centre as low as 20% while they assemble, and eases the speed change by at most 0.04 per tick. Horses get bounded 4–8% catch-up rather than teleports, while the group can no longer leave most of its physical formation behind.
+- Walking, running and pace transitions preserve horizontal momentum through the single controller instead of alternating short MoveControl targets and stopped frames.
+- Increased mounted-triumph opportunities from 18% to 30% per four-to-seven-second formation check, averaging roughly one visible triumph every eighteen seconds while eligible without multiplying the rate for large groups.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.14-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.13-server.1
 Wedge toggle, preserved wedge frontage and mounted triumph
 

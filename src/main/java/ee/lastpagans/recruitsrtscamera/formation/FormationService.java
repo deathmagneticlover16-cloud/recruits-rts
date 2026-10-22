@@ -116,18 +116,22 @@ public final class FormationService {
         // Preserve an existing loose-spacing choice across the authored line order.
         double effectiveSpacing = previous != null && previous.spacing() > 1.10D
                 ? previous.spacing() : spacing;
+        boolean mounted = recruits != null && recruits.stream().anyMatch(recruit -> recruit.getVehicle() != null);
+        int effectiveRanks = FormationSlotMath.bestRanksForWidth(
+                recruits == null ? 0 : recruits.size(), width, effectiveSpacing, mounted
+        );
         RTSFormationSavedData.get(level).put(groupId, new RTSFormationSavedData.GroupState(
                 FormationMode.FRONTAGE,
                 preferred,
                 FormationKind.LINE,
                 effectiveSpacing,
-                ranks,
+                effectiveRanks,
                 facingYaw,
                 Map.of(),
                 1
         ));
         FormationPlan plan = FormationPlanner.frontage(
-                groupId, destination, width, facingYaw, ranks, effectiveSpacing
+                groupId, destination, width, facingYaw, effectiveRanks, effectiveSpacing
         );
         return FormationRuntime.executePlan(sender, recruits, plan);
     }

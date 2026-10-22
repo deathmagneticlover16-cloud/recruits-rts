@@ -55,9 +55,10 @@ public record SetFormationPacket(List<UUID> groupIds, FormationKind kind) {
 
     public static void handle(SetFormationPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
-        if (packet.kind == FormationKind.CAVALRY_WEDGE) {
-            // Wedge is a native RTS formation with its own acceleration state; relaying it as
-            // the base mod's generic triangle would discard both its identity and eligibility.
+        if (packet.kind == FormationKind.CAVALRY_WEDGE || packet.kind == FormationKind.SQUARE) {
+            // Wedge and its Square toggle are one native RTS state transition. Sending Square
+            // through another formation controller can leave the native wedge alive underneath,
+            // causing both systems to steer the same mounts into a distorted triangle.
             context.enqueueWork(() -> execute(packet, context.getSender()));
             context.setPacketHandled(true);
             return;

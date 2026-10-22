@@ -93,6 +93,27 @@ public final class FormationSlotMath {
         return hungarian(costs);
     }
 
+    /** Selects the rank count whose production grid most closely matches an authored width. */
+    public static int bestRanksForWidth(
+            int count, double targetWidth, double spacing, boolean mounted
+    ) {
+        int safeCount = Math.max(1, count);
+        double mountedScale = mounted ? 1.7D * (spacing <= 1.10D ? 1.30D : 1.0D) : 1.0D;
+        double side = Math.max(1.0D, 1.02D * spacing) * mountedScale;
+        int bestRanks = 1;
+        double bestError = Double.POSITIVE_INFINITY;
+        for (int ranks = 1; ranks <= Math.min(20, safeCount); ranks++) {
+            int columns = (int) Math.ceil(safeCount / (double) ranks);
+            double width = Math.max(0.0D, (columns - 1) * side);
+            double error = Math.abs(width - Math.max(0.0D, targetWidth));
+            if (error < bestError) {
+                bestError = error;
+                bestRanks = ranks;
+            }
+        }
+        return bestRanks;
+    }
+
     private static int[] hungarian(double[][] costs) {
         int n = costs.length;
         double[] u = new double[n + 1];

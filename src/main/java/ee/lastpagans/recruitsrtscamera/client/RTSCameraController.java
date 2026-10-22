@@ -11,6 +11,7 @@ import ee.lastpagans.recruitsrtscamera.formation.ArtilleryFormationMath;
 import ee.lastpagans.recruitsrtscamera.formation.CustomFormationMath;
 import ee.lastpagans.recruitsrtscamera.formation.FormationKind;
 import ee.lastpagans.recruitsrtscamera.formation.FrontageMath;
+import ee.lastpagans.recruitsrtscamera.formation.FormationSlotMath;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRotationMath;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
@@ -2456,7 +2457,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.13-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.14-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2631,7 +2632,8 @@ public final class RTSCameraController {
         int drawn = 0;
 
         for (int gi = 0; gi < ordered.size() && drawn < 384; gi++) {
-            List<AbstractRecruitEntity> recruits = groups.get(ordered.get(gi));
+            UUID groupId = ordered.get(gi);
+            List<AbstractRecruitEntity> recruits = groups.get(groupId);
             FrontageMath.GroupSegment segment = segments.get(gi);
             double centerX = midX + lineX * segment.centerOffset();
             double centerZ = midZ + lineZ * segment.centerOffset();
@@ -2639,6 +2641,7 @@ public final class RTSCameraController {
             int artillery = 0;
             int ships = 0;
             int infantry = 0;
+            boolean mounted = false;
             for (AbstractRecruitEntity recruit : recruits) {
                 if (ClientPermissionState.siegeWeaponsAvailable()
                         && recruit instanceof SiegeEngineerEntity engineer
@@ -2650,25 +2653,28 @@ public final class RTSCameraController {
                     ships++;
                 } else {
                     infantry++;
+                    if (recruit.getVehicle() != null) mounted = true;
                 }
             }
 
             if (infantry > 0) {
-                int ranks = Math.max(1, Math.min(segment.ranks(), infantry));
-                int columns = (int) Math.ceil(infantry / (double) ranks);
-                double rightStep = Math.max(1.0D, 1.02D * segment.spacing());
-                double backStep = Math.max(1.1D, 1.12D * segment.spacing());
-                int placed = 0;
-                for (int row = 0; row < ranks && placed < infantry && drawn < 384; row++) {
-                    for (int col = 0; col < columns && placed < infantry && drawn < 384; col++) {
-                        double right = (col - (columns - 1) * 0.5D) * rightStep;
-                        double back = (row - (ranks - 1) * 0.5D) * backStep;
-                        double wx = centerX + rightX * right - forwardX * back;
-                        double wz = centerZ + rightZ * right - forwardZ * back;
-                        drawYellowWorldPoint(graphics, camera, wx, midY + 0.15D, wz, false);
-                        placed++;
-                        drawn++;
-                    }
+                boolean wedge = LOCAL_FORMATIONS.get(groupId) == FormationKind.CAVALRY_WEDGE;
+                double previewSpacing = LOCAL_LOOSE_SPACING_GROUPS.contains(groupId)
+                        ? 2.20D : wedge ? 1.0D : segment.spacing();
+                int ranks = wedge ? 0 : FormationSlotMath.bestRanksForWidth(
+                        infantry, segment.allocatedWidth(), previewSpacing, mounted
+                );
+                FormationKind previewKind = wedge ? FormationKind.CAVALRY_WEDGE : FormationKind.LINE;
+                List<FormationSlotMath.Offset> offsets = FormationSlotMath.create(
+                        previewKind, infantry, previewSpacing, ranks,
+                        segment.allocatedWidth(), mounted
+                );
+                for (FormationSlotMath.Offset offset : offsets) {
+                    if (drawn >= 384) break;
+                    double wx = centerX + rightX * offset.right() - forwardX * offset.back();
+                    double wz = centerZ + rightZ * offset.right() - forwardZ * offset.back();
+                    drawYellowWorldPoint(graphics, camera, wx, midY + 0.15D, wz, false);
+                    drawn++;
                 }
             }
 

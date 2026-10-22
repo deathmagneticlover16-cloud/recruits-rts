@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.13 behavior."""
+"""Targeted source contracts for Commander 0.15.14 behavior."""
 
 from pathlib import Path
 
@@ -24,6 +24,7 @@ def forbid(text: str, token: str, description: str) -> None:
 formation = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/NativeFormationController.java")
 pathfinder = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/TacticalPathfinder.java")
 steering = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/LocalFormationSteering.java")
+mounted_motion = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/MountedFormationMotion.java")
 keys = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCameraKeyMappings.java")
 controller = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCameraController.java")
 overlay = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CommanderOverlay.java")
@@ -43,6 +44,7 @@ tactical = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/Tactical
 cavalry_combat = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryCombatManager.java")
 mode_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/RTSModeStatePacket.java")
 attack_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/AttackGroupsPacket.java")
+formation_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/SetFormationPacket.java")
 animation_hints = source("src/main/java/ee/lastpagans/recruitsrtscamera/animation/CommanderAnimationHints.java")
 slots = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationSlotMath.java")
 formation_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationService.java")
@@ -64,8 +66,8 @@ require(formation, "state.travelHeading", "travelling members must retain the sh
 require(formation, "addGoal(-10, lease.goal)", "mounted formations need exclusive horse goal ownership")
 require(formation, "Flag.MOVE, Flag.LOOK, Flag.JUMP, Flag.TARGET",
         "horse puppet goal must suppress every competing control channel")
-require(formation, "signedUnit(seed) * SLOT_JITTER_RIGHT",
-        "formation slots need stable bounded human variation")
+forbid(formation, "SLOT_JITTER", "authored formation slots must not receive random movement offsets")
+forbid(formation, "signedUnit(", "slot destinations must remain exact and deterministic")
 require(cavalry, "Flag.MOVE, Flag.LOOK, Flag.JUMP, Flag.TARGET",
         "mounted tactical combat must keep the horse under rider control")
 forbid(cavalry, "s.mount.getNavigation().stop();\n                if (s.maneuver.blocked",
@@ -100,18 +102,15 @@ forbid(formation[formation.index("private static void claim("):formation.index("
        "ownerRot", "claim must not compete for rotation")
 require(formation, "new Vec3(goal.x, resolved.y, goal.z)",
         "completed routes must preserve the exact horizontal destination")
-require(formation, "float slotHeading = state.slotHeading;",
-        "formation geometry must face the route tangent and restore ordered facing at arrival")
+require(formation, "state.slotHeading = state.heading;",
+        "authored formation geometry must remain fixed while bodies face the route tangent")
 require(formation, "worldSlotPoints(start, heading, offsets)",
         "new orders must assign slots against live geometry instead of the distant destination")
-require(formation, "stabilizeMountedSlots(state, members, target)",
-        "mounted direction reversals must choose the nearest physical slots once")
-require(formation, "mountedSlotHeadingStep(state, members)",
-        "walking formation rotation must account for wide outer slots")
-require(formation, "Math.toDegrees(0.14D / radius)",
-        "outer mounted slots need a radius-bounded sideways step")
-forbid(formation, "RTSMovementBoostManager.isHastyActive(state.groupId)) return 9.0F",
-       "Walk-to-Run must not disable the wide-formation rotation limit")
+forbid(formation, "stabilizeMountedSlots", "movement must never reassign occupied formation slots")
+require(formation, "cohesionTarget = Math.max(0.20D",
+        "the virtual centre must slow while physical members assemble")
+require(formation, "cohesionTarget - state.cohesionScale, -0.04D, 0.04D",
+        "cohesion pace changes must be eased instead of pulsing")
 require(formation, "mover.setDeltaMovement(momentum)",
         "manual-control handoffs must preserve momentum for continuous animation")
 require(formation, "state.appliedHeadings.getOrDefault(recruitId, mount.getYRot())",
@@ -122,15 +121,15 @@ require(formation, "state.routeGoal = requestedDestination",
         "partial safe routes must retain their continuation goal")
 
 require(pathfinder, "mover instanceof AbstractHorse", "cavalry rises need a dedicated route cost")
-require(steering, "recruit.getVehicle() == mover && mover.onGround()",
+require(steering, "if (mover.onGround())",
         "mounted local steering must actively jump a safe rise")
-require(steering, "recruit.getVehicle() == null ? separation(recruit) : Vec3.ZERO",
-        "mounted steering must not alternate lateral neighbor impulses")
-require(steering, "forward.scale(0.45D / forwardLength)",
-        "mounted MoveControl needs forward lookahead to avoid stop-start animation")
-require(steering, "lateralCurrent.scale(0.65D)",
+require(steering, "if (recruit.getVehicle() == mover)",
+        "mounted steering must branch before foot separation is applied")
+require(mounted_motion, "formationX / formationSpeed",
+        "mounted velocity must follow the continuous shared formation vector")
+require(mounted_motion, "lateralCurrentX * 0.45D",
         "mounted slot correction must damp lateral overshoot")
-require(steering, "Math.min(0.075D, Math.max(0.035D, formationSpeed * 0.12D))",
+require(mounted_motion, "slotDistance > 1.5D ? 0.065D : 0.032D",
         "mounted lateral authority must remain bounded relative to walking speed")
 require(formation, "recruit.getVehicle() == mover && mover.onGround()",
         "mounted tactical waypoints must actively jump a safe rise")
@@ -220,22 +219,40 @@ require(formation_service, "if (active == FormationKind.CAVALRY_WEDGE)",
         "frontage dragging must recognize an active cavalry wedge")
 require(formation_service, "destination, FormationKind.CAVALRY_WEDGE",
         "frontage dragging must position a wedge without replacing its geometry")
+require(formation_service, "FormationSlotMath.bestRanksForWidth(",
+        "server frontage must fit ranks using production mounted spacing")
+require(controller, "FormationSlotMath.create(",
+        "frontage preview must use the same production slot generator as the server")
+require(controller, "LOCAL_FORMATIONS.get(groupId) == FormationKind.CAVALRY_WEDGE",
+        "frontage preview must retain active wedge geometry")
+require(controller, "FormationSlotMath.bestRanksForWidth(",
+        "frontage preview must mirror mounted production rank fitting")
 require(spa, 'Class.forName("com.lastpagans.recruitsspa.RecruitsAnimationsApi")',
         "SPA mounted triumph must resolve the published API package")
 for method in ("playMountedTriumph", "canPlayMountedTriumph", "isMountedTriumphActive",
                "mountedTriumphDurationTicks"):
     require(spa, method, "SPA mounted triumph bridge is incomplete: " + method)
 require(triumph, "averageMorale <= MIN_MORALE_EXCLUSIVE", "mounted triumph requires morale above 35")
-require(triumph, "OPPORTUNITY_CHANCE = 0.18F", "mounted triumph must remain occasional")
+require(triumph, "OPPORTUNITY_CHANCE = 0.30F", "mounted triumph needs the increased occasional rate")
 require(triumph, "recruit.getMainHandItem().isEmpty()", "mounted triumph must preflight its hand item")
 require(rumble, "sample.riders * 2 <= sample.totalMembers", "triumph must only sample cavalry formations")
 require(rumble, "charging || running || wedge", "triumph eligibility must include charge, run and wedge")
-require(formation, "state.rotateForTravel = horizontalDistanceSq(state.center, destination) > 4.0D * 4.0D",
-        "short orders must not rotate the whole formation out and back")
+require(steering, "private static boolean steerMounted(",
+        "mounted open-ground movement needs one continuous velocity controller")
+require(steering, "setWantedPosition(mover.getX(), mover.getY(), mover.getZ(), 0.0D)",
+        "mounted steering must neutralize MoveControl's competing yaw target")
+require(mounted_motion, "currentX * 0.30D + requestedX * 0.70D",
+        "mounted velocity changes must be damped across ticks")
+require(steering, "TacticalPathfinder.canSteerDirect(level, mover, probe)",
+        "direct mounted velocity must retain terrain and hole safety checks")
+require(formation_packet, "packet.kind == FormationKind.CAVALRY_WEDGE || packet.kind == FormationKind.SQUARE",
+        "wedge and its square toggle must use one native formation controller")
 require(formation, "mover != recruit && (travelling || !arrived)",
         "mounted bodies must retain the route tangent through slow arrival cohesion")
 require(formation, "? slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.08D",
         "mounted laggards need bounded catch-up instead of teleport-like surges")
+require(formation, "cohesionDistance = mountedMember ? 0.85D : 1.55D",
+        "mounted cohesion must tighten before the virtual centre resumes full pace")
 require(cavalry_combat, "MOUNT_HEALTH_BONUS = 0.75D", "managed recruited mounts need extra health")
 require(rumble, "riders * speed * emphasis / 15.0D", "rumble gain must use the reduced riders x speed scale")
 require(rumble, "(wedge ? 1.15D : 1.0D) * (charging ? 1.15D : 1.0D)",
@@ -280,6 +297,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.13-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.14-server.1", "semantic version must be updated")
 
-print("0.15.13 source contracts passed")
+print("0.15.14 source contracts passed")

@@ -14,7 +14,7 @@ import java.util.UUID;
 /** Formation-wide scheduler for SPA's optional mounted triumph animation. */
 final class MountedTriumphManager {
     private static final float MIN_MORALE_EXCLUSIVE = 35.0F;
-    private static final float OPPORTUNITY_CHANCE = 0.18F;
+    private static final float OPPORTUNITY_CHANCE = 0.30F;
     private static final int MIN_OPPORTUNITY_TICKS = 80;
     private static final int OPPORTUNITY_VARIANCE_TICKS = 61;
     private static final Map<UUID, Long> NEXT_OPPORTUNITY = new HashMap<>();

@@ -29,84 +29,90 @@ public final class LocalFormationSteering {
         Vec3 current = mover.getDeltaMovement();
         Vec3 formationVelocity = slotVelocity == null
                 ? Vec3.ZERO : new Vec3(slotVelocity.x, 0.0D, slotVelocity.z);
+        double slotDistance = Math.hypot(error.x, error.z);
+        double safeScale = Math.max(1.0D, Math.min(1.25D, catchUpScale));
+        if (recruit.getVehicle() == mover) {
+            return steerMounted(level, mover, desired, position, error, current,
+                    formationVelocity, safeScale);
+        }
         Vec3 requested = new Vec3(error.x * 0.34D, 0.0D, error.z * 0.34D)
                 .add(formationVelocity)
                 .subtract(new Vec3(current.x * 0.08D, 0.0D, current.z * 0.08D))
-                // Mounted collision bodies and assigned 1.7-block slots already provide
-                // separation. Alternating neighbor impulses made horses weave left/right.
-                .add(recruit.getVehicle() == null ? separation(recruit) : Vec3.ZERO);
-        double slotDistance = Math.hypot(error.x, error.z);
-        double formationSpeed = formationVelocity.length();
-        if (recruit.getVehicle() == mover && formationSpeed > 1.0E-5D) {
-            Vec3 travel = formationVelocity.scale(1.0D / formationSpeed);
-            Vec3 horizontalCurrent = new Vec3(current.x, 0.0D, current.z);
-            double alongError = error.dot(travel);
-            double alongCurrent = horizontalCurrent.dot(travel);
-            Vec3 lateralError = new Vec3(error.x, 0.0D, error.z)
-                    .subtract(travel.scale(alongError));
-            Vec3 lateralCurrent = horizontalCurrent.subtract(travel.scale(alongCurrent));
-            // Walking horses previously used a high-gain correction with almost no
-            // lateral damping. The outside of a wide line would overshoot together,
-            // reverse together, and visibly swing while the inside happened to stay put.
-            double alongCorrection = Math.max(-0.08D, Math.min(0.08D,
-                    alongError * 0.18D - (alongCurrent - formationSpeed) * 0.25D));
-            double along = Math.max(0.08D, formationSpeed + alongCorrection);
-            Vec3 lateral = lateralError.scale(0.12D).subtract(lateralCurrent.scale(0.65D));
-            double lateralLength = lateral.length();
-            double lateralLimit = slotDistance > 1.50D
-                    ? Math.min(0.075D, Math.max(0.035D, formationSpeed * 0.12D))
-                    : Math.min(0.035D, Math.max(0.012D, formationSpeed * 0.05D));
-            if (lateralLength > lateralLimit) lateral = lateral.scale(lateralLimit / lateralLength);
-            requested = travel.scale(along).add(lateral);
-        }
-        double safeScale = Math.max(1.0D, Math.min(1.25D, catchUpScale));
-        double maximum = (recruit.getVehicle() == null ? 0.18D : 0.22D) * safeScale;
+                .add(separation(recruit));
+        double maximum = 0.18D * safeScale;
         double horizontal = Math.hypot(requested.x, requested.z);
         if (horizontal > maximum) requested = requested.scale(maximum / horizontal);
-
-        boolean mounted = recruit.getVehicle() == mover;
-        Vec3 forward = formationVelocity.multiply(1.0D, 0.0D, 1.0D);
-        double forwardLength = forward.length();
-        // Stay well inside mounted row spacing so the lookahead never targets the horse
-        // in front. Laggards omit lead and correct directly toward their own slot.
-        Vec3 lead = mounted && slotDistance < 1.50D && forwardLength > 1.0E-5D
-                ? forward.scale(0.45D / forwardLength) : Vec3.ZERO;
-        Vec3 probe = position.add(requested.scale(mounted ? 2.75D : 2.5D)).add(lead);
-        if (mounted && !TacticalPathfinder.canSteerDirect(level, mover, probe)) {
-            probe = position.add(requested.scale(2.5D));
-        }
+        Vec3 probe = position.add(requested.scale(2.5D));
         Vec3 safe = TacticalPathfinder.standableAt(level, mover, probe);
         // Never fall back to an unchecked desired point. A moving formation can shift
         // its slot after the staggered direct-route probe; stopping for one update is
         // preferable to letting MoveControl step into newly unsupported space.
         if (safe == null) {
             if (desired.y > mover.getY() + 0.45D) mover.getJumpControl().jump();
-            mover.getNavigation().moveTo(desired.x, desired.y, desired.z,
-                    (recruit.getVehicle() == null ? 0.78D : 0.86D) * safeScale);
+            mover.getNavigation().moveTo(desired.x, desired.y, desired.z, 0.78D * safeScale);
             return false;
         }
         // The probe only proves the next part of the route. A farther look-ahead keeps
         // MoveControl from being reset to a point under half a block away every tick.
         double lookAhead = Math.min(1.75D, slotDistance);
-        Vec3 target = lookAhead <= 1.0E-5D || mounted ? safe
+        Vec3 target = lookAhead <= 1.0E-5D ? safe
                 : position.add(error.x / Math.hypot(error.x, error.z) * lookAhead,
                 safe.y - position.y, error.z / Math.hypot(error.x, error.z) * lookAhead);
-        // Horses do not reliably invoke their jump controller when MoveControl is aimed
-        // at the top of a full block. Trigger the same supported one-block step explicitly.
+        // Foot MoveControl needs an explicit jump request for a supported rise.
         if (safe.y > mover.getY() + 0.45D
                 && horizontalDistanceSq(position, safe) < 1.60D * 1.60D) {
             mover.getJumpControl().jump();
-            // Mounted MoveControl often waits at the lower face of a full block without
-            // advancing its jump control. Reassert the supported jump while grounded;
-            // `safe` came from the collision/fluid checked target column above.
-            if (recruit.getVehicle() == mover && mover.onGround()) {
-                Vec3 motion = mover.getDeltaMovement();
-                mover.setDeltaMovement(motion.x, Math.max(motion.y, 0.42D), motion.z);
-                mover.hasImpulse = true;
-            }
         }
         mover.getMoveControl().setWantedPosition(target.x, target.y, target.z,
-                (recruit.getVehicle() == null ? 0.78D : 0.72D) * safeScale);
+                0.78D * safeScale);
+        return true;
+    }
+
+    /**
+     * One velocity owner for an RTS horse on verified open ground. MoveControl targets a
+     * lateral slot and also rotates toward it, which fights the formation heading and causes
+     * the familiar left/right shiver. This controller keeps the route velocity continuous and
+     * applies a small, damped sideways correction without changing the horse's facing.
+     */
+    private static boolean steerMounted(
+            ServerLevel level,
+            Mob mover,
+            Vec3 desired,
+            Vec3 position,
+            Vec3 error,
+            Vec3 current,
+            Vec3 formationVelocity,
+            double safeScale
+    ) {
+        MountedFormationMotion.Vector motion = MountedFormationMotion.velocity(
+                current.x, current.z, error.x, error.z,
+                formationVelocity.x, formationVelocity.z, safeScale
+        );
+        Vec3 requested = new Vec3(motion.x(), 0.0D, motion.z());
+        double probeDistance = Math.max(1.25D, requested.length() * 5.0D);
+        Vec3 probe = requested.length() > 1.0E-5D
+                ? position.add(requested.normalize().scale(probeDistance)) : position;
+        if (!TacticalPathfinder.canSteerDirect(level, mover, probe)) {
+            mover.getNavigation().moveTo(desired.x, desired.y, desired.z, 0.86D * safeScale);
+            return false;
+        }
+        Vec3 safe = TacticalPathfinder.standableAt(level, mover, probe);
+        if (safe == null) {
+            mover.getNavigation().moveTo(desired.x, desired.y, desired.z, 0.86D * safeScale);
+            return false;
+        }
+
+        if (safe.y > mover.getY() + 0.45D
+                && horizontalDistanceSq(position, safe) < 3.0D * 3.0D) {
+            mover.getJumpControl().jump();
+            if (mover.onGround()) {
+                mover.setDeltaMovement(current.x, Math.max(current.y, 0.42D), current.z);
+            }
+        }
+        // Neutralize stale MoveControl without asking it to choose another yaw.
+        mover.getMoveControl().setWantedPosition(mover.getX(), mover.getY(), mover.getZ(), 0.0D);
+        mover.setDeltaMovement(requested.x, mover.getDeltaMovement().y, requested.z);
+        mover.hasImpulse = true;
         return true;
     }
 
