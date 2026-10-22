@@ -54,6 +54,7 @@ public final class CavalryRumbleClient {
         private static final float FADE_OUT_STEP = 1.0F / 120.0F;
         private static final double FILTER_START = 8.0D;
         private static final double FILTER_END = 34.0D;
+        private static final float CLOSE_GAIN = 1.50F;
         private final RumbleLayer clear;
         private final RumbleLayer distant;
         private float fade;
@@ -98,7 +99,7 @@ public final class CavalryRumbleClient {
             double distance = listener == null ? 0.0D : listener.position().distanceTo(targetPosition);
             float filterMix = smoothStep(FILTER_START, FILTER_END, distance);
             float gain = targetVolume * fade;
-            clear.update(targetPosition, gain * (1.0F - filterMix), targetPitch);
+            clear.update(targetPosition, gain * CLOSE_GAIN * (1.0F - filterMix), targetPitch);
             distant.update(targetPosition, gain * filterMix, targetPitch);
 
             if (fadingOut && fade <= 0.0F) stopNow();

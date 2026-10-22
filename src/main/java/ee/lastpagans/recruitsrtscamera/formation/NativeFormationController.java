@@ -347,7 +347,6 @@ public final class NativeFormationController {
             state.offsets.remove(id);
             state.facings.remove(id);
             state.agents.remove(id);
-            state.appliedHeadings.remove(id);
             state.locked.remove(id);
             state.order.remove(id);
         }
@@ -451,7 +450,12 @@ public final class NativeFormationController {
             state.dispersed = false;
         }
         state.velocity = state.center.subtract(previousCenter);
-        if (travelling) state.travelHeading = movementHeading(state);
+        if (travelling) {
+            float desiredTravelHeading = movementHeading(state);
+            if (Math.abs(angleDifference(state.travelHeading, desiredTravelHeading)) > 0.75F) {
+                state.travelHeading = approachHeading(state.travelHeading, desiredTravelHeading, 4.5F);
+            }
+        }
         updateSlotHeading(state);
         float slotHeading = state.slotHeading;
 
@@ -497,17 +501,15 @@ public final class NativeFormationController {
             // fixed, so a route bend cannot throw outside members across the formation.
             float controlledHeading;
             if (mover != recruit && (travelling || !arrived)) {
-                // A slow formation centre often arrives before its horses finish settling.
-                // Keep those still-moving mounts on the last route tangent as well.
-                controlledHeading = mountedTravelHeading(
-                        state, recruit.getUUID(), mover, state.travelHeading);
+                // Every rider/mount pair receives the same group-owned travel yaw. Per-member
+                // easing allowed tiny differences to survive after repeated angled orders.
+                controlledHeading = state.travelHeading;
             } else if (travelling) {
                 controlledHeading = state.travelHeading;
             } else {
                 controlledHeading = arrived
                         ? memberHeading : headingTo(mover.position(), desired, memberHeading);
             }
-            state.appliedHeadings.put(recruit.getUUID(), controlledHeading);
             applyFormationFacing(recruit, mover, controlledHeading);
             if (arrived) {
                 state.locked.add(recruit.getUUID());
@@ -585,19 +587,16 @@ public final class NativeFormationController {
     }
 
     private static float approachHeading(float current, float target, float maximumStep) {
-        float delta = (target - current) % 360.0F;
-        if (delta > 180.0F) delta -= 360.0F;
-        if (delta < -180.0F) delta += 360.0F;
+        float delta = angleDifference(current, target);
         if (Math.abs(delta) <= maximumStep) return target;
         return current + Math.copySign(maximumStep, delta);
     }
 
-    private static float mountedTravelHeading(State state, UUID recruitId, Mob mount, float routeHeading) {
-        // Slot recovery may adjust translation and pace, never body direction. Turning
-        // laggards toward individual slots reintroduced competing yaw. Smooth from our
-        // own last write so low-speed MoveControl yaw cannot feed back into the next tick.
-        float previous = state.appliedHeadings.getOrDefault(recruitId, mount.getYRot());
-        return approachHeading(previous, routeHeading, 12.0F);
+    private static float angleDifference(float current, float target) {
+        float delta = (target - current) % 360.0F;
+        if (delta > 180.0F) delta -= 360.0F;
+        if (delta < -180.0F) delta += 360.0F;
+        return delta;
     }
 
     private static boolean constraintImmediatelyAhead(ServerLevel level, Mob mover, State state) {
@@ -970,20 +969,21 @@ public final class NativeFormationController {
 
     /** Single rotation owner for both stable route travel and ordered final facing. */
     private static void applyFormationFacing(AbstractRecruitEntity recruit, Mob mover, float yaw) {
+        float previousYaw = mover.getYRot();
         recruit.ownerRot = yaw;
         recruit.setYRot(yaw);
         recruit.setYBodyRot(yaw);
         recruit.setYHeadRot(yaw);
-        recruit.yRotO = yaw;
-        recruit.yBodyRotO = yaw;
-        recruit.yHeadRotO = yaw;
+        recruit.yRotO = previousYaw;
+        recruit.yBodyRotO = previousYaw;
+        recruit.yHeadRotO = previousYaw;
         if (mover != recruit) {
             mover.setYRot(yaw);
             mover.setYBodyRot(yaw);
             mover.setYHeadRot(yaw);
-            mover.yRotO = yaw;
-            mover.yBodyRotO = yaw;
-            mover.yHeadRotO = yaw;
+            mover.yRotO = previousYaw;
+            mover.yBodyRotO = previousYaw;
+            mover.yHeadRotO = previousYaw;
         }
     }
 
@@ -1015,7 +1015,6 @@ public final class NativeFormationController {
         final Map<UUID, Float> facings;
         final Map<UUID, Integer> order = new HashMap<>();
         final Map<UUID, Agent> agents = new HashMap<>();
-        final Map<UUID, Float> appliedHeadings = new HashMap<>();
         final Map<UUID, MountControl> mountControls = new HashMap<>();
         final Set<UUID> locked = new HashSet<>();
         final List<Vec3> trail = new ArrayList<>();

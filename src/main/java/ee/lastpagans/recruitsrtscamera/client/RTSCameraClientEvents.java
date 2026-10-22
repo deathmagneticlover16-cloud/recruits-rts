@@ -29,6 +29,7 @@ public final class RTSCameraClientEvents {
         InputGate.suppressDisallowedKeyMappings();
         if (event.phase == TickEvent.Phase.END) {
             RTSCameraController.clientTick();
+            MountedFacingClient.tick();
             CavalryRumbleClient.tick();
             AdvisorClient.tick();
             InputGate.suppressDisallowedKeyMappings();

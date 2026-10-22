@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.14 behavior."""
+"""Targeted source contracts for Commander 0.15.15 behavior."""
 
 from pathlib import Path
 
@@ -52,6 +52,7 @@ rumble = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryRum
 triumph = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/MountedTriumphManager.java")
 spa = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/SeriousAnimationsCompat.java")
 rumble_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CavalryRumbleClient.java")
+mounted_facing_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/MountedFacingClient.java")
 icy_horse_sounds = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/IcyHorseSoundsCompat.java")
 mount_push = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/RTSMountEntityPushMixin.java")
 mount_control = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/RTSMountControlRegistry.java")
@@ -113,8 +114,24 @@ require(formation, "cohesionTarget - state.cohesionScale, -0.04D, 0.04D",
         "cohesion pace changes must be eased instead of pulsing")
 require(formation, "mover.setDeltaMovement(momentum)",
         "manual-control handoffs must preserve momentum for continuous animation")
-require(formation, "state.appliedHeadings.getOrDefault(recruitId, mount.getYRot())",
-        "mounted smoothing must use the last authoritative yaw instead of MoveControl feedback")
+require(formation, "desiredTravelHeading = movementHeading(state)",
+        "formation travel yaw must come from the shared route tangent")
+require(formation, "angleDifference(state.travelHeading, desiredTravelHeading)",
+        "shared travel yaw needs a deadband that rejects tiny route noise")
+require(formation, "approachHeading(state.travelHeading, desiredTravelHeading, 4.5F)",
+        "the group-owned travel yaw must turn smoothly through angled orders")
+forbid(formation, "mountedTravelHeading(",
+       "per-member mounted yaw smoothing must not split rider/mount pairs across the formation")
+require(formation, "controlledHeading = state.travelHeading;",
+        "moving riders and mounts must receive the exact shared formation yaw")
+require(formation, "float previousYaw = mover.getYRot();",
+        "rider and mount interpolation must start from the same previous yaw")
+require(mounted_facing_client, "recruit.getShouldHoldPos()",
+        "client render alignment must be limited to formation-held recruits")
+require(mounted_facing_client, "float yaw = mount.getYRot();",
+        "client render alignment must use the mount as the shared yaw source")
+require(mounted_facing_client, "recruit.yBodyRotO = previousYaw;",
+        "rider render interpolation must exactly match its mount")
 require(formation, "QUICK_PATH_BUDGET_NANOS = 20_000_000L",
         "difficult route planning must use the 20 ms staged-planning budget")
 require(formation, "state.routeGoal = requestedDestination",
@@ -233,7 +250,7 @@ for method in ("playMountedTriumph", "canPlayMountedTriumph", "isMountedTriumphA
                "mountedTriumphDurationTicks"):
     require(spa, method, "SPA mounted triumph bridge is incomplete: " + method)
 require(triumph, "averageMorale <= MIN_MORALE_EXCLUSIVE", "mounted triumph requires morale above 35")
-require(triumph, "OPPORTUNITY_CHANCE = 0.30F", "mounted triumph needs the increased occasional rate")
+require(triumph, "OPPORTUNITY_CHANCE = 0.50F", "mounted triumph needs the further increased occasional rate")
 require(triumph, "recruit.getMainHandItem().isEmpty()", "mounted triumph must preflight its hand item")
 require(rumble, "sample.riders * 2 <= sample.totalMembers", "triumph must only sample cavalry formations")
 require(rumble, "charging || running || wedge", "triumph eligibility must include charge, run and wedge")
@@ -268,6 +285,11 @@ require(rumble_client, "smoothStep(FILTER_START, FILTER_END, distance)",
         "the low-pass layer must crossfade gradually with listener distance")
 require(rumble_client, "FILTER_START = 8.0D", "close rumble must retain its bright positional layer")
 require(rumble_client, "FILTER_END = 34.0D", "thirty-to-forty block rumble must be almost entirely bass")
+require(rumble_client, "CLOSE_GAIN = 1.50F", "close cavalry rumble needs the requested gain boost")
+require(rumble_client, "gain * CLOSE_GAIN * (1.0F - filterMix)",
+        "the gain boost must apply only to the close clear layer")
+require(rumble_client, "distant.update(targetPosition, gain * filterMix, targetPitch)",
+        "the distant low-pass layer must retain its existing gain curve")
 require(icy_horse_sounds, "NEIGH_CHANCE = 0.075F", "running horse neighs must remain rare")
 require(icy_horse_sounds, "SNORT_CHANCE = 0.35F", "running horse snorts must be more frequent")
 require(icy_horse_sounds, "info.getModId() + \" \" + info.getDisplayName()",
@@ -297,6 +319,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.14-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.15-server.1", "semantic version must be updated")
 
-print("0.15.14 source contracts passed")
+print("0.15.15 source contracts passed")

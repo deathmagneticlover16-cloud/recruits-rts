@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.15.15-server.1
+Exact mounted facing and stronger close cavalry sound
+
+- Replaced per-rider travel-heading easing with one group-owned, deadbanded route heading. Every moving rider and mount now receives the exact same current yaw while the formation turns smoothly through bends and repeated angled orders.
+- Matched the rider and mount's previous yaw, body yaw and head yaw on both the server and client render tick. Close-up interpolation can no longer show the recruit looking slightly beside its horse.
+- Left mounted velocity, slot assignment, cohesion, pathfinding and terrain safety unchanged from 0.15.14.
+- Increased mounted-triumph opportunities from 30% to 50% per four-to-seven-second formation check, averaging roughly one visible triumph every eleven seconds while eligible.
+- Raised only the clear close-range cavalry rumble layer to 1.5x gain. The distant low-pass layer, distance crossfade, attenuation and fade timing are unchanged.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.15-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.14-server.1
 Exact formations and single-owner cavalry motion
 
