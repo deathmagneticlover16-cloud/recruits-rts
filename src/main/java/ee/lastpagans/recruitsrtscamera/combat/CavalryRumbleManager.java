@@ -2,6 +2,7 @@ package ee.lastpagans.recruitsrtscamera.combat;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
+import ee.lastpagans.recruitsrtscamera.compat.IcyHorseSoundsCompat;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.network.CavalryRumblePacket;
@@ -42,6 +43,7 @@ public final class CavalryRumbleManager {
 
         Map<UUID, AudibleGroup> current = new HashMap<>();
         for (ServerLevel level : event.getServer().getAllLevels()) sampleLevel(level, current);
+        IcyHorseSoundsCompat.retainGroups(current.keySet());
 
         for (Map.Entry<UUID, AudibleGroup> entry : AUDIBLE_GROUPS.entrySet()) {
             if (current.containsKey(entry.getKey())) continue;
@@ -63,7 +65,7 @@ public final class CavalryRumbleManager {
             MountSample previous = LAST_MOUNT_SAMPLE.put(mount.getUUID(), new MountSample(position, now));
             long elapsed = previous == null ? 0L : Math.max(1L, now - previous.tick());
             double speed = previous == null ? 0.0D : horizontalDistance(previous.position(), position) / elapsed;
-            groups.computeIfAbsent(groupId, ignored -> new GroupSample()).add(position, speed);
+            groups.computeIfAbsent(groupId, ignored -> new GroupSample()).add(mount, speed);
         }
 
         RTSGroupTacticsSavedData tactics = RTSGroupTacticsSavedData.get(level);
@@ -74,6 +76,8 @@ public final class CavalryRumbleManager {
             if (speed < 0.025D) continue;
             boolean wedge = "CAVALRY_WEDGE".equals(FormationRuntime.currentShape(groupId));
             boolean charging = tactics.timer(groupId, "chargeUntil") > now;
+            boolean running = charging || RTSMovementBoostManager.isHastyActive(groupId) || speed >= 0.38D;
+            IcyHorseSoundsCompat.maybePlay(level, groupId, sample.mounts, running, now);
             float volume = volume(sample.riders, speed, wedge, charging);
             if (volume <= 0.0F) continue;
             AudibleGroup audible = new AudibleGroup(level.dimension(), sample.center());
@@ -110,6 +114,7 @@ public final class CavalryRumbleManager {
     public static void onStop(ServerStoppedEvent event) {
         LAST_MOUNT_SAMPLE.clear();
         AUDIBLE_GROUPS.clear();
+        IcyHorseSoundsCompat.reset();
     }
 
     private record MountSample(Vec3 position, long tick) { }
@@ -121,9 +126,12 @@ public final class CavalryRumbleManager {
         double y;
         double z;
         double speed;
+        final java.util.List<Entity> mounts = new java.util.ArrayList<>();
 
-        void add(Vec3 position, double actualSpeed) {
+        void add(Entity mount, double actualSpeed) {
+            Vec3 position = mount.position();
             riders++;
+            mounts.add(mount);
             x += position.x;
             y += position.y;
             z += position.z;

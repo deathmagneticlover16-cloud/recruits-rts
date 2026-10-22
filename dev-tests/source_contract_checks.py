@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.10 behavior."""
+"""Targeted source contracts for Commander 0.15.11 behavior."""
 
 from pathlib import Path
 
@@ -48,6 +48,7 @@ slots = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/Formatio
 formation_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationService.java")
 rumble = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryRumbleManager.java")
 rumble_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CavalryRumbleClient.java")
+icy_horse_sounds = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/IcyHorseSoundsCompat.java")
 scheduler = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitAIScheduler.java")
 stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
@@ -224,6 +225,15 @@ require(rumble_client, "smoothStep(FILTER_START, FILTER_END, distance)",
         "the low-pass layer must crossfade gradually with listener distance")
 require(rumble_client, "FILTER_START = 8.0D", "close rumble must retain its bright positional layer")
 require(rumble_client, "FILTER_END = 34.0D", "thirty-to-forty block rumble must be almost entirely bass")
+require(icy_horse_sounds, "NEIGH_CHANCE = 0.075F", "running horse neighs must remain rare")
+require(icy_horse_sounds, "SNORT_CHANCE = 0.35F", "running horse snorts must be more frequent")
+require(icy_horse_sounds, "info.getModId() + \" \" + info.getDisplayName()",
+        "Icy integration must discover optional mod namespaces without a hard dependency")
+require(icy_horse_sounds, "path.contains(\"neigh\") || path.contains(\"whinny\")",
+        "Icy integration must discover both common neigh registry names")
+require(icy_horse_sounds, "level.playSound(null, horse.getX(), horse.getY(), horse.getZ()",
+        "horse vocalizations must be positional at an individual mount")
+require(rumble, "IcyHorseSoundsCompat.maybePlay", "moving cavalry sampling must drive optional vocals")
 require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 15_000_000L",
         "recovery paths need an aggregate tick-time guard during initial cohesion")
 require(overlay, "COMMAND_CAVALRY_WEDGE", "cavalry wedge needs a stable command-bar element")
@@ -237,6 +247,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.10-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.11-server.1", "semantic version must be updated")
 
-print("0.15.10 source contracts passed")
+print("0.15.11 source contracts passed")

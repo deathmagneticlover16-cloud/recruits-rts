@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.15.11-server.1
+Optional Icy horse vocalizations
+
+- Added a registry-only optional compatibility layer for Icy horse sound mods. It discovers loaded mods whose ID or display name contains `Icy`, then caches their registered neigh/whinny and snort events without linking against their classes or requiring the mod.
+- Running cavalry formations now receive one randomized vocal opportunity every two to four seconds. Neighs have a 7.5% chance per opportunity; snorts have a 35% chance and therefore occur much more often.
+- Each sound originates from one randomly selected moving horse rather than the formation centre. Formation-wide scheduling prevents large groups from multiplying the sound rate by their rider count, while small groups retain the same occasional character.
+- Vocalizations only run for Hasty movement, charge orders or groups whose measured speed indicates running. Idle and ordinary slow horses remain quiet.
+- Network protocol remains rts-camera-157 because playback uses Forge's synchronized sound registry and adds no packet.
+- Source version and packaging references are 0.15.11-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.10-server.1
 Unbroken cavalry passes, stable walking lines and directional rumble
 
