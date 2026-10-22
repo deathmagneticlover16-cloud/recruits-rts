@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.12 behavior."""
+"""Targeted source contracts for Commander 0.15.13 behavior."""
 
 from pathlib import Path
 
@@ -47,6 +47,8 @@ animation_hints = source("src/main/java/ee/lastpagans/recruitsrtscamera/animatio
 slots = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationSlotMath.java")
 formation_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationService.java")
 rumble = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryRumbleManager.java")
+triumph = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/MountedTriumphManager.java")
+spa = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/SeriousAnimationsCompat.java")
 rumble_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CavalryRumbleClient.java")
 icy_horse_sounds = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/IcyHorseSoundsCompat.java")
 mount_push = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/RTSMountEntityPushMixin.java")
@@ -212,6 +214,22 @@ require(slots, "case CAVALRY_WEDGE -> addCavalryWedge", "wedge needs dedicated f
 require(slots, "1.7D * (spacing <= 1.10D ? 1.30D : 1.0D)",
         "normal mounted geometry must be 1.3x wider without widening loose spacing twice")
 require(formation_service, "previous.spacing() > 1.10D", "frontage dragging must preserve loose spacing")
+require(overlay, "current == FormationKind.CAVALRY_WEDGE", "the wedge command must toggle its active state")
+require(overlay, "? FormationKind.SQUARE", "a second wedge click must restore the default square")
+require(formation_service, "if (active == FormationKind.CAVALRY_WEDGE)",
+        "frontage dragging must recognize an active cavalry wedge")
+require(formation_service, "destination, FormationKind.CAVALRY_WEDGE",
+        "frontage dragging must position a wedge without replacing its geometry")
+require(spa, 'Class.forName("com.lastpagans.recruitsspa.RecruitsAnimationsApi")',
+        "SPA mounted triumph must resolve the published API package")
+for method in ("playMountedTriumph", "canPlayMountedTriumph", "isMountedTriumphActive",
+               "mountedTriumphDurationTicks"):
+    require(spa, method, "SPA mounted triumph bridge is incomplete: " + method)
+require(triumph, "averageMorale <= MIN_MORALE_EXCLUSIVE", "mounted triumph requires morale above 35")
+require(triumph, "OPPORTUNITY_CHANCE = 0.18F", "mounted triumph must remain occasional")
+require(triumph, "recruit.getMainHandItem().isEmpty()", "mounted triumph must preflight its hand item")
+require(rumble, "sample.riders * 2 <= sample.totalMembers", "triumph must only sample cavalry formations")
+require(rumble, "charging || running || wedge", "triumph eligibility must include charge, run and wedge")
 require(formation, "state.rotateForTravel = horizontalDistanceSq(state.center, destination) > 4.0D * 4.0D",
         "short orders must not rotate the whole formation out and back")
 require(formation, "mover != recruit && (travelling || !arrived)",
@@ -262,6 +280,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.12-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.13-server.1", "semantic version must be updated")
 
-print("0.15.12 source contracts passed")
+print("0.15.13 source contracts passed")

@@ -22,7 +22,10 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.PacketDistributor;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /** Samples mounted groups cheaply and drives client-side positional loops with explicit stops. */
@@ -42,8 +45,10 @@ public final class CavalryRumbleManager {
         if (Math.floorMod(now, SAMPLE_TICKS) != 0L) return;
 
         Map<UUID, AudibleGroup> current = new HashMap<>();
-        for (ServerLevel level : event.getServer().getAllLevels()) sampleLevel(level, current);
+        Set<UUID> cavalryGroups = new HashSet<>();
+        for (ServerLevel level : event.getServer().getAllLevels()) sampleLevel(level, current, cavalryGroups);
         IcyHorseSoundsCompat.retainGroups(current.keySet());
+        MountedTriumphManager.retainGroups(cavalryGroups);
 
         for (Map.Entry<UUID, AudibleGroup> entry : AUDIBLE_GROUPS.entrySet()) {
             if (current.containsKey(entry.getKey())) continue;
@@ -54,29 +59,42 @@ public final class CavalryRumbleManager {
         AUDIBLE_GROUPS.putAll(current);
     }
 
-    private static void sampleLevel(ServerLevel level, Map<UUID, AudibleGroup> current) {
+    private static void sampleLevel(
+            ServerLevel level,
+            Map<UUID, AudibleGroup> current,
+            Set<UUID> cavalryGroups
+    ) {
         Map<UUID, GroupSample> groups = new HashMap<>();
         long now = level.getGameTime();
         for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
             UUID groupId = recruit.getGroup();
+            if (groupId == null) continue;
+            GroupSample sample = groups.computeIfAbsent(groupId, ignored -> new GroupSample());
+            sample.totalMembers++;
             Entity mount = recruit.getVehicle();
-            if (groupId == null || mount == null || !RTSMovementBoostManager.isCavalry(recruit)) continue;
+            if (mount == null || !RTSMovementBoostManager.isCavalry(recruit)) continue;
             Vec3 position = mount.position();
             MountSample previous = LAST_MOUNT_SAMPLE.put(mount.getUUID(), new MountSample(position, now));
             long elapsed = previous == null ? 0L : Math.max(1L, now - previous.tick());
             double speed = previous == null ? 0.0D : horizontalDistance(previous.position(), position) / elapsed;
-            groups.computeIfAbsent(groupId, ignored -> new GroupSample()).add(mount, speed);
+            sample.add(recruit, mount, speed);
         }
 
         RTSGroupTacticsSavedData tactics = RTSGroupTacticsSavedData.get(level);
         for (Map.Entry<UUID, GroupSample> entry : groups.entrySet()) {
             UUID groupId = entry.getKey();
             GroupSample sample = entry.getValue();
+            if (sample.riders == 0 || sample.riders * 2 <= sample.totalMembers) continue;
+            cavalryGroups.add(groupId);
             double speed = sample.averageSpeed();
-            if (speed < 0.025D) continue;
             boolean wedge = "CAVALRY_WEDGE".equals(FormationRuntime.currentShape(groupId));
             boolean charging = tactics.timer(groupId, "chargeUntil") > now;
             boolean running = charging || RTSMovementBoostManager.isHastyActive(groupId) || speed >= 0.38D;
+            MountedTriumphManager.maybePlay(
+                    level, groupId, sample.cavalry, sample.averageMorale(),
+                    charging || running || wedge, now
+            );
+            if (speed < 0.025D) continue;
             IcyHorseSoundsCompat.maybePlay(level, groupId, sample.mounts, running, now);
             float volume = volume(sample.riders, speed, wedge, charging);
             if (volume <= 0.0F) continue;
@@ -115,6 +133,7 @@ public final class CavalryRumbleManager {
         LAST_MOUNT_SAMPLE.clear();
         AUDIBLE_GROUPS.clear();
         IcyHorseSoundsCompat.reset();
+        MountedTriumphManager.reset();
     }
 
     private record MountSample(Vec3 position, long tick) { }
@@ -122,23 +141,29 @@ public final class CavalryRumbleManager {
 
     private static final class GroupSample {
         int riders;
+        int totalMembers;
         double x;
         double y;
         double z;
         double speed;
         final java.util.List<Entity> mounts = new java.util.ArrayList<>();
+        final List<AbstractRecruitEntity> cavalry = new java.util.ArrayList<>();
+        double morale;
 
-        void add(Entity mount, double actualSpeed) {
+        void add(AbstractRecruitEntity recruit, Entity mount, double actualSpeed) {
             Vec3 position = mount.position();
             riders++;
             mounts.add(mount);
+            cavalry.add(recruit);
             x += position.x;
             y += position.y;
             z += position.z;
             speed += Math.min(1.0D, actualSpeed);
+            morale += Math.max(0.0F, Math.min(100.0F, recruit.getMorale()));
         }
 
         double averageSpeed() { return riders == 0 ? 0.0D : speed / riders; }
+        float averageMorale() { return riders == 0 ? 0.0F : (float) (morale / riders); }
         Vec3 center() { return new Vec3(x / riders, y / riders, z / riders); }
     }
 }

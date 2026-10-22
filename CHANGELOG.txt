@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.15.13-server.1
+Wedge toggle, preserved wedge frontage and mounted triumph
+
+- Clicking the active cavalry Wedge command now returns selected cavalry to the default Square formation. Mixed selections still receive Wedge normally.
+- Drawing frontage while Wedge is active now uses the stroke only for destination and facing. It preserves the wedge geometry, ranks and exact normal/loose spacing instead of converting the formation to a line.
+- Added optional support for SPA's published `com.lastpagans.recruitsspa.RecruitsAnimationsApi` mounted-triumph methods. Older SPA package naming and spear animation support remain compatible.
+- Cavalry-majority groups above 35 average morale now get one formation-wide triumph opportunity every four to seven seconds while charging, running or in Wedge. An 18% opportunity chance, active-animation check and randomized eligible rider keep it rare without scaling spam with formation size.
+- The scheduler preflights a living mounted recruit with a main-hand item and lets SPA make the final eligibility decision. Missing or older SPA versions remain harmless.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.13-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.12-server.1
 Contact-shiver and pace-transition correction
 

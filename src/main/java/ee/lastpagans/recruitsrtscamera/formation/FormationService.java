@@ -90,6 +90,28 @@ public final class FormationService {
         ServerLevel level = sender.serverLevel();
         FormationKind preferred = preferred(level, groupId);
         RTSFormationSavedData.GroupState previous = state(level, groupId);
+        FormationKind active = previous != null ? previous.active() : activeKind(level, groupId);
+        if (active == FormationKind.CAVALRY_WEDGE) {
+            // A frontage stroke supplies a new centre and facing for a wedge. Its length must
+            // never turn the wedge into a line or rewrite the wedge's ranks/spacing.
+            double preservedSpacing = previous == null ? 1.0D : previous.spacing();
+            int preservedRanks = previous == null ? 0 : previous.ranks();
+            RTSFormationSavedData.get(level).put(groupId, new RTSFormationSavedData.GroupState(
+                    FormationMode.PRESET,
+                    FormationKind.CAVALRY_WEDGE,
+                    FormationKind.CAVALRY_WEDGE,
+                    preservedSpacing,
+                    preservedRanks,
+                    facingYaw,
+                    Map.of(),
+                    1
+            ));
+            FormationPlan plan = FormationPlanner.movePreserved(
+                    groupId, destination, FormationKind.CAVALRY_WEDGE,
+                    facingYaw, preservedSpacing, preservedRanks
+            );
+            return FormationRuntime.executePlan(sender, recruits, plan);
+        }
         // Dragging frontage changes width/facing, not the group's spacing doctrine.
         // Preserve an existing loose-spacing choice across the authored line order.
         double effectiveSpacing = previous != null && previous.spacing() > 1.10D

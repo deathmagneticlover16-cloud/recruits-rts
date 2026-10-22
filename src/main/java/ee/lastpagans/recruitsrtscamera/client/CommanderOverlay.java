@@ -251,7 +251,10 @@ public final class CommanderOverlay {
         }
         if (RTSCommandFacade.selectedHasCavalryMajority()
                 && layout.cavalryWedgeButton().contains(mouseX, mouseY)) {
-            RTSCommandFacade.setFormation(FormationKind.CAVALRY_WEDGE);
+            FormationKind current = RTSCommandFacade.commonSelectedFormationKind();
+            RTSCommandFacade.setFormation(current == FormationKind.CAVALRY_WEDGE
+                    ? FormationKind.SQUARE
+                    : FormationKind.CAVALRY_WEDGE);
             return true;
         }
         List<RTSCommandFacade.UnitCardView> groups = RTSCommandFacade.unitCards();
