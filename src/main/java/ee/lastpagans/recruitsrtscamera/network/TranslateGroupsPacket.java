@@ -52,7 +52,7 @@ public record TranslateGroupsPacket(List<UUID> groupIds, Vec3 delta) {
         Vec3 delta = packet.delta;
         if (!ServerPacketGuard.allow(sender) || packet.groupIds.isEmpty() || delta == null
                 || !Double.isFinite(delta.x) || !Double.isFinite(delta.y) || !Double.isFinite(delta.z)
-                || delta.lengthSqr() > 192.0D * 192.0D) return;
+                || delta.lengthSqr() > 576.0D * 576.0D) return;
         Map<UUID, List<AbstractRecruitEntity>> groups = ServerGroupResolver.resolve(sender, packet.groupIds);
         for (Map.Entry<UUID, List<AbstractRecruitEntity>> entry : groups.entrySet()) {
             boolean moved = FormationRuntime.translateFormation(entry.getKey(), delta);

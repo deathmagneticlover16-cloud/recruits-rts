@@ -17,7 +17,7 @@ import java.util.function.Supplier;
 
 /** Commit a multi-stage RTS route. */
 public record RouteGroupsPacket(List<UUID> groupIds, List<BlockPos> waypoints) {
-    private static final double MAX_TARGET_DISTANCE = 112.0D;
+    private static final double MAX_TARGET_DISTANCE = 336.0D;
 
     public RouteGroupsPacket {
         int groups = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);

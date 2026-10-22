@@ -24,7 +24,7 @@ import java.util.function.Supplier;
 
 /** Alt+RMB freehand formation order. */
 public record CustomFormationPacket(List<UUID> groupIds, List<Vec3> stroke, int ranks) {
-    private static final double MAX_POINT_DISTANCE = 112.0D;
+    private static final double MAX_POINT_DISTANCE = 336.0D;
 
     public CustomFormationPacket {
         int groupCount = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);

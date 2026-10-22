@@ -30,7 +30,7 @@ import java.util.function.Supplier;
  * custom freehand slots are retained. The difference is only travel pace/cohesion.
  */
 public record HastyMoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
-    private static final double MAX_TARGET_DISTANCE = 112.0D;
+    private static final double MAX_TARGET_DISTANCE = 336.0D;
 
     public HastyMoveGroupsPacket {
         int size = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);

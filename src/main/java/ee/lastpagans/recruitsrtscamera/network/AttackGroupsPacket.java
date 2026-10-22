@@ -23,7 +23,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 public record AttackGroupsPacket(List<UUID> groupIds, int targetEntityId, boolean charge) {
-    private static final double MAX_TARGET_DISTANCE = 144.0D;
+    private static final double MAX_TARGET_DISTANCE = 432.0D;
     public AttackGroupsPacket(List<UUID> groupIds, int targetEntityId) { this(groupIds, targetEntityId, false); }
 
     public AttackGroupsPacket {

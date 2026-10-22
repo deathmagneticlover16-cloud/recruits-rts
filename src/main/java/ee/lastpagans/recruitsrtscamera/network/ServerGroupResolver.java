@@ -23,7 +23,7 @@ final class ServerGroupResolver {
     /** Protocol/hard-safety cap. Operational limits are server configurable below this value. */
     static final int MAX_GROUPS_PER_ORDER = 128;
     static final int MAX_RECRUITS_PER_ORDER = 4096;
-    static final double MAX_RECRUIT_DISTANCE = 144.0D;
+    static final double MAX_RECRUIT_DISTANCE = 432.0D;
 
     private ServerGroupResolver() {
     }

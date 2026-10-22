@@ -350,6 +350,7 @@ public final class NativeFormationController {
             state.offsets.remove(id);
             state.facings.remove(id);
             state.agents.remove(id);
+            state.appliedHeadings.remove(id);
             state.locked.remove(id);
             state.order.remove(id);
         }
@@ -495,11 +496,19 @@ public final class NativeFormationController {
             // rotateForTravel controls the slot stencil only. Every moving body still
             // follows the route tangent, including short moves, or MoveControl and this
             // rotation owner pull a horse in different directions and recreate spinning.
-            float controlledHeading = travelling
-                    ? mover != recruit
-                    ? mountedTravelHeading(mover, state.travelHeading)
-                    : state.travelHeading
-                    : arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading);
+            float controlledHeading;
+            if (mover != recruit && (travelling || !arrived)) {
+                // A slow formation centre often arrives before its horses finish settling.
+                // Keep those still-moving mounts on the last route tangent as well.
+                controlledHeading = mountedTravelHeading(
+                        state, recruit.getUUID(), mover, state.travelHeading);
+            } else if (travelling) {
+                controlledHeading = state.travelHeading;
+            } else {
+                controlledHeading = arrived
+                        ? memberHeading : headingTo(mover.position(), desired, memberHeading);
+            }
+            state.appliedHeadings.put(recruit.getUUID(), controlledHeading);
             applyFormationFacing(recruit, mover, controlledHeading);
             if (arrived) {
                 state.locked.add(recruit.getUUID());
@@ -619,11 +628,12 @@ public final class NativeFormationController {
         return current + Math.copySign(maximumStep, delta);
     }
 
-    private static float mountedTravelHeading(Mob mount, float routeHeading) {
+    private static float mountedTravelHeading(State state, UUID recruitId, Mob mount, float routeHeading) {
         // Slot recovery may adjust translation and pace, never body direction. Turning
-        // laggards toward individual slots reintroduced competing yaw as wider cavalry
-        // crossed the old error threshold together.
-        return approachHeading(mount.getYRot(), routeHeading, 12.0F);
+        // laggards toward individual slots reintroduced competing yaw. Smooth from our
+        // own last write so low-speed MoveControl yaw cannot feed back into the next tick.
+        float previous = state.appliedHeadings.getOrDefault(recruitId, mount.getYRot());
+        return approachHeading(previous, routeHeading, 12.0F);
     }
 
     private static boolean constraintImmediatelyAhead(ServerLevel level, Mob mover, State state) {
@@ -1060,6 +1070,7 @@ public final class NativeFormationController {
         final Map<UUID, Float> facings;
         final Map<UUID, Integer> order = new HashMap<>();
         final Map<UUID, Agent> agents = new HashMap<>();
+        final Map<UUID, Float> appliedHeadings = new HashMap<>();
         final Map<UUID, MountControl> mountControls = new HashMap<>();
         final Set<UUID> locked = new HashSet<>();
         final List<Vec3> trail = new ArrayList<>();

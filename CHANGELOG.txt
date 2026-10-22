@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.15.8-server.1
+Stable walking cavalry, distance-filtered rumble and extended orders
+
+- Fixed walk-only cavalry spinning. Mounted yaw easing now starts from the formation controller's last authoritative heading instead of reading MoveControl's intervening lateral yaw back into the next tick, and settling horses retain the route tangent until their own slot arrival.
+- Reduced cavalry rumble gain by 20% and capped its calculated gain at 1.2.
+- Added a derived 1.1 kHz low-pass version of the supplied recording. The clear and filtered positional loops crossfade smoothly from 20 to 128 blocks, using Minecraft's 192-block linear attenuation for direction and distance.
+- Temporarily tripled client order reach from 96 to 288 blocks. Server movement/frontage/route/custom limits are 336 blocks, attack resolution is 432 blocks, and strategic fire is 480 blocks.
+- Network protocol remains rts-camera-157 because the rumble packet format and message registration are unchanged.
+- Source version and packaging references are 0.15.8-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.7-server.1
 Fading positional cavalry audio and regression fixes
 

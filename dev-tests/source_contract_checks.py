@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.7 behavior."""
+"""Targeted source contracts for Commander 0.15.8 behavior."""
 
 from pathlib import Path
 
@@ -53,7 +53,7 @@ stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatis
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
-require(formation, "arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading)",
+require(formation, "? memberHeading : headingTo(mover.position(), desired, memberHeading)",
         "stationary members must face their slot while rotating, then restore final facing")
 require(formation, "state.travelHeading", "travelling members must retain the shared route tangent")
 require(formation, "addGoal(-10, lease.goal)", "mounted formations need exclusive horse goal ownership")
@@ -83,8 +83,8 @@ require(formation, "approachHeading(state.slotHeading, target, 9.0F)",
         "formation geometry must ease through route bends without slot snapping")
 require(formation, "mover.setDeltaMovement(momentum)",
         "manual-control handoffs must preserve momentum for continuous animation")
-require(formation, "return approachHeading(mount.getYRot(), routeHeading, 12.0F);",
-        "mounted laggards must retain the shared route heading while recovering their slot")
+require(formation, "state.appliedHeadings.getOrDefault(recruitId, mount.getYRot())",
+        "mounted smoothing must use the last authoritative yaw instead of MoveControl feedback")
 require(formation, "QUICK_PATH_BUDGET_NANOS = 20_000_000L",
         "difficult route planning must use the 20 ms staged-planning budget")
 require(formation, "state.routeGoal = requestedDestination",
@@ -179,20 +179,23 @@ require(slots, "1.7D * (spacing <= 1.10D ? 1.30D : 1.0D)",
 require(formation_service, "previous.spacing() > 1.10D", "frontage dragging must preserve loose spacing")
 require(formation, "state.rotateForTravel = horizontalDistanceSq(state.center, destination) > 4.0D * 4.0D",
         "short orders must not rotate the whole formation out and back")
-require(formation, "float controlledHeading = travelling",
-        "short-move bodies must still share the route tangent instead of fighting MoveControl")
+require(formation, "mover != recruit && (travelling || !arrived)",
+        "mounted bodies must retain the route tangent through slow arrival cohesion")
 require(formation, "? slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.08D",
         "mounted laggards need bounded catch-up instead of teleport-like surges")
 require(cavalry_combat, "MOUNT_HEALTH_BONUS = 0.75D", "managed recruited mounts need extra health")
-require(rumble, "riders * speed * emphasis / 12.0D", "rumble volume must use riders x actual speed")
+require(rumble, "riders * speed * emphasis / 15.0D", "rumble gain must use the reduced riders x speed scale")
 require(rumble, "(wedge ? 1.15D : 1.0D) * (charging ? 1.15D : 1.0D)",
         "wedge and charge sound emphasis must stack")
 require(rumble, "SAMPLE_TICKS = 5", "rumble sampling must avoid an every-tick server scan")
 require(rumble, "new CavalryRumblePacket(groupId, false", "stopped groups need an explicit client stop")
 require(rumble_client, "FADE_IN_STEP = 1.0F / 120.0F", "rumble needs a very slow fade in")
 require(rumble_client, "FADE_OUT_STEP = 1.0F / 120.0F", "rumble needs a very slow fade out")
-require(rumble_client, "this.looping = true", "rumble must be a controllable loop, not fire-and-forget audio")
+require(rumble_client, "looping = true", "rumble must be a controllable loop, not fire-and-forget audio")
 require(rumble_client, "public boolean canStartSilent()", "a zero-gain fade-in must not be culled at startup")
+require(rumble_client, "CAVALRY_RUMBLE_DISTANT", "distance filtering needs a separately filtered audio layer")
+require(rumble_client, "smoothStep(FILTER_START, FILTER_END, distance)",
+        "the low-pass layer must crossfade gradually with listener distance")
 require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 15_000_000L",
         "recovery paths need an aggregate tick-time guard during initial cohesion")
 require(overlay, "COMMAND_CAVALRY_WEDGE", "cavalry wedge needs a stable command-bar element")
@@ -201,8 +204,11 @@ for key in ("DAMAGE", "MELEE_SKILL", "MELEE_DEFENCE", "CHARGE_BONUS", "SPEED", "
             "FATIGUE", "ACCURACY", "AMMUNITION", "RATE_OF_FIRE"):
     require(stats, key + "(\"stat.", "all ten troop-wide statistics must have stable IDs")
 require(stat_registry, "Map<UUID, TroopStatProfile>", "statistics must be stored per troop group")
+require(controller, "ORDER_RADIUS = 288.0D", "temporary client order reach must be tripled")
+require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroupsPacket.java"),
+        "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.7-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.8-server.1", "semantic version must be updated")
 
-print("0.15.7 source contracts passed")
+print("0.15.8 source contracts passed")

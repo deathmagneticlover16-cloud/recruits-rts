@@ -76,6 +76,7 @@ import java.util.UUID;
 public final class RTSCameraController {
     private static final Minecraft MC = Minecraft.getInstance();
     private static final double CAMERA_RADIUS = 96.0D;
+    private static final double ORDER_RADIUS = 288.0D;
     private static final double MAX_RAY_DISTANCE = 192.0D;
     private static final double SELECTION_RANGE = 192.0D;
     private static final double CLICK_DRAG_THRESHOLD = 5.0D;
@@ -1105,7 +1106,7 @@ public final class RTSCameraController {
             return;
         }
         BlockPos point = hit.pos().immutable();
-        if (Vec3.atCenterOf(point).distanceToSqr(anchor) > CAMERA_RADIUS * CAMERA_RADIUS) {
+        if (Vec3.atCenterOf(point).distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
             setStatus("That route waypoint is outside the tactical radius.");
             return;
         }
@@ -1207,7 +1208,7 @@ public final class RTSCameraController {
             return;
         }
         BlockPos target = hit.pos();
-        if (Vec3.atCenterOf(target).distanceToSqr(anchor) > CAMERA_RADIUS * CAMERA_RADIUS) {
+        if (Vec3.atCenterOf(target).distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
             setStatus("That bombardment point is outside the tactical radius.");
             return;
         }
@@ -1621,7 +1622,7 @@ public final class RTSCameraController {
             setStatus("No valid terrain under the cursor (terrain ray: MISS).");
             return;
         }
-        if (Vec3.atCenterOf(targetPos).distanceToSqr(anchor) > CAMERA_RADIUS * CAMERA_RADIUS) {
+        if (Vec3.atCenterOf(targetPos).distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
             setStatus("That destination is outside the tactical radius.");
             return;
         }
@@ -1731,7 +1732,7 @@ public final class RTSCameraController {
             width = FrontageMath.MAX_FRONTAGE;
         }
         Vec3 midpoint = start.add(end).scale(0.5D);
-        if (midpoint.distanceToSqr(anchor) > CAMERA_RADIUS * CAMERA_RADIUS) {
+        if (midpoint.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
             setStatus("That frontage is outside the tactical radius.");
             return;
         }
@@ -2455,7 +2456,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.7-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.8-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -3056,7 +3057,7 @@ public final class RTSCameraController {
                 ground.location().y,
                 ground.pos().getZ() + 0.5D
         );
-        if (newArmyCenter.distanceToSqr(anchor) > CAMERA_RADIUS * CAMERA_RADIUS) {
+        if (newArmyCenter.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
             return;
         }
 
@@ -3113,7 +3114,7 @@ public final class RTSCameraController {
                 ground.location().y,
                 ground.pos().getZ() + 0.5D
         );
-        if (destination.distanceToSqr(anchor) > CAMERA_RADIUS * CAMERA_RADIUS) {
+        if (destination.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
             return "Move preview: destination outside tactical radius";
         }
         boolean hastyPreview = lastTerrainOrderTarget != null

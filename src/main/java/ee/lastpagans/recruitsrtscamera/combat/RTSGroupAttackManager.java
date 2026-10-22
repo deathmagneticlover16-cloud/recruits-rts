@@ -59,7 +59,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RTSGroupAttackManager {
-    private static final double MAX_TACTICAL_DISTANCE = 144.0D;
+    private static final double MAX_TACTICAL_DISTANCE = 432.0D;
     private static final int RETARGET_INTERVAL_TICKS = 5;
     private static final int APPROACH_REPLAN_TICKS = 40;
     private static final int EMPTY_TARGET_GRACE_TICKS = 40;

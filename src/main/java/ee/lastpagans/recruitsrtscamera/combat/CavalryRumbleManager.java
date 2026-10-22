@@ -97,7 +97,7 @@ public final class CavalryRumbleManager {
     /** Riders x actual blocks/tick x independently stacking charge/wedge factors. */
     static float volume(int riders, double speed, boolean wedge, boolean charging) {
         double emphasis = (wedge ? 1.15D : 1.0D) * (charging ? 1.15D : 1.0D);
-        return (float) Math.max(0.0D, Math.min(1.5D, riders * speed * emphasis / 12.0D));
+        return (float) Math.max(0.0D, Math.min(1.2D, riders * speed * emphasis / 15.0D));
     }
 
     private static double horizontalDistance(Vec3 a, Vec3 b) {

@@ -29,7 +29,7 @@ import java.util.function.Supplier;
  * their current relative X/Z spacing and each group keeps its own current formation.
  */
 public record MoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
-    private static final double MAX_TARGET_DISTANCE = 112.0D;
+    private static final double MAX_TARGET_DISTANCE = 336.0D;
 
     public MoveGroupsPacket {
         int size = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);

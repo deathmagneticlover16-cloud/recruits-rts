@@ -30,7 +30,7 @@ import java.util.function.Supplier;
  * formation runtime for collision-aware line slots.
  */
 public record FrontageGroupsPacket(List<UUID> groupIds, Vec3 start, Vec3 end) {
-    private static final double MAX_TARGET_DISTANCE = 112.0D;
+    private static final double MAX_TARGET_DISTANCE = 336.0D;
 
     public FrontageGroupsPacket {
         int size = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);

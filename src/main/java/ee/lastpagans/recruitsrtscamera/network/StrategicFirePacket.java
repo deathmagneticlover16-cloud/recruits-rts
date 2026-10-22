@@ -21,7 +21,7 @@ import java.util.function.Supplier;
 
 /** F: designate one strategic-fire/bombardment point for the selected groups. */
 public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
-    private static final double MAX_TARGET_DISTANCE = 160.0D;
+    private static final double MAX_TARGET_DISTANCE = 480.0D;
 
     public StrategicFirePacket {
         int size = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);
