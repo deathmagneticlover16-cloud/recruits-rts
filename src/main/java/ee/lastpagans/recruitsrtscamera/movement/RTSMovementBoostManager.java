@@ -70,6 +70,7 @@ public final class RTSMovementBoostManager {
     private static final int FORCED_ORDER_MAX_TICKS = 20 * 70;
     private static final int FORCED_ORDER_REPAIR_COOLDOWN = 60;
     private static final double FORCED_ORDER_ARRIVAL_DISTANCE = 0.45D;
+    private static final double GROUP_ACCELERATION_PER_TICK = 0.015D;
 
     private static final Map<UUID, BoostState> ACTIVE = new ConcurrentHashMap<>();
     private static final Map<UUID, GroupBoostState> ACTIVE_GROUPS = new ConcurrentHashMap<>();
@@ -236,7 +237,17 @@ public final class RTSMovementBoostManager {
     private static void registerGroup(UUID groupId, GroupMode mode, int ticks, List<AbstractRecruitEntity> recruits) {
         Vec3 center = FormationRuntime.formationCenter(groupId);
         if (center != null) {
-            ACTIVE_GROUPS.put(groupId, new GroupBoostState(mode, ticks, center, averageArmorWeightScale(recruits)));
+            GroupBoostState previous = ACTIVE_GROUPS.get(groupId);
+            GroupBoostState replacement = new GroupBoostState(
+                    mode, ticks, center, averageArmorWeightScale(recruits));
+            if (previous != null) {
+                // Pace changes are changes to the same moving body, not new movement
+                // orders. Carry its current anchor speed through Walk <-> Run so the
+                // entire slot stencil cannot jump forward in one server tick.
+                replacement.currentStep = previous.currentStep;
+                replacement.movingTicks = previous.movingTicks;
+            }
+            ACTIVE_GROUPS.put(groupId, replacement);
         }
     }
 
@@ -817,7 +828,14 @@ public final class RTSMovementBoostManager {
         double wedgeAcceleration = cavalryWedge
                 ? 1.0D + 0.25D * Math.min(1.0D, state.movingTicks / (20.0D * 12.0D))
                 : 1.0D;
-        return Math.max(0.035D, step * state.externalSpeedScale * wedgeAcceleration);
+        double targetStep = Math.max(0.035D, step * state.externalSpeedScale * wedgeAcceleration);
+        if (!Double.isFinite(state.currentStep)) state.currentStep = targetStep;
+        else {
+            double difference = targetStep - state.currentStep;
+            state.currentStep += Math.max(-GROUP_ACCELERATION_PER_TICK,
+                    Math.min(GROUP_ACCELERATION_PER_TICK, difference));
+        }
+        return state.currentStep;
     }
 
     public static boolean isSlowMarchActive(UUID groupId) {
@@ -890,6 +908,7 @@ public final class RTSMovementBoostManager {
         private Vec3 lastCenter;
         private int movingTicks;
         private final double externalSpeedScale;
+        private double currentStep = Double.NaN;
 
         private GroupBoostState(GroupMode mode, int remainingTicks, Vec3 lastCenter, double externalSpeedScale) {
             this.mode = mode;

@@ -8,6 +8,7 @@ import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
 import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
+import ee.lastpagans.recruitsrtscamera.movement.RTSMountControlRegistry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
@@ -60,6 +61,7 @@ public final class CavalryTacticalController {
         s.active = false;
         ((MobGoalAccess) rider).rts$getGoals().removeGoal(s.goal);
         ((MobGoalAccess) s.mount).rts$getGoals().removeGoal(s.mountGoal);
+        RTSMountControlRegistry.release(s.mount);
         s.mount.getNavigation().stop();
         CommanderAnimationHints.clearMovement(rider);
         if (!rider.isRemoved() && !RoutedGroupManager.isRouting(rider)) {
@@ -235,6 +237,7 @@ public final class CavalryTacticalController {
         State(AbstractRecruitEntity rider, AbstractHorse mount) {
             this.rider = rider; this.mount = mount; this.goal = new CavalryGoal(this);
             this.mountGoal = new MountControlGoal(this);
+            RTSMountControlRegistry.claim(mount);
         }
     }
     private static final class MountControlGoal extends Goal {

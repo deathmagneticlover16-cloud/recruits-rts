@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.15.12-server.1
+Contact-shiver and pace-transition correction
+
+- Diagnosed the supplied five-second recording frame by frame. The visible failure is an occupied-frontage contact loop: entity collision pushes a horse out while RTS movement immediately corrects it back, repeating without meaningful forward progress.
+- Added reference-counted RTS mount ownership and suppressed entity-to-entity shove impulses only while a horse is controlled by an RTS formation or committed cavalry pass. Horses retain normal block collision, wall collision, terrain support, water, hole, drop and route safety behavior.
+- This lets a committed cavalry pass cross a dense enemy frontage instead of vibrating inside it. It also prevents adjacent formation horses from exchanging alternating knockback impulses while converging on their distinct slots.
+- Fixed the severe Walk-to-Run formation jump. Hasty mode previously disabled the radius-based mounted rotation limit, instantly changing a wide line from a fraction of a degree to nine degrees of stencil rotation per tick and throwing outer slots several blocks sideways.
+- All mounted pace modes now retain the radius-based rotation limit. The formation centre also ramps between walking and running at 0.015 blocks/tick per server tick instead of jumping from one pace to the other in a single update.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.12-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.11-server.1
 Optional Icy horse vocalizations
 

@@ -10,6 +10,7 @@ import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
 import ee.lastpagans.recruitsrtscamera.navigation.LocalFormationSteering;
 import ee.lastpagans.recruitsrtscamera.navigation.TacticalTerrainRevisions;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
+import ee.lastpagans.recruitsrtscamera.movement.RTSMountControlRegistry;
 import ee.lastpagans.recruitsrtscamera.network.FormationRouteSyncPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
@@ -581,16 +582,16 @@ public final class NativeFormationController {
             // of a large line must not travel several blocks sideways in one tick merely
             // because the route tangent changed by a few degrees.
             state.slotHeading = approachHeading(state.slotHeading, target,
-                    walkingSlotHeadingStep(state, members));
+                    mountedSlotHeadingStep(state, members));
         } else {
             state.slotHeading = target;
         }
         state.wasTravelling = orientToTravel;
     }
 
-    private static float walkingSlotHeadingStep(State state, List<AbstractRecruitEntity> members) {
+    private static float mountedSlotHeadingStep(State state, List<AbstractRecruitEntity> members) {
         boolean mounted = members.stream().anyMatch(member -> member.getVehicle() instanceof Mob);
-        if (!mounted || RTSMovementBoostManager.isHastyActive(state.groupId)) return 9.0F;
+        if (!mounted) return 9.0F;
         double radius = 1.0D;
         for (FormationSlotMath.Offset offset : state.offsets.values()) {
             radius = Math.max(radius, Math.hypot(offset.right(), offset.back()));
@@ -1134,10 +1135,12 @@ public final class NativeFormationController {
         final AbstractRecruitEntity rider;
         final Mob mount;
         final Goal goal;
+        boolean released;
 
         MountControl(AbstractRecruitEntity rider, Mob mount) {
             this.rider = rider;
             this.mount = mount;
+            RTSMountControlRegistry.claim(mount);
             this.goal = new Goal() {
                 {
                     setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK, Flag.JUMP, Flag.TARGET));
@@ -1161,7 +1164,10 @@ public final class NativeFormationController {
         }
 
         void release() {
+            if (released) return;
+            released = true;
             ((MobGoalAccess) mount).rts$getGoals().removeGoal(goal);
+            RTSMountControlRegistry.release(mount);
         }
     }
 

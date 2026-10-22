@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.11 behavior."""
+"""Targeted source contracts for Commander 0.15.12 behavior."""
 
 from pathlib import Path
 
@@ -49,6 +49,8 @@ formation_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/format
 rumble = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryRumbleManager.java")
 rumble_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CavalryRumbleClient.java")
 icy_horse_sounds = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/IcyHorseSoundsCompat.java")
+mount_push = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/RTSMountEntityPushMixin.java")
+mount_control = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/RTSMountControlRegistry.java")
 scheduler = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitAIScheduler.java")
 stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
@@ -102,10 +104,12 @@ require(formation, "worldSlotPoints(start, heading, offsets)",
         "new orders must assign slots against live geometry instead of the distant destination")
 require(formation, "stabilizeMountedSlots(state, members, target)",
         "mounted direction reversals must choose the nearest physical slots once")
-require(formation, "walkingSlotHeadingStep(state, members)",
+require(formation, "mountedSlotHeadingStep(state, members)",
         "walking formation rotation must account for wide outer slots")
 require(formation, "Math.toDegrees(0.14D / radius)",
         "outer mounted slots need a radius-bounded sideways step")
+forbid(formation, "RTSMovementBoostManager.isHastyActive(state.groupId)) return 9.0F",
+       "Walk-to-Run must not disable the wide-formation rotation limit")
 require(formation, "mover.setDeltaMovement(momentum)",
         "manual-control handoffs must preserve momentum for continuous animation")
 require(formation, "state.appliedHeadings.getOrDefault(recruitId, mount.getYRot())",
@@ -177,6 +181,10 @@ require(movement, "HASTY_INFANTRY_SPEED = 1.62D", "running foot navigation must 
 require(movement, "SLOW_MARCH_CAVALRY_NAV_SPEED = 0.68D", "cavalry slow pace must remain unchanged")
 require(movement, "REGULAR_CAVALRY_MOUNT_MULTIPLIER = 1.10D",
         "ordinary formation cavalry must receive the requested 2.10x mount speed")
+require(movement, "GROUP_ACCELERATION_PER_TICK = 0.015D",
+        "formation pace changes need a bounded shared acceleration")
+require(movement, "replacement.currentStep = previous.currentStep",
+        "Walk-to-Run must carry the current anchor speed across mode replacement")
 require(movement, "TacticalCombatManager.chargeAcceleration(recruit)",
         "mounted charges must progressively accelerate")
 require(tactical, "return 1.10D + 0.30D * progress;",
@@ -234,6 +242,13 @@ require(icy_horse_sounds, "path.contains(\"neigh\") || path.contains(\"whinny\")
 require(icy_horse_sounds, "level.playSound(null, horse.getX(), horse.getY(), horse.getZ()",
         "horse vocalizations must be positional at an individual mount")
 require(rumble, "IcyHorseSoundsCompat.maybePlay", "moving cavalry sampling must drive optional vocals")
+require(mount_push, "RTSMountControlRegistry.controls(self) || RTSMountControlRegistry.controls(other)",
+        "controlled mounts must not receive alternating entity shove impulses")
+require(mount_push, "callback.cancel();", "RTS mount entity pushes must be cancelled at their source")
+require(mount_control, "CLAIMS.merge(mount.getUUID(), 1, Integer::sum)",
+        "formation-to-combat mount handoffs need reference-counted collision ownership")
+require(formation, "RTSMountControlRegistry.claim(mount)", "formation movement must claim mount collision control")
+require(cavalry, "RTSMountControlRegistry.claim(mount)", "combat passes must claim mount collision control")
 require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 15_000_000L",
         "recovery paths need an aggregate tick-time guard during initial cohesion")
 require(overlay, "COMMAND_CAVALRY_WEDGE", "cavalry wedge needs a stable command-bar element")
@@ -247,6 +262,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.11-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.12-server.1", "semantic version must be updated")
 
-print("0.15.11 source contracts passed")
+print("0.15.12 source contracts passed")
