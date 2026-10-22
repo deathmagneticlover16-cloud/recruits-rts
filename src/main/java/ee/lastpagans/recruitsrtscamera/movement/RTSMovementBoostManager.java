@@ -378,6 +378,13 @@ public final class RTSMovementBoostManager {
                     ACTIVE_GROUPS.remove(groupId, state);
                     continue;
                 }
+                if ((state.mode == GroupMode.FORMATION_CAVALRY || state.mode == GroupMode.HASTY_CAVALRY)
+                        && horizontalDistance(current, state.lastCenter) > 0.035D
+                        && "CAVALRY_WEDGE".equals(FormationRuntime.currentShape(groupId))) {
+                    state.movingTicks = Math.min(20 * 20, state.movingTicks + 1);
+                } else {
+                    state.movingTicks = Math.max(0, state.movingTicks - 2);
+                }
                 state.lastCenter = current;
             }
         }
@@ -805,7 +812,12 @@ public final class RTSMovementBoostManager {
             case HASTY_CAVALRY -> RTSServerConfig.CAVALRY_HASTY_SPEED.get();
             case SLOW_MARCH -> baseStep * SLOW_MARCH_FACTOR;
         };
-        return Math.max(0.035D, step * state.externalSpeedScale);
+        boolean cavalryWedge = (state.mode == GroupMode.FORMATION_CAVALRY || state.mode == GroupMode.HASTY_CAVALRY)
+                && "CAVALRY_WEDGE".equals(FormationRuntime.currentShape(groupId));
+        double wedgeAcceleration = cavalryWedge
+                ? 1.0D + 0.25D * Math.min(1.0D, state.movingTicks / (20.0D * 12.0D))
+                : 1.0D;
+        return Math.max(0.035D, step * state.externalSpeedScale * wedgeAcceleration);
     }
 
     public static boolean isSlowMarchActive(UUID groupId) {
@@ -876,6 +888,7 @@ public final class RTSMovementBoostManager {
         private final GroupMode mode;
         private int remainingTicks;
         private Vec3 lastCenter;
+        private int movingTicks;
         private final double externalSpeedScale;
 
         private GroupBoostState(GroupMode mode, int remainingTicks, Vec3 lastCenter, double externalSpeedScale) {

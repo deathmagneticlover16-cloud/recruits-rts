@@ -55,6 +55,13 @@ public record SetFormationPacket(List<UUID> groupIds, FormationKind kind) {
 
     public static void handle(SetFormationPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
         NetworkEvent.Context context = contextSupplier.get();
+        if (packet.kind == FormationKind.CAVALRY_WEDGE) {
+            // Wedge is a native RTS formation with its own acceleration state; relaying it as
+            // the base mod's generic triangle would discard both its identity and eligibility.
+            context.enqueueWork(() -> execute(packet, context.getSender()));
+            context.setPacketHandled(true);
+            return;
+        }
         String relayCommand = relayCommand(packet.kind);
         context.enqueueWork(() -> OrderRelayCompat.executeOrRelay(
                 context, packet.groupIds(), relayCommand,
@@ -78,6 +85,10 @@ public record SetFormationPacket(List<UUID> groupIds, FormationKind kind) {
         for (Map.Entry<UUID, List<AbstractRecruitEntity>> entry : groups.entrySet()) {
             UUID groupId = entry.getKey();
             List<AbstractRecruitEntity> allRecruits = entry.getValue();
+            if (packet.kind == FormationKind.CAVALRY_WEDGE) {
+                long cavalry = allRecruits.stream().filter(RTSMovementBoostManager::isCavalry).count();
+                if (cavalry * 2 <= allRecruits.size()) continue;
+            }
             FormationService.remember(sender.serverLevel(), groupId, packet.kind);
 
             List<AbstractRecruitEntity> formationRecruits = SiegeWeaponsCompat.withoutAttachedArtillery(allRecruits);
@@ -144,6 +155,7 @@ public record SetFormationPacket(List<UUID> groupIds, FormationKind kind) {
             case HOLLOW_SQUARE -> "formation_h_square";
             case VEE -> "formation_vee";
             case BUBBLE -> "formation_none";
+            case CAVALRY_WEDGE -> "formation_wedge";
         };
     }
 

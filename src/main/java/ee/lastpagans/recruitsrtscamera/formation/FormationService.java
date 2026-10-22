@@ -89,18 +89,23 @@ public final class FormationService {
         }
         ServerLevel level = sender.serverLevel();
         FormationKind preferred = preferred(level, groupId);
+        RTSFormationSavedData.GroupState previous = state(level, groupId);
+        // Dragging frontage changes width/facing, not the group's spacing doctrine.
+        // Preserve an existing loose-spacing choice across the authored line order.
+        double effectiveSpacing = previous != null && previous.spacing() > 1.10D
+                ? previous.spacing() : spacing;
         RTSFormationSavedData.get(level).put(groupId, new RTSFormationSavedData.GroupState(
                 FormationMode.FRONTAGE,
                 preferred,
                 FormationKind.LINE,
-                spacing,
+                effectiveSpacing,
                 ranks,
                 facingYaw,
                 Map.of(),
                 1
         ));
         FormationPlan plan = FormationPlanner.frontage(
-                groupId, destination, width, facingYaw, ranks, spacing
+                groupId, destination, width, facingYaw, ranks, effectiveSpacing
         );
         return FormationRuntime.executePlan(sender, recruits, plan);
     }

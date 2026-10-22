@@ -82,6 +82,7 @@ public final class CommanderAnimationHints {
             sample.state = next;
             publishMovement(recruit, next);
         }
+        synchronizeSprintState(recruit, next);
     }
 
     public static MovementState movementState(AbstractRecruitEntity recruit) {
@@ -101,6 +102,17 @@ public final class CommanderAnimationHints {
         recruit.getPersistentData().putString(MOVEMENT_KEY, state.name());
         recruit.getPersistentData().putBoolean(WALKING_KEY, state == MovementState.WALKING);
         recruit.getPersistentData().putBoolean(RUNNING_KEY, state == MovementState.RUNNING);
+        // SPA and other animation packs commonly use the vanilla sprint flag as their
+        // inexpensive run-state signal. Keep it aligned with the public semantic state.
+        synchronizeSprintState(recruit, state);
+    }
+
+    private static void synchronizeSprintState(AbstractRecruitEntity recruit, MovementState state) {
+        boolean running = state == MovementState.RUNNING;
+        if (recruit.isSprinting() != running) recruit.setSprinting(running);
+        if (recruit.getVehicle() != null && recruit.getVehicle().isSprinting() != running) {
+            recruit.getVehicle().setSprinting(running);
+        }
     }
 
     private static MovementState persistedMovement(AbstractRecruitEntity recruit) {

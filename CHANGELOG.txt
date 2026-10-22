@@ -1,3 +1,17 @@
+Recruits: RTS Camera 0.15.6-server.1
+Cavalry wedge, troop statistics and mounted polish
+
+- Added a cavalry-only Wedge command as the right-most eligible command-bar icon. Its filled triangular slots retain cavalry spacing and progressively build up to a bounded 25% movement bonus during uninterrupted travel.
+- Added a stable troop/group-wide model for Damage, Melee Skill, Melee Defence, Charge Bonus, Speed, Morale, Fatigue, Accuracy, Ammunition and Rate of Fire. The values are complete neutral metadata and are not yet applied to combat.
+- Added data-only pixel-slot and repeat-segment formation blueprint contracts for future custom-formation editing without tying troop statistics to formation geometry.
+- Ordinary mounted formations and frontage use 1.3x wider spacing; loose spacing keeps its existing width. Frontage dragging now carries the group's saved loose-spacing value forward.
+- Mounted laggard catch-up is capped to remove teleport-like surges. Short moves under four blocks keep the current formation facing instead of rotating the entire stencil out and back.
+- Recruited mounts gain 75% maximum health while ridden by a managed recruit. The transient bonus is removed cleanly when RTS cavalry management releases the mount.
+- RTS WALKING/RUNNING hints now also synchronize the recruit and mount sprint flags, allowing SPA-style animation controllers to observe commanded running without polling or persistent-data churn.
+- Added the supplied positional cavalry rumble. One streamed sound plays from each moving group's center; volume is riders x actual speed with independently stacking 15% wedge and charge emphasis.
+- Network protocol is now rts-camera-156 because CAVALRY_WEDGE extends the formation enum carried by formation packets. Update clients and server together.
+- Source version and packaging references are 0.15.6-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.5-server.2
 Stable cavalry slots, direct routes and animation movement states
 

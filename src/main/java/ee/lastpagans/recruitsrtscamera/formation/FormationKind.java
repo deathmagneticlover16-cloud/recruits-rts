@@ -16,12 +16,17 @@ public enum FormationKind {
     CIRCLE,
     HOLLOW_SQUARE,
     VEE,
-    BUBBLE;
+    BUBBLE,
+    /** Mounted shock formation exposed as its own Commander command. */
+    CAVALRY_WEDGE;
 
     private static final FormationKind[] VALUES = values();
 
     public FormationKind next() {
-        return VALUES[(ordinal() + 1) % VALUES.length];
+        // Cavalry wedge has its own eligibility-gated command. Keep the ordinary cycle
+        // on the original general-purpose formations so infantry cannot become stuck on it.
+        int generalPurposeCount = CAVALRY_WEDGE.ordinal();
+        return this == CAVALRY_WEDGE ? MARCH : VALUES[(ordinal() + 1) % generalPurposeCount];
     }
 
     public String displayName() {

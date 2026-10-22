@@ -7,5 +7,6 @@
   "advisor_units_exhausted": {"sounds": ["recruits_rts_camera:advisor/latin/latin_10", "recruits_rts_camera:advisor/latin/latin_16", "recruits_rts_camera:advisor/latin/latin_17"]},
   "advisor_enemy_commander_fallen": {"sounds": ["recruits_rts_camera:advisor/latin/latin_13", "recruits_rts_camera:advisor/latin/latin_14"]},
   "advisor_enemy_unit_rout": {"sounds": ["recruits_rts_camera:advisor/latin/latin_15"]},
-  "advisor_artillery_attacked": {"sounds": ["recruits_rts_camera:advisor/latin/latin_18"]}
+  "advisor_artillery_attacked": {"sounds": ["recruits_rts_camera:advisor/latin/latin_18"]},
+  "cavalry_rumble": {"sounds": [{"name": "recruits_rts_camera:cavalry/horse_run_rumble", "stream": true}]}
 }

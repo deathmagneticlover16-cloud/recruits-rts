@@ -36,6 +36,10 @@ public record FormationDoctrine(
                     "Aggressive V formation with good forward pressure");
             case BUBBLE -> new FormationDoctrine(-0.12D, 0.00D, 0.15D,
                     "Compact protective formation");
+            // Wedge acceleration is owned by cavalry movement. The generic doctrine
+            // remains neutral so the future troop-stat system is not applied prematurely.
+            case CAVALRY_WEDGE -> new FormationDoctrine(0.0D, 0.0D, 0.0D,
+                    "Mounted wedge that builds speed while advancing");
         };
     }
 

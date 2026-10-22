@@ -224,7 +224,7 @@ public final class SmallShipsCompat {
                     raw.add(new Vec3(center.x - forwardX * back, center.y, center.z - forwardZ * back));
                 }
             }
-            case TRIANGLE, VEE -> {
+            case TRIANGLE, VEE, CAVALRY_WEDGE -> {
                 raw.add(center);
                 int placed = 1;
                 for (int rank = 1; placed < count; rank++) {

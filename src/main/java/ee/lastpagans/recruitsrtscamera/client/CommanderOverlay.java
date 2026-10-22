@@ -249,6 +249,11 @@ public final class CommanderOverlay {
             RTSCommandFacade.toggleBodyguardFollow();
             return true;
         }
+        if (RTSCommandFacade.selectedHasCavalryMajority()
+                && layout.cavalryWedgeButton().contains(mouseX, mouseY)) {
+            RTSCommandFacade.setFormation(FormationKind.CAVALRY_WEDGE);
+            return true;
+        }
         List<RTSCommandFacade.UnitCardView> groups = RTSCommandFacade.unitCards();
         for (CardHitbox hitbox : cardHitboxes(groups, layout)) {
             if (hitbox.bounds().contains(mouseX, mouseY)) {
@@ -725,13 +730,16 @@ public final class CommanderOverlay {
     }
 
     private static void drawFormationIcon(GuiGraphics graphics, FormationKind kind, int x, int y) {
-        int row = Math.max(0, Math.min(FormationKind.values().length - 1, kind.ordinal()));
+        // The authored sheet has the original nine rows. Cavalry wedge deliberately reuses
+        // the triangle artwork while remaining a separate command and runtime formation.
+        int row = kind == FormationKind.CAVALRY_WEDGE ? FormationKind.TRIANGLE.ordinal()
+                : Math.max(0, Math.min(8, kind.ordinal()));
         graphics.blit(
                 CommanderGuiTextures.FORMATION_ICONS,
                 x, y,
                 0, row * FORMATION_ICON_SIZE,
                 FORMATION_ICON_SIZE, FORMATION_ICON_SIZE,
-                FORMATION_ICON_SIZE, FORMATION_ICON_SIZE * FormationKind.values().length
+                FORMATION_ICON_SIZE, FORMATION_ICON_SIZE * 9
         );
     }
 
@@ -828,6 +836,7 @@ public final class CommanderOverlay {
         if (rangedMajority) recordUi(CommanderUiElementIds.COMMAND_SKIRMISH, layout.skirmishButton());
         recordUi(CommanderUiElementIds.COMMAND_BODYGUARD, layout.bodyguardButton());
         recordUi(CommanderUiElementIds.COMMAND_BODYGUARD_FOLLOW, layout.bodyguardFollowButton());
+        if (cavalryMajority) recordUi(CommanderUiElementIds.COMMAND_CAVALRY_WEDGE, layout.cavalryWedgeButton());
 
         renderTextCommandButton(graphics, layout.paceButton(), running ? "<<" : "<", hasSelection, running);
         renderIconCommandButton(graphics, layout.formationButton(),
@@ -852,6 +861,9 @@ public final class CommanderOverlay {
                 CommanderGuiTextures.COMMAND_BODYGUARD, canBodyguard, bodyguard);
         renderIconCommandButton(graphics, layout.bodyguardFollowButton(),
                 CommanderGuiTextures.COMMAND_BODYGUARD_FOLLOW, canFollowBodyguard, followBodyguard);
+        if (cavalryMajority) renderFormationCommandButton(graphics, layout.cavalryWedgeButton(),
+                FormationKind.CAVALRY_WEDGE,
+                RTSCommandFacade.commonSelectedFormationKind() == FormationKind.CAVALRY_WEDGE);
 
         if (!RTSCommandFacade.commandCursor()) return;
         int mx = guiMouseX();
@@ -894,7 +906,18 @@ public final class CommanderOverlay {
             renderCommandTooltip(graphics, followBodyguard ? "Bodyguard Follows: ON" : "Bodyguard Follows",
                     canFollowBodyguard ? "Toggle whether the Bodyguard follows your real player."
                             : "Assign a General's Bodyguard first.");
+        } else if (cavalryMajority && layout.cavalryWedgeButton().contains(mx, my)) {
+            renderCommandTooltip(graphics, "Cavalry Wedge",
+                    "A cavalry-only wedge that builds speed while it keeps moving.");
         }
+    }
+
+    private static void renderFormationCommandButton(
+            GuiGraphics graphics, Bounds bounds, FormationKind kind, boolean active
+    ) {
+        graphics.fill(bounds.x1(), bounds.y1(), bounds.x2(), bounds.y2(), active ? 0xCC554817 : 0xB824231F);
+        drawBorder(graphics, bounds, active ? GOLD : 0xFF6F6544);
+        drawFormationIcon(graphics, kind, bounds.x1() + 1, bounds.y1() + 1);
     }
 
     private static void renderTextCommandButton(
@@ -1147,7 +1170,7 @@ public final class CommanderOverlay {
         boolean showMount = RTSCommandFacade.selectedHasCavalryMajority();
         boolean showFire = RTSCommandFacade.selectedHasRangedWeapons();
         boolean showSkirmish = RTSCommandFacade.selectedHasRangedMajority();
-        int commandCount = 8 + (showMount ? 1 : 0) + (showFire ? 1 : 0) + (showSkirmish ? 1 : 0);
+        int commandCount = 8 + (showMount ? 2 : 0) + (showFire ? 1 : 0) + (showSkirmish ? 1 : 0);
         int totalButtons = COMMAND_BUTTON_SIZE * commandCount + COMMAND_BUTTON_GAP * (commandCount - 1);
         int buttonX = panelX + Math.max(8, (panelWidth - totalButtons) / 2);
         int buttonY1 = panelBottom - COMMAND_BAR_HEIGHT + 2;
@@ -1183,6 +1206,10 @@ public final class CommanderOverlay {
         Bounds bodyguard = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
         buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
         Bounds bodyguardFollow = new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2);
+        buttonX += COMMAND_BUTTON_SIZE + COMMAND_BUTTON_GAP;
+        Bounds cavalryWedge = showMount
+                ? new Bounds(buttonX, buttonY1, buttonX + COMMAND_BUTTON_SIZE, buttonY2)
+                : new Bounds(0, 0, 0, 0);
 
         return new Layout(
                 panelX, panelY, panelRight, panelBottom,
@@ -1190,7 +1217,7 @@ public final class CommanderOverlay {
                 cardsX, cardsRight - navSpace,
                 cardsPerPage, pageCount,
                 prev, next, pace, formation, selectionGroup, halt, aggression, mount,
-                looseSpacing, fireControl, skirmish, bodyguard, bodyguardFollow
+                looseSpacing, fireControl, skirmish, bodyguard, bodyguardFollow, cavalryWedge
         );
     }
 
@@ -1322,7 +1349,8 @@ public final class CommanderOverlay {
             Bounds fireControlButton,
             Bounds skirmishButton,
             Bounds bodyguardButton,
-            Bounds bodyguardFollowButton
+            Bounds bodyguardFollowButton,
+            Bounds cavalryWedgeButton
     ) {
         private static final Layout EMPTY = new Layout(0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
@@ -1331,7 +1359,8 @@ public final class CommanderOverlay {
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
                 new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
                 new Bounds(0, 0, 0, 0),
-                new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0));
+                new Bounds(0, 0, 0, 0), new Bounds(0, 0, 0, 0),
+                new Bounds(0, 0, 0, 0));
 
         boolean contains(int x, int y) {
             return x >= panelX && x < panelRight && y >= panelY && y < panelBottom;

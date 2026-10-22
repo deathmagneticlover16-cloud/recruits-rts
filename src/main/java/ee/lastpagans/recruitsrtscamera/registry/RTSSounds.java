@@ -23,6 +23,7 @@ public final class RTSSounds {
     public static final RegistryObject<SoundEvent> ADVISOR_ENEMY_COMMANDER_FALLEN = register("advisor_enemy_commander_fallen");
     public static final RegistryObject<SoundEvent> ADVISOR_ENEMY_UNIT_ROUT = register("advisor_enemy_unit_rout");
     public static final RegistryObject<SoundEvent> ADVISOR_ARTILLERY_ATTACKED = register("advisor_artillery_attacked");
+    public static final RegistryObject<SoundEvent> CAVALRY_RUMBLE = register("cavalry_rumble");
 
     private RTSSounds() {
     }

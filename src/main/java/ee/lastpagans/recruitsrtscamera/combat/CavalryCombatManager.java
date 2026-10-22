@@ -39,6 +39,8 @@ import java.util.UUID;
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class CavalryCombatManager {
     private static final UUID SPEED_ID = UUID.fromString("fe74a3c8-728f-4d41-bb90-3014d6a5db0b");
+    private static final UUID MOUNT_HEALTH_ID = UUID.fromString("a7d39069-9e55-4ae3-a511-d36715156c92");
+    private static final double MOUNT_HEALTH_BONUS = 0.75D;
     private static final Map<UUID, RiderState> RIDERS = new HashMap<>();
     private static final Map<UUID, ShockWindow> LAST_SHOCK = new HashMap<>();
     private static final Map<UUID, Long> LAST_PRESSURE = new HashMap<>();
@@ -65,9 +67,10 @@ public final class CavalryCombatManager {
                 seen.add(id);
                 RiderState state = RIDERS.get(id);
                 if (state == null || state.mount != mount || state.level != level) {
-                    if (state != null) removeSpeed(state.mount);
+                    if (state != null) removeMountModifiers(state.mount);
                     state = new RiderState(mount, level);
                     RIDERS.put(id, state);
+                    applyMountedHealth(mount);
                 }
                 // runtime formation pacing already has a separate attribute/stride pass. Do not
                 // multiply it a second time. Outside formations this affects native horse AI.
@@ -80,7 +83,7 @@ public final class CavalryCombatManager {
             }
         }
         for (UUID id : List.copyOf(RIDERS.keySet())) {
-            if (!seen.contains(id)) removeSpeed(RIDERS.remove(id).mount);
+            if (!seen.contains(id)) removeMountModifiers(RIDERS.remove(id).mount);
         }
         long now = server.overworld().getGameTime();
         if (now % 200 == 0) {
@@ -234,14 +237,29 @@ public final class CavalryCombatManager {
                 "RTS cavalry combat pace", amount, AttributeModifier.Operation.MULTIPLY_TOTAL));
     }
 
-    private static void removeSpeed(Mob mount) {
+    private static void applyMountedHealth(Mob mount) {
+        AttributeInstance health = mount.getAttribute(Attributes.MAX_HEALTH);
+        if (health == null || health.getModifier(MOUNT_HEALTH_ID) != null) return;
+        double oldMaximum = health.getValue();
+        health.addTransientModifier(new AttributeModifier(MOUNT_HEALTH_ID,
+                "RTS recruited cavalry mount health", MOUNT_HEALTH_BONUS,
+                AttributeModifier.Operation.MULTIPLY_TOTAL));
+        mount.setHealth((float) Math.min(health.getValue(), mount.getHealth() + health.getValue() - oldMaximum));
+    }
+
+    private static void removeMountModifiers(Mob mount) {
         AttributeInstance attribute = mount.getAttribute(Attributes.MOVEMENT_SPEED);
         if (attribute != null) attribute.removeModifier(SPEED_ID);
+        AttributeInstance health = mount.getAttribute(Attributes.MAX_HEALTH);
+        if (health != null) {
+            health.removeModifier(MOUNT_HEALTH_ID);
+            if (mount.getHealth() > health.getValue()) mount.setHealth((float) health.getValue());
+        }
     }
 
     @SubscribeEvent
     public static void onStop(ServerStoppedEvent event) {
-        for (RiderState state : RIDERS.values()) removeSpeed(state.mount);
+        for (RiderState state : RIDERS.values()) removeMountModifiers(state.mount);
         RIDERS.clear();
         LAST_SHOCK.clear();
         LAST_PRESSURE.clear();

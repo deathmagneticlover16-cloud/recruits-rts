@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.5 behavior."""
+"""Targeted source contracts for Commander 0.15.6 behavior."""
 
 from pathlib import Path
 
@@ -44,6 +44,11 @@ cavalry_combat = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/Ca
 mode_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/RTSModeStatePacket.java")
 attack_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/AttackGroupsPacket.java")
 animation_hints = source("src/main/java/ee/lastpagans/recruitsrtscamera/animation/CommanderAnimationHints.java")
+slots = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationSlotMath.java")
+formation_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationService.java")
+rumble = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryRumbleManager.java")
+stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
+stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -162,8 +167,28 @@ require(animation_hints, "public enum MovementState { IDLE, WALKING, RUNNING }",
         "animation integrations need explicit walking and running states")
 require(animation_hints, "IDLE_HYSTERESIS_TICKS = 6",
         "one-tick movement handoffs must not reset locomotion animations")
+require(animation_hints, "synchronizeSprintState(recruit, next)",
+        "RTS run intent must reach sprint-based SPA animation controllers")
+require(slots, "case CAVALRY_WEDGE -> addCavalryWedge", "wedge needs dedicated filled geometry")
+require(slots, "1.7D * (spacing <= 1.10D ? 1.30D : 1.0D)",
+        "normal mounted geometry must be 1.3x wider without widening loose spacing twice")
+require(formation_service, "previous.spacing() > 1.10D", "frontage dragging must preserve loose spacing")
+require(formation, "state.rotateForTravel = horizontalDistanceSq(state.center, destination) > 4.0D * 4.0D",
+        "short orders must not rotate the whole formation out and back")
+require(formation, "? slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.08D",
+        "mounted laggards need bounded catch-up instead of teleport-like surges")
+require(cavalry_combat, "MOUNT_HEALTH_BONUS = 0.75D", "managed recruited mounts need extra health")
+require(rumble, "riders * speed * emphasis / 12.0D", "rumble volume must use riders x actual speed")
+require(rumble, "(wedge ? 1.15D : 1.0D) * (charging ? 1.15D : 1.0D)",
+        "wedge and charge sound emphasis must stack")
+require(overlay, "COMMAND_CAVALRY_WEDGE", "cavalry wedge needs a stable command-bar element")
+require(overlay, "bodyguardFollow, cavalryWedge", "cavalry wedge must be the right-most command")
+for key in ("DAMAGE", "MELEE_SKILL", "MELEE_DEFENCE", "CHARGE_BONUS", "SPEED", "MORALE",
+            "FATIGUE", "ACCURACY", "AMMUNITION", "RATE_OF_FIRE"):
+    require(stats, key + "(\"stat.", "all ten troop-wide statistics must have stable IDs")
+require(stat_registry, "Map<UUID, TroopStatProfile>", "statistics must be stored per troop group")
 
-require(network, 'PROTOCOL = "rts-camera-150"', "wire-compatible release must retain protocol 150")
-require(source("gradle.properties"), "mod_version=0.15.5-server.2", "semantic version must be updated")
+require(network, 'PROTOCOL = "rts-camera-156"', "wedge enum requires protocol 156")
+require(source("gradle.properties"), "mod_version=0.15.6-server.1", "semantic version must be updated")
 
-print("0.15.5 source contracts passed")
+print("0.15.6 source contracts passed")

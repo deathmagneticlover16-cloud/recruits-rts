@@ -18,8 +18,11 @@ public final class FormationSlotMath {
             boolean mounted
     ) {
         if (count <= 0) return List.of();
-        double side = Math.max(1.0D, 1.02D * spacing) * (mounted ? 1.7D : 1.0D);
-        double depth = Math.max(1.1D, 1.12D * spacing) * (mounted ? 1.7D : 1.0D);
+        // Ordinary mounted formations need substantially more room for their collision
+        // bodies. Loose spacing is already explicit and must not receive this again.
+        double mountedScale = mounted ? 1.7D * (spacing <= 1.10D ? 1.30D : 1.0D) : 1.0D;
+        double side = Math.max(1.0D, 1.02D * spacing) * mountedScale;
+        double depth = Math.max(1.1D, 1.12D * spacing) * mountedScale;
         List<Offset> result = new ArrayList<>(count);
         switch (kind == null ? FormationKind.MARCH : kind) {
             // A march is a road column. Keep two files for normal groups and a single
@@ -57,9 +60,21 @@ public final class FormationSlotMath {
                     result.add(new Offset((i % 2 == 1 ? -rank : rank) * side, rank * depth));
                 }
             }
+            case CAVALRY_WEDGE -> addCavalryWedge(result, count, side, depth);
         }
         center(result);
         return List.copyOf(result);
+    }
+
+    private static void addCavalryWedge(
+            List<Offset> result, int count, double side, double depth
+    ) {
+        for (int row = 0; result.size() < count; row++) {
+            int width = row + 1;
+            for (int column = 0; column < width && result.size() < count; column++) {
+                result.add(new Offset((column - (width - 1) / 2.0D) * side, row * depth));
+            }
+        }
     }
 
     /** Hungarian assignment for normal groups; deterministic greedy fallback for very large groups. */

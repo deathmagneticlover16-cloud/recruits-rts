@@ -215,6 +215,7 @@ public final class NativeFormationController {
         // the virtual centre itself would make every slot jump, and translating an older
         // destination would make an already-moving formation continue beyond the preview.
         state.destination = state.center.add(delta);
+        state.rotateForTravel = horizontalDistanceSq(state.center, state.destination) > 4.0D * 4.0D;
         invalidateRoutes(state);
         return true;
     }
@@ -223,6 +224,7 @@ public final class NativeFormationController {
         State state = STATES.get(groupId);
         if (state == null || destination == null) return false;
         state.destination = destination;
+        state.rotateForTravel = horizontalDistanceSq(state.center, destination) > 4.0D * 4.0D;
         // Keep following the already-safe route instead of resetting every member. Once
         // its published segment is consumed, advanceAlongRoute requests the continuation.
         if (state.route.points().isEmpty() || state.routeIndex >= state.route.points().size()) {
@@ -473,7 +475,11 @@ public final class NativeFormationController {
             if (grounded != null) desired = grounded;
             double slotError = horizontalDistanceSq(mover.position(), desired);
             double heightError = Math.abs(mover.getY() - desired.y);
-            double catchUpScale = slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.40D
+            boolean mountedMember = mover != recruit;
+            double catchUpScale = mountedMember
+                    ? slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.08D
+                    : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.04D : 1.0D
+                    : slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.40D
                     : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.20D : 1.0D;
             recruit.setHoldPos(desired);
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
@@ -486,7 +492,7 @@ public final class NativeFormationController {
             // during the same tick, producing constant alternating yaw. Keep every moving
             // body on the shared route tangent; restore the ordered per-member facing only
             // after both the anchor and this member have settled.
-            float controlledHeading = travelling
+            float controlledHeading = travelling && state.rotateForTravel
                     ? mover != recruit
                     ? mountedTravelHeading(mover, desired, state.travelHeading)
                     : state.travelHeading
@@ -549,20 +555,21 @@ public final class NativeFormationController {
     private static void updateSlotHeading(
             State state, List<AbstractRecruitEntity> members, boolean travelling
     ) {
-        float target = travelling ? state.travelHeading : state.heading;
-        if (travelling != state.wasTravelling) {
+        boolean orientToTravel = travelling && state.rotateForTravel;
+        float target = orientToTravel ? state.travelHeading : state.heading;
+        if (orientToTravel != state.wasTravelling) {
             // A 180-degree order should make horses turn in their current places instead
             // of preserving abstract row identities and crossing the full formation.
             stabilizeMountedSlots(state, members, target);
             state.slotHeading = target;
-        } else if (travelling) {
+        } else if (orientToTravel) {
             // Route-cell corners otherwise rotate far slots several blocks in one tick.
             // Ease the stencil through bends while every member retains its chosen slot.
             state.slotHeading = approachHeading(state.slotHeading, target, 9.0F);
         } else {
             state.slotHeading = target;
         }
-        state.wasTravelling = travelling;
+        state.wasTravelling = orientToTravel;
     }
 
     private static void stabilizeMountedSlots(
@@ -1073,6 +1080,7 @@ public final class NativeFormationController {
         boolean lastSyncedMoving;
         float slotHeading;
         boolean wasTravelling;
+        boolean rotateForTravel;
 
         State(UUID groupId, UUID ownerId, ResourceKey<Level> levelKey, FormationKind kind,
               float heading, Vec3 center, Vec3 destination,
@@ -1086,6 +1094,7 @@ public final class NativeFormationController {
             this.slotHeading = heading;
             this.center = center;
             this.destination = destination;
+            this.rotateForTravel = horizontalDistanceSq(center, destination) > 4.0D * 4.0D;
             this.offsets = new LinkedHashMap<>(offsets);
             this.facings = new HashMap<>(facings);
             this.hold = hold;
