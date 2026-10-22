@@ -60,6 +60,8 @@ forbid(cavalry, "s.mount.getNavigation().stop();\n                if (s.maneuver
        "combat stall recovery must not inject an animation-breaking stop")
 require(cavalry, "lastNavigationGoal.distanceToSqr(navigationGoal) > 1.5D * 1.5D",
         "combat navigation must avoid redundant path resets")
+forbid(cavalry, "if (++s.repath < 10) return;",
+       "combat maneuvers must not wait after reaching an intermediate waypoint")
 forbid(formation[formation.index("private static void claim("):formation.index("private static void releaseMembers(")],
        "ownerRot", "claim must not compete for rotation")
 require(formation, "new Vec3(goal.x, resolved.y, goal.z)",
@@ -74,6 +76,8 @@ require(formation, "approachHeading(state.slotHeading, target, 9.0F)",
         "formation geometry must ease through route bends without slot snapping")
 require(formation, "mover.setDeltaMovement(momentum)",
         "manual-control handoffs must preserve momentum for continuous animation")
+require(formation, "horizontalDistanceSq(mount.position(), desired) > 1.50D * 1.50D",
+        "minor mounted slot errors must not swing horse facing away from the route")
 require(formation, "QUICK_PATH_BUDGET_NANOS = 20_000_000L",
         "difficult route planning must use the 20 ms staged-planning budget")
 require(formation, "state.routeGoal = requestedDestination",
@@ -82,6 +86,12 @@ require(formation, "state.routeGoal = requestedDestination",
 require(pathfinder, "mover instanceof AbstractHorse", "cavalry rises need a dedicated route cost")
 require(steering, "recruit.getVehicle() == mover && mover.onGround()",
         "mounted local steering must actively jump a safe rise")
+require(steering, "recruit.getVehicle() == null ? separation(recruit) : Vec3.ZERO",
+        "mounted steering must not alternate lateral neighbor impulses")
+require(steering, "forward.scale(0.45D / forwardLength)",
+        "mounted MoveControl needs forward lookahead to avoid stop-start animation")
+require(steering, "lateralLimit = slotDistance > 1.50D ? 0.12D : 0.045D",
+        "mounted slot correction must bound side-to-side steering")
 require(formation, "recruit.getVehicle() == mover && mover.onGround()",
         "mounted tactical waypoints must actively jump a safe rise")
 require(pathfinder, "if (!dryAt(level, mover, feet)) return null;", "fluid rejection must remain")
@@ -154,6 +164,6 @@ require(animation_hints, "IDLE_HYSTERESIS_TICKS = 6",
         "one-tick movement handoffs must not reset locomotion animations")
 
 require(network, 'PROTOCOL = "rts-camera-150"', "wire-compatible release must retain protocol 150")
-require(source("gradle.properties"), "mod_version=0.15.5-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.5-server.2", "semantic version must be updated")
 
 print("0.15.5 source contracts passed")

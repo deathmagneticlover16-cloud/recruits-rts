@@ -1,6 +1,8 @@
-Recruits: RTS Camera 0.15.5-server.1
+Recruits: RTS Camera 0.15.5-server.2
 Stable cavalry slots, direct routes and animation movement states
 
+- Removed a combat waypoint command gap that could leave horses stopped for up to nine ticks. Maneuver goals now advance immediately, while rejected paths retry on a bounded cooldown.
+- Mounted local steering no longer receives alternating neighbor-separation impulses. A safe forward lookahead keeps MoveControl ahead of the moving slot, and minor slot errors no longer swing horse facing away from the route.
 - Move orders assign slots from the live formation instead of the distant destination. Mounted formations perform a one-time nearest-slot remap on direction reversals, allowing horses to turn in place instead of crossing to the opposite end.
 - Formation stencil heading eases through route bends while each cavalryman retains its slot, reducing target jumps, rubberbanding and erratic lateral corrections.
 - Tactical A* now uses an admissible direct-distance heuristic and safely removes grid stair-stepping on open terrain. Narrow passages, climbable cells, water, holes, unsupported drops and terrain revision checks remain protected.
@@ -8,7 +10,7 @@ Stable cavalry slots, direct routes and animation movement states
 - Cavalry combat no longer stops the mount during stall recovery and only replaces its navigation path when the maneuver destination materially changes, navigation completes or a bounded refresh expires.
 - Animation integrations can read `CommanderAnimationHints.MovementState` or the persistent `RecruitsRTSMovementState`, `RecruitsRTSWalking` and `RecruitsRTSRunning` keys. Six-tick idle hysteresis masks isolated path-handoff pauses without per-tick persistent-data writes.
 - Network protocol remains rts-camera-150 because packet registration and wire formats are unchanged.
-- Source version and packaging references are 0.15.5-server.1. The Forge build remains for the packager by request.
+- Source version and packaging references are 0.15.5-server.2. The Forge build remains for the packager by request.
 
 Recruits: RTS Camera 0.15.4-server.2
 Cavalry pace, progressive charges and continuous formation travel

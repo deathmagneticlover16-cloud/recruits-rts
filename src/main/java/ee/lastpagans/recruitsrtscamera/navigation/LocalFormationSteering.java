@@ -27,16 +27,41 @@ public final class LocalFormationSteering {
         Vec3 position = mover.position();
         Vec3 error = desired.subtract(position);
         Vec3 current = mover.getDeltaMovement();
+        Vec3 formationVelocity = slotVelocity == null
+                ? Vec3.ZERO : new Vec3(slotVelocity.x, 0.0D, slotVelocity.z);
         Vec3 requested = new Vec3(error.x * 0.34D, 0.0D, error.z * 0.34D)
-                .add(slotVelocity == null ? Vec3.ZERO : new Vec3(slotVelocity.x, 0.0D, slotVelocity.z))
+                .add(formationVelocity)
                 .subtract(new Vec3(current.x * 0.08D, 0.0D, current.z * 0.08D))
-                .add(separation(recruit));
+                // Mounted collision bodies and assigned 1.7-block slots already provide
+                // separation. Alternating neighbor impulses made horses weave left/right.
+                .add(recruit.getVehicle() == null ? separation(recruit) : Vec3.ZERO);
+        double slotDistance = Math.hypot(error.x, error.z);
+        double formationSpeed = formationVelocity.length();
+        if (recruit.getVehicle() == mover && formationSpeed > 1.0E-5D) {
+            Vec3 travel = formationVelocity.scale(1.0D / formationSpeed);
+            double along = requested.dot(travel);
+            Vec3 lateral = requested.subtract(travel.scale(along));
+            double lateralLength = lateral.length();
+            double lateralLimit = slotDistance > 1.50D ? 0.12D : 0.045D;
+            if (lateralLength > lateralLimit) lateral = lateral.scale(lateralLimit / lateralLength);
+            requested = travel.scale(along).add(lateral);
+        }
         double safeScale = Math.max(1.0D, Math.min(1.25D, catchUpScale));
         double maximum = (recruit.getVehicle() == null ? 0.18D : 0.22D) * safeScale;
         double horizontal = Math.hypot(requested.x, requested.z);
         if (horizontal > maximum) requested = requested.scale(maximum / horizontal);
 
-        Vec3 probe = position.add(requested.scale(2.5D));
+        boolean mounted = recruit.getVehicle() == mover;
+        Vec3 forward = formationVelocity.multiply(1.0D, 0.0D, 1.0D);
+        double forwardLength = forward.length();
+        // Stay well inside mounted row spacing so the lookahead never targets the horse
+        // in front. Laggards omit lead and correct directly toward their own slot.
+        Vec3 lead = mounted && slotDistance < 1.50D && forwardLength > 1.0E-5D
+                ? forward.scale(0.45D / forwardLength) : Vec3.ZERO;
+        Vec3 probe = position.add(requested.scale(mounted ? 2.75D : 2.5D)).add(lead);
+        if (mounted && !TacticalPathfinder.canSteerDirect(level, mover, probe)) {
+            probe = position.add(requested.scale(2.5D));
+        }
         Vec3 safe = TacticalPathfinder.standableAt(level, mover, probe);
         // Never fall back to an unchecked desired point. A moving formation can shift
         // its slot after the staggered direct-route probe; stopping for one update is
@@ -49,8 +74,8 @@ public final class LocalFormationSteering {
         }
         // The probe only proves the next part of the route. A farther look-ahead keeps
         // MoveControl from being reset to a point under half a block away every tick.
-        double lookAhead = Math.min(1.75D, Math.sqrt(error.x * error.x + error.z * error.z));
-        Vec3 target = lookAhead <= 1.0E-5D ? safe
+        double lookAhead = Math.min(1.75D, slotDistance);
+        Vec3 target = lookAhead <= 1.0E-5D || mounted ? safe
                 : position.add(error.x / Math.hypot(error.x, error.z) * lookAhead,
                 safe.y - position.y, error.z / Math.hypot(error.x, error.z) * lookAhead);
         // Horses do not reliably invoke their jump controller when MoveControl is aimed

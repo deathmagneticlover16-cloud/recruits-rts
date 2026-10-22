@@ -487,7 +487,9 @@ public final class NativeFormationController {
             // body on the shared route tangent; restore the ordered per-member facing only
             // after both the anchor and this member have settled.
             float controlledHeading = travelling
-                    ? state.travelHeading
+                    ? mover != recruit
+                    ? mountedTravelHeading(mover, desired, state.travelHeading)
+                    : state.travelHeading
                     : arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading);
             applyFormationFacing(recruit, mover, controlledHeading);
             if (arrived) {
@@ -605,6 +607,14 @@ public final class NativeFormationController {
         if (delta < -180.0F) delta += 360.0F;
         if (Math.abs(delta) <= maximumStep) return target;
         return current + Math.copySign(maximumStep, delta);
+    }
+
+    private static float mountedTravelHeading(Mob mount, Vec3 desired, float routeHeading) {
+        // Small slot errors are corrected by MoveControl without swinging the horse's
+        // body away from the route. Only a genuine laggard turns toward its recovery slot.
+        float target = horizontalDistanceSq(mount.position(), desired) > 1.50D * 1.50D
+                ? headingTo(mount.position(), desired, routeHeading) : routeHeading;
+        return approachHeading(mount.getYRot(), target, 12.0F);
     }
 
     private static boolean constraintImmediatelyAhead(ServerLevel level, Mob mover, State state) {
