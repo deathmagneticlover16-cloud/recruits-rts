@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.15.9-server.1
+Committed cavalry attack passes
+
+- Reworked melee cavalry combat into committed attack runs. Horsemen now cross the target line, continue twenty-two blocks clear of the impact, follow a broad twelve-block-radius hairpin, and only then line up another strike.
+- Replaced the old four-step, six-block combat turn with twelve small stable arc waypoints. This keeps horses moving through the turn instead of orbiting, snapping sideways or repeatedly diving back into the same target.
+- Removed stopped ticks at the staging-to-charge, pass-to-turn and turn-to-reform handoffs. The complete combat cycle retains the running animation, including its moving hairpin.
+- Rider and mount combat facing now share one authoritative heading eased by at most 4.5 degrees per tick. Previous-frame rotations remain intact for render interpolation, removing the visual snap caused by overwriting both current and old yaw every tick.
+- Accepted horse navigation paths are no longer forcibly restarted every thirty ticks. Paths change only for a materially different maneuver waypoint, normal path completion or a rejected-path retry every five ticks, reducing micro-stops, retry storms and rubberbanding.
+- A blocked pass turns out of combat without stopping. If terrain blocks the selected hairpin, the controller tries the opposite broad turn before safely forming a new attack line.
+- Network protocol remains rts-camera-157 because no packets or wire formats changed.
+- Source version and packaging references are 0.15.9-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.8-server.1
 Stable walking cavalry, distance-filtered rumble and extended orders
 

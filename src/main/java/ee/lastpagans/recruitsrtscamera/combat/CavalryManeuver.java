@@ -2,6 +2,11 @@ package ee.lastpagans.recruitsrtscamera.combat;
 
 /** Dependency-free cavalry plan. Terrain navigation consumes these waypoints in the adapter. */
 public final class CavalryManeuver {
+    private static final double STAGING_DISTANCE = 22.0D;
+    private static final double PASS_DISTANCE = 22.0D;
+    private static final double TURN_RADIUS = 12.0D;
+    private static final int TURN_STEPS = 12;
+    private static final double WAYPOINT_REACHED_SQ = 3.25D * 3.25D;
     public record Point(double x, double z) {
         public Point add(Point p) { return new Point(x + p.x, z + p.z); }
         public Point minus(Point p) { return new Point(x - p.x, z - p.z); }
@@ -11,48 +16,67 @@ public final class CavalryManeuver {
     }
     public enum Phase { APPROACH, CHARGE, PASS, TURN, REFORM }
     private Phase phase;
-    private Point impact, direction, approach, exit, turnOrigin;
-    private final double turnSign;
+    private Point impact, direction, approach, exit, turnCenter, turnRadial;
+    private final double preferredTurnSign;
+    private double activeTurnSign;
     private int turnStep;
+    private int turnRetries;
 
     public CavalryManeuver(Point start, Point target, double turnSign) {
-        this.turnSign = turnSign < 0 ? -1 : 1;
+        this.preferredTurnSign = turnSign < 0 ? -1 : 1;
+        this.activeTurnSign = this.preferredTurnSign;
         prepare(start, target);
     }
     public Phase phase() { return phase; }
     public Point committedImpact() { return impact; }
     public Point committedExit() { return exit; }
     private void prepare(Point position, Point target) {
-        impact = target;
         Point delta = target.minus(position);
         double distance = Math.sqrt(delta.lengthSquared());
         direction = distance > 0.1 ? delta.scale(1 / distance) : new Point(0, 1);
-        approach = impact.minus(direction.scale(22));
-        exit = impact.add(direction.scale(18));
+        impact = target;
+        approach = impact.minus(direction.scale(STAGING_DISTANCE));
+        exit = impact.add(direction.scale(PASS_DISTANCE));
+        activeTurnSign = preferredTurnSign;
+        turnRetries = 0;
         phase = distance > 26 ? Phase.APPROACH : Phase.CHARGE;
+    }
+    private void commitCharge(Point position, Point target) {
+        Point delta = target.minus(position);
+        double distance = Math.sqrt(delta.lengthSquared());
+        if (distance > 0.1D) direction = delta.scale(1.0D / distance);
+        impact = target;
+        exit = impact.add(direction.scale(PASS_DISTANCE));
+        phase = Phase.CHARGE;
     }
     public Point tick(Point position, Point liveTarget) {
         switch (phase) {
             case APPROACH:
                 Point waypoint = approach;
                 if (position.minus(waypoint).lengthSquared() < 9) {
-                    if (liveTarget != null) {
-                        impact = liveTarget;
-                        exit = impact.add(direction.scale(18));
-                    }
-                    phase = Phase.CHARGE;
+                    commitCharge(position, liveTarget == null ? impact : liveTarget);
+                    return exit;
                 }
                 return waypoint;
             case CHARGE:
                 if (position.minus(impact).dot(direction) > 2) phase = Phase.PASS;
                 return exit;
             case PASS:
-                if (position.minus(exit).lengthSquared() < 9) beginTurn(position);
+                if (position.minus(exit).lengthSquared() < 9) {
+                    beginTurn(position);
+                    return turnWaypoint(turnStep);
+                }
                 return exit;
             case TURN:
-                double[] arc = TacticalMath.arc(direction.x, direction.z, 6, turnStep * Math.PI / 4, turnSign);
-                Point turnPoint = turnOrigin.add(new Point(arc[0], arc[1]));
-                if (position.minus(turnPoint).lengthSquared() < 4 && ++turnStep > 4) phase = Phase.REFORM;
+                Point turnPoint = turnWaypoint(turnStep);
+                if (position.minus(turnPoint).lengthSquared() < WAYPOINT_REACHED_SQ) {
+                    if (++turnStep > TURN_STEPS) {
+                        phase = Phase.REFORM;
+                        // Carry speed out of the hairpin until the next pass is planned.
+                        return turnPoint.add(direction.scale(-6.0D));
+                    }
+                    else turnPoint = turnWaypoint(turnStep);
+                }
                 return turnPoint;
             case REFORM:
                 if (liveTarget == null) return position;
@@ -61,13 +85,30 @@ public final class CavalryManeuver {
             default: throw new IllegalStateException("Unknown cavalry phase");
         }
     }
-    /** Returns true when repeated obstruction calls for a pause before replanning. */
+    /** Returns true only after both broad turn directions prove obstructed. */
     public boolean blocked(Point position) {
+        if (phase == Phase.TURN && turnRetries++ == 0) {
+            activeTurnSign = -activeTurnSign;
+            beginTurn(position);
+            turnRetries = 1;
+            return false;
+        }
         if (phase == Phase.TURN) { phase = Phase.REFORM; return true; }
         beginTurn(position);
         return false;
     }
     private void beginTurn(Point position) {
-        phase = Phase.TURN; turnOrigin = position; turnStep = 1;
+        phase = Phase.TURN;
+        turnStep = 1;
+        Point normal = new Point(-direction.z * activeTurnSign, direction.x * activeTurnSign);
+        turnCenter = position.add(normal.scale(TURN_RADIUS));
+        turnRadial = normal.scale(-TURN_RADIUS);
+    }
+    private Point turnWaypoint(int step) {
+        double angle = activeTurnSign * Math.min(step, TURN_STEPS) * Math.PI / TURN_STEPS;
+        double sin = Math.sin(angle), cos = Math.cos(angle);
+        Point rotated = new Point(turnRadial.x * cos - turnRadial.z * sin,
+                turnRadial.x * sin + turnRadial.z * cos);
+        return turnCenter.add(rotated);
     }
 }

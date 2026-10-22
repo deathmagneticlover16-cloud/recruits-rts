@@ -31,15 +31,15 @@ public final class TacticalSystemsSelfTest {
         var plan = new CavalryManeuver(start, target, 1);
         check(plan.phase() == CavalryManeuver.Phase.CHARGE, "Room for immediate run-up");
         Point exit = plan.committedExit();
-        check(near(exit, new Point(0, 18)), "Pass exits eighteen blocks beyond line");
+        check(near(exit, new Point(0, 22)), "Pass exits twenty-two blocks beyond line");
         check(near(plan.tick(start, new Point(20, 0)), exit), "Moving target cannot bend committed charge");
         check(near(plan.committedImpact(), target), "Impact geometry remains frozen");
         check(near(plan.tick(new Point(0, 3), null), exit), "Target death does not stop pass");
         check(plan.phase() == CavalryManeuver.Phase.PASS, "Crossing impact advances to pass");
-        plan.tick(new Point(0, 18), null);
+        plan.tick(new Point(0, 22), null);
         check(plan.phase() == CavalryManeuver.Phase.TURN, "Turn begins beyond line");
-        Point firstTurn = plan.tick(new Point(0, 18), null);
-        check(firstTurn.z() > 18 && firstTurn.x() < 0, "First turn point continues forward and outward");
+        Point firstTurn = plan.tick(new Point(0, 22), null);
+        check(firstTurn.z() > 22 && firstTurn.x() < 0, "First turn point continues forward and outward");
 
         for (int sign : new int[]{-1, 1}) {
             var cycle = new CavalryManeuver(start, target, sign);
@@ -57,7 +57,7 @@ public final class TacticalSystemsSelfTest {
             check(reformed, "Cavalry completes full pass and curved turn in either direction");
             check(phases.containsAll(List.of(CavalryManeuver.Phase.CHARGE, CavalryManeuver.Phase.PASS,
                     CavalryManeuver.Phase.TURN)), "All committed phases visited");
-            check(position.z() > 12 && Math.abs(position.x()) > 8, "Reform occurs outside melee zone");
+            check(position.z() > 16 && Math.abs(position.x()) > 18, "Reform occurs outside melee zone");
             check(near(cycle.tick(position, null), position), "No target means wait clear of line");
             cycle.tick(position, new Point(4, -10));
             check(near(cycle.committedImpact(), new Point(4, -10)), "Next pass accepts new formation target");

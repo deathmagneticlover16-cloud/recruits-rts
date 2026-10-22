@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.8 behavior."""
+"""Targeted source contracts for Commander 0.15.9 behavior."""
 
 from pathlib import Path
 
@@ -65,8 +65,24 @@ require(cavalry, "Flag.MOVE, Flag.LOOK, Flag.JUMP, Flag.TARGET",
         "mounted tactical combat must keep the horse under rider control")
 forbid(cavalry, "s.mount.getNavigation().stop();\n                if (s.maneuver.blocked",
        "combat stall recovery must not inject an animation-breaking stop")
-require(cavalry, "lastNavigationGoal.distanceToSqr(navigationGoal) > 1.5D * 1.5D",
+require(cavalry, "lastNavigationGoal.distanceToSqr(navigationGoal) > 2.5D * 2.5D",
         "combat navigation must avoid redundant path resets")
+require(cavalry, "approachHeading(state.appliedHeading, desiredYaw, 4.5F)",
+        "combat cavalry must ease rider and mount yaw through the broad turn")
+require(cavalry, "CommanderAnimationHints.updateMovement(s.rider, true, true)",
+        "the complete cavalry attack cycle must retain its running animation")
+forbid(cavalry, "now - s.lastNavigationAt >= 30L",
+       "accepted combat paths must not be periodically restarted")
+require(cavalry, "!s.navigationAccepted && now - s.lastNavigationAt >= 5L",
+        "rejected combat paths need a bounded retry interval")
+require(cavalry, "s.lastNavigationAt = now;",
+        "a rejected path must not falsify its timestamp and retry every tick")
+maneuver = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryManeuver.java")
+require(maneuver, "TURN_RADIUS = 12.0D", "cavalry needs a broad fly-by hairpin")
+require(maneuver, "TURN_STEPS = 12", "cavalry hairpins need small stable steering changes")
+require(maneuver, "PASS_DISTANCE = 22.0D", "cavalry must clear the victim before turning")
+require(maneuver, "return turnWaypoint(turnStep);", "pass-to-turn handoff must not insert a stopped tick")
+require(maneuver, "turnPoint.add(direction.scale(-6.0D))", "hairpin exit must carry motion into replanning")
 forbid(cavalry, "if (++s.repath < 10) return;",
        "combat maneuvers must not wait after reaching an intermediate waypoint")
 forbid(formation[formation.index("private static void claim("):formation.index("private static void releaseMembers(")],
@@ -209,6 +225,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.8-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.9-server.1", "semantic version must be updated")
 
-print("0.15.8 source contracts passed")
+print("0.15.9 source contracts passed")

@@ -95,6 +95,8 @@ public final class CavalryTacticalController {
         s.navigationAccepted = false;
         s.lastNavigationAt = Long.MIN_VALUE;
         s.lastPosition = s.mount.position();
+        s.appliedHeading = s.mount.getYRot();
+        s.hasAppliedHeading = true;
     }
     private static void tick(State s) {
         if (!eligible(s.rider)) return;
@@ -106,10 +108,8 @@ public final class CavalryTacticalController {
         }
         CavalryManeuver.Point destination = s.maneuver.tick(point(s.mount.position()),
                 liveTarget == null ? null : point(liveTarget));
-        CommanderAnimationHints.updateMovement(s.rider, true,
-                s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
-                        || s.maneuver.phase() == CavalryManeuver.Phase.PASS);
-        matchRiderAndMountFacing(s, destination);
+        // A combat pass is one continuous gallop, including staging and the hairpin.
+        CommanderAnimationHints.updateMovement(s.rider, true, true);
         if (s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
                 || s.maneuver.phase() == CavalryManeuver.Phase.PASS) attack(s);
         if (++s.samples % 20 == 0) {
@@ -131,36 +131,44 @@ public final class CavalryTacticalController {
                 BlockPos.containing(destination.x(), s.mount.getY(), destination.z()));
         Vec3 navigationGoal = new Vec3(destination.x(), ground.getY(), destination.z());
         long now = s.rider.level().getGameTime();
-        if (s.lastNavigationGoal == null || s.lastNavigationGoal.distanceToSqr(navigationGoal) > 1.5D * 1.5D
+        if (s.lastNavigationGoal == null || s.lastNavigationGoal.distanceToSqr(navigationGoal) > 2.5D * 2.5D
                 || s.navigationAccepted && s.mount.getNavigation().isDone()
-                || now - s.lastNavigationAt >= 30L) {
+                || !s.navigationAccepted && now - s.lastNavigationAt >= 5L) {
             boolean accepted = s.mount.getNavigation().moveTo(destination.x(), ground.getY(), destination.z(),
                     s.maneuver.phase() == CavalryManeuver.Phase.CHARGE ? 1.15 : 1.0);
             s.lastNavigationGoal = navigationGoal;
             s.navigationAccepted = accepted;
-            s.lastNavigationAt = accepted ? now : now - 25L;
+            s.lastNavigationAt = now;
         }
-        s.mount.getLookControl().setLookAt(destination.x(), ground.getY(), destination.z());
+        matchRiderAndMountFacing(s, destination);
     }
 
     private static void matchRiderAndMountFacing(State state, CavalryManeuver.Point destination) {
         double dx = destination.x() - state.mount.getX();
         double dz = destination.z() - state.mount.getZ();
         if (dx * dx + dz * dz < 1.0E-5D) return;
-        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        if (!state.hasAppliedHeading) {
+            state.appliedHeading = state.mount.getYRot();
+            state.hasAppliedHeading = true;
+        }
+        float yaw = approachHeading(state.appliedHeading, desiredYaw, 4.5F);
+        state.appliedHeading = yaw;
         state.rider.ownerRot = yaw;
         state.rider.setYRot(yaw);
         state.rider.setYBodyRot(yaw);
         state.rider.setYHeadRot(yaw);
-        state.rider.yRotO = yaw;
-        state.rider.yBodyRotO = yaw;
-        state.rider.yHeadRotO = yaw;
         state.mount.setYRot(yaw);
         state.mount.setYBodyRot(yaw);
         state.mount.setYHeadRot(yaw);
-        state.mount.yRotO = yaw;
-        state.mount.yBodyRotO = yaw;
-        state.mount.yHeadRotO = yaw;
+    }
+    private static float approachHeading(float current, float target, float maximumStep) {
+        float difference = (target - current) % 360.0F;
+        if (difference >= 180.0F) difference -= 360.0F;
+        if (difference < -180.0F) difference += 360.0F;
+        if (difference > maximumStep) difference = maximumStep;
+        else if (difference < -maximumStep) difference = -maximumStep;
+        return current + difference;
     }
     private static void attack(State s) {
         if (valid(s.rider, s.target)) {
@@ -181,6 +189,8 @@ public final class CavalryTacticalController {
         int samples, stallTicks;
         long lastNavigationAt = Long.MIN_VALUE;
         boolean navigationAccepted;
+        float appliedHeading;
+        boolean hasAppliedHeading;
         long refreshed;
         boolean active;
         State(AbstractRecruitEntity rider, AbstractHorse mount) {
