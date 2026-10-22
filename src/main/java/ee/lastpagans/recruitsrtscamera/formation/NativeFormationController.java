@@ -577,11 +577,25 @@ public final class NativeFormationController {
         } else if (orientToTravel) {
             // Route-cell corners otherwise rotate far slots several blocks in one tick.
             // Ease the stencil through bends while every member retains its chosen slot.
-            state.slotHeading = approachHeading(state.slotHeading, target, 9.0F);
+            // At walking pace, cap angular speed by formation radius: the outside slot
+            // of a large line must not travel several blocks sideways in one tick merely
+            // because the route tangent changed by a few degrees.
+            state.slotHeading = approachHeading(state.slotHeading, target,
+                    walkingSlotHeadingStep(state, members));
         } else {
             state.slotHeading = target;
         }
         state.wasTravelling = orientToTravel;
+    }
+
+    private static float walkingSlotHeadingStep(State state, List<AbstractRecruitEntity> members) {
+        boolean mounted = members.stream().anyMatch(member -> member.getVehicle() instanceof Mob);
+        if (!mounted || RTSMovementBoostManager.isHastyActive(state.groupId)) return 9.0F;
+        double radius = 1.0D;
+        for (FormationSlotMath.Offset offset : state.offsets.values()) {
+            radius = Math.max(radius, Math.hypot(offset.right(), offset.back()));
+        }
+        return (float) clamp(Math.toDegrees(0.14D / radius), 0.35D, 3.0D);
     }
 
     private static void stabilizeMountedSlots(

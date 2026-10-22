@@ -7,6 +7,7 @@ import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
+import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
@@ -95,6 +96,9 @@ public final class CavalryTacticalController {
         s.navigationAccepted = false;
         s.lastNavigationAt = Long.MIN_VALUE;
         s.lastPosition = s.mount.position();
+        s.directPassGoal = null;
+        s.directPassSafe = false;
+        s.directPassControl = false;
         s.appliedHeading = s.mount.getYRot();
         s.hasAppliedHeading = true;
     }
@@ -131,9 +135,31 @@ public final class CavalryTacticalController {
                 BlockPos.containing(destination.x(), s.mount.getY(), destination.z()));
         Vec3 navigationGoal = new Vec3(destination.x(), ground.getY(), destination.z());
         long now = s.rider.level().getGameTime();
-        if (s.lastNavigationGoal == null || s.lastNavigationGoal.distanceToSqr(navigationGoal) > 2.5D * 2.5D
+        boolean committedPass = s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
+                || s.maneuver.phase() == CavalryManeuver.Phase.PASS;
+        boolean directPass = committedPass && directPassSafe(s, navigationGoal);
+        if (directPass) {
+            if (!s.directPassControl) {
+                // Navigation can declare an occupied enemy frontage to be the end of its
+                // path. Hand a terrain-checked pass to MoveControl and preserve the current
+                // impulse so entering direct control cannot create a stopped animation tick.
+                Vec3 momentum = s.mount.getDeltaMovement();
+                s.mount.getNavigation().stop();
+                s.mount.setDeltaMovement(momentum);
+                s.directPassControl = true;
+            }
+            s.mount.getMoveControl().setWantedPosition(
+                    navigationGoal.x, navigationGoal.y, navigationGoal.z, 1.15D);
+            s.lastNavigationGoal = navigationGoal;
+            s.navigationAccepted = false;
+            s.lastNavigationAt = now;
+        } else {
+            s.directPassControl = false;
+        }
+        if (!directPass && (s.lastNavigationGoal == null
+                || s.lastNavigationGoal.distanceToSqr(navigationGoal) > 2.5D * 2.5D
                 || s.navigationAccepted && s.mount.getNavigation().isDone()
-                || !s.navigationAccepted && now - s.lastNavigationAt >= 5L) {
+                || !s.navigationAccepted && now - s.lastNavigationAt >= 5L)) {
             boolean accepted = s.mount.getNavigation().moveTo(destination.x(), ground.getY(), destination.z(),
                     s.maneuver.phase() == CavalryManeuver.Phase.CHARGE ? 1.15 : 1.0);
             s.lastNavigationGoal = navigationGoal;
@@ -141,6 +167,16 @@ public final class CavalryTacticalController {
             s.lastNavigationAt = now;
         }
         matchRiderAndMountFacing(s, destination);
+    }
+
+    private static boolean directPassSafe(State state, Vec3 destination) {
+        if (state.directPassGoal == null
+                || state.directPassGoal.distanceToSqr(destination) > 1.0D) {
+            state.directPassGoal = destination;
+            state.directPassSafe = TacticalPathfinder.canSteerDirect(
+                    (ServerLevel) state.rider.level(), state.mount, destination);
+        }
+        return state.directPassSafe;
     }
 
     private static void matchRiderAndMountFacing(State state, CavalryManeuver.Point destination) {
@@ -186,9 +222,12 @@ public final class CavalryTacticalController {
         CavalryManeuver maneuver;
         Vec3 lastPosition;
         Vec3 lastNavigationGoal;
+        Vec3 directPassGoal;
         int samples, stallTicks;
         long lastNavigationAt = Long.MIN_VALUE;
         boolean navigationAccepted;
+        boolean directPassSafe;
+        boolean directPassControl;
         float appliedHeading;
         boolean hasAppliedHeading;
         long refreshed;

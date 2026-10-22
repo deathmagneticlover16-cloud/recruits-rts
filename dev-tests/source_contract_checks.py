@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.9 behavior."""
+"""Targeted source contracts for Commander 0.15.10 behavior."""
 
 from pathlib import Path
 
@@ -77,6 +77,12 @@ require(cavalry, "!s.navigationAccepted && now - s.lastNavigationAt >= 5L",
         "rejected combat paths need a bounded retry interval")
 require(cavalry, "s.lastNavigationAt = now;",
         "a rejected path must not falsify its timestamp and retry every tick")
+require(cavalry, "TacticalPathfinder.canSteerDirect(",
+        "cavalry must terrain-check a direct pass through an occupied frontage")
+require(cavalry, "s.mount.getMoveControl().setWantedPosition(",
+        "a safe committed pass must not stop when navigation reaches the enemy line")
+require(cavalry, "s.mount.setDeltaMovement(momentum);",
+        "navigation-to-pass control must preserve animation momentum")
 maneuver = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryManeuver.java")
 require(maneuver, "TURN_RADIUS = 12.0D", "cavalry needs a broad fly-by hairpin")
 require(maneuver, "TURN_STEPS = 12", "cavalry hairpins need small stable steering changes")
@@ -95,8 +101,10 @@ require(formation, "worldSlotPoints(start, heading, offsets)",
         "new orders must assign slots against live geometry instead of the distant destination")
 require(formation, "stabilizeMountedSlots(state, members, target)",
         "mounted direction reversals must choose the nearest physical slots once")
-require(formation, "approachHeading(state.slotHeading, target, 9.0F)",
-        "formation geometry must ease through route bends without slot snapping")
+require(formation, "walkingSlotHeadingStep(state, members)",
+        "walking formation rotation must account for wide outer slots")
+require(formation, "Math.toDegrees(0.14D / radius)",
+        "outer mounted slots need a radius-bounded sideways step")
 require(formation, "mover.setDeltaMovement(momentum)",
         "manual-control handoffs must preserve momentum for continuous animation")
 require(formation, "state.appliedHeadings.getOrDefault(recruitId, mount.getYRot())",
@@ -113,8 +121,10 @@ require(steering, "recruit.getVehicle() == null ? separation(recruit) : Vec3.ZER
         "mounted steering must not alternate lateral neighbor impulses")
 require(steering, "forward.scale(0.45D / forwardLength)",
         "mounted MoveControl needs forward lookahead to avoid stop-start animation")
-require(steering, "lateralLimit = slotDistance > 1.50D ? 0.12D : 0.045D",
-        "mounted slot correction must bound side-to-side steering")
+require(steering, "lateralCurrent.scale(0.65D)",
+        "mounted slot correction must damp lateral overshoot")
+require(steering, "Math.min(0.075D, Math.max(0.035D, formationSpeed * 0.12D))",
+        "mounted lateral authority must remain bounded relative to walking speed")
 require(formation, "recruit.getVehicle() == mover && mover.onGround()",
         "mounted tactical waypoints must actively jump a safe rise")
 require(pathfinder, "if (!dryAt(level, mover, feet)) return null;", "fluid rejection must remain")
@@ -212,6 +222,8 @@ require(rumble_client, "public boolean canStartSilent()", "a zero-gain fade-in m
 require(rumble_client, "CAVALRY_RUMBLE_DISTANT", "distance filtering needs a separately filtered audio layer")
 require(rumble_client, "smoothStep(FILTER_START, FILTER_END, distance)",
         "the low-pass layer must crossfade gradually with listener distance")
+require(rumble_client, "FILTER_START = 8.0D", "close rumble must retain its bright positional layer")
+require(rumble_client, "FILTER_END = 34.0D", "thirty-to-forty block rumble must be almost entirely bass")
 require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 15_000_000L",
         "recovery paths need an aggregate tick-time guard during initial cohesion")
 require(overlay, "COMMAND_CAVALRY_WEDGE", "cavalry wedge needs a stable command-bar element")
@@ -225,6 +237,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.9-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.10-server.1", "semantic version must be updated")
 
-print("0.15.9 source contracts passed")
+print("0.15.10 source contracts passed")

@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.15.10-server.1
+Unbroken cavalry passes, stable walking lines and directional rumble
+
+- Fixed cavalry stopping at the enemy frontage after its first strike. A committed charge or fly-by now uses direct horse MoveControl when the entire corridor has passed the existing supported-ground, fluid, rise and drop safety check; tactical navigation remains in charge whenever that corridor is unsafe.
+- Direct pass takeover preserves the horse's current momentum, so crossing the target line does not insert a stopped animation frame. The rider continues attacking in reach while the mount carries the pass through.
+- Damped mounted lateral slot correction using the horse's existing sideways velocity, and reduced lateral authority relative to formation speed. Walking horses now converge on their slots instead of overshooting from side to side together.
+- Walking formation rotation now scales with formation radius. The far end of a large cavalry line receives the same bounded sideways slot movement as the near end; Hasty movement retains its faster rotation.
+- Rebuilt both cavalry rumble layers as mono Vorbis sources so Minecraft/OpenAL can spatialize them from the live formation centre. Stereo sources were playing as listener-centred ambience despite positional coordinates.
+- The close layer receives a mild 4 kHz presence lift. The distant layer is a dedicated 250 Hz low-pass bass signal, and the crossfade now completes by 34 blocks so roughly 30–45 blocks carries bass with only a trace of hoof definition.
+- Network protocol remains rts-camera-157 because no packets or wire formats changed.
+- Source version and packaging references are 0.15.10-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.9-server.1
 Committed cavalry attack passes
 

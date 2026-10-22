@@ -52,8 +52,8 @@ public final class CavalryRumbleClient {
     private static final class GroupRumble {
         private static final float FADE_IN_STEP = 1.0F / 120.0F;
         private static final float FADE_OUT_STEP = 1.0F / 120.0F;
-        private static final double FILTER_START = 20.0D;
-        private static final double FILTER_END = 128.0D;
+        private static final double FILTER_START = 8.0D;
+        private static final double FILTER_END = 34.0D;
         private final RumbleLayer clear;
         private final RumbleLayer distant;
         private float fade;

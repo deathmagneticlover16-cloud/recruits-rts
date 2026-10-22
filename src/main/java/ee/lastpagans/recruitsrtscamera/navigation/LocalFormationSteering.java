@@ -39,10 +39,23 @@ public final class LocalFormationSteering {
         double formationSpeed = formationVelocity.length();
         if (recruit.getVehicle() == mover && formationSpeed > 1.0E-5D) {
             Vec3 travel = formationVelocity.scale(1.0D / formationSpeed);
-            double along = requested.dot(travel);
-            Vec3 lateral = requested.subtract(travel.scale(along));
+            Vec3 horizontalCurrent = new Vec3(current.x, 0.0D, current.z);
+            double alongError = error.dot(travel);
+            double alongCurrent = horizontalCurrent.dot(travel);
+            Vec3 lateralError = new Vec3(error.x, 0.0D, error.z)
+                    .subtract(travel.scale(alongError));
+            Vec3 lateralCurrent = horizontalCurrent.subtract(travel.scale(alongCurrent));
+            // Walking horses previously used a high-gain correction with almost no
+            // lateral damping. The outside of a wide line would overshoot together,
+            // reverse together, and visibly swing while the inside happened to stay put.
+            double alongCorrection = Math.max(-0.08D, Math.min(0.08D,
+                    alongError * 0.18D - (alongCurrent - formationSpeed) * 0.25D));
+            double along = Math.max(0.08D, formationSpeed + alongCorrection);
+            Vec3 lateral = lateralError.scale(0.12D).subtract(lateralCurrent.scale(0.65D));
             double lateralLength = lateral.length();
-            double lateralLimit = slotDistance > 1.50D ? 0.12D : 0.045D;
+            double lateralLimit = slotDistance > 1.50D
+                    ? Math.min(0.075D, Math.max(0.035D, formationSpeed * 0.12D))
+                    : Math.min(0.035D, Math.max(0.012D, formationSpeed * 0.05D));
             if (lateralLength > lateralLimit) lateral = lateral.scale(lateralLimit / lateralLength);
             requested = travel.scale(along).add(lateral);
         }
