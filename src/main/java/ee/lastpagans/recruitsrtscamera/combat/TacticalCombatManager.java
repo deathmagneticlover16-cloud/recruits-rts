@@ -4,10 +4,13 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.IRangedRecruit;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
+import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager;
 import ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeBrain;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -109,6 +112,14 @@ public final class TacticalCombatManager {
                             "Commander progressive charge", amount, AttributeModifier.Operation.MULTIPLY_TOTAL));
                 }
             } else speed.removeModifier(CHARGE_SPEED);
+        }
+        // Formation and cavalry controllers publish intent every tick. This slower
+        // physical-motion fallback clears their state after control passes into ordinary
+        // melee without scanning all recruits in a separate animation task.
+        if (RecruitRuntimeRegistry.brain(recruit).authority()
+                != RecruitRuntimeBrain.MovementAuthority.RTS_FORMATION
+                && !CavalryTacticalController.isActive(recruit)) {
+            CommanderAnimationHints.updateMovement(recruit, false, chargeAcceleration(recruit) > 1.0D);
         }
     }
 

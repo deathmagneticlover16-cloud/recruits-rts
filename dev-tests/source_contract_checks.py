@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.4 behavior."""
+"""Targeted source contracts for Commander 0.15.5 behavior."""
 
 from pathlib import Path
 
@@ -43,6 +43,7 @@ tactical = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/Tactical
 cavalry_combat = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryCombatManager.java")
 mode_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/RTSModeStatePacket.java")
 attack_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/AttackGroupsPacket.java")
+animation_hints = source("src/main/java/ee/lastpagans/recruitsrtscamera/animation/CommanderAnimationHints.java")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -55,12 +56,24 @@ require(formation, "signedUnit(seed) * SLOT_JITTER_RIGHT",
         "formation slots need stable bounded human variation")
 require(cavalry, "Flag.MOVE, Flag.LOOK, Flag.JUMP, Flag.TARGET",
         "mounted tactical combat must keep the horse under rider control")
+forbid(cavalry, "s.mount.getNavigation().stop();\n                if (s.maneuver.blocked",
+       "combat stall recovery must not inject an animation-breaking stop")
+require(cavalry, "lastNavigationGoal.distanceToSqr(navigationGoal) > 1.5D * 1.5D",
+        "combat navigation must avoid redundant path resets")
 forbid(formation[formation.index("private static void claim("):formation.index("private static void releaseMembers(")],
        "ownerRot", "claim must not compete for rotation")
 require(formation, "new Vec3(goal.x, resolved.y, goal.z)",
         "completed routes must preserve the exact horizontal destination")
-require(formation, "float slotHeading = travelling ? state.travelHeading : state.heading;",
+require(formation, "float slotHeading = state.slotHeading;",
         "formation geometry must face the route tangent and restore ordered facing at arrival")
+require(formation, "worldSlotPoints(start, heading, offsets)",
+        "new orders must assign slots against live geometry instead of the distant destination")
+require(formation, "stabilizeMountedSlots(state, members, target)",
+        "mounted direction reversals must choose the nearest physical slots once")
+require(formation, "approachHeading(state.slotHeading, target, 9.0F)",
+        "formation geometry must ease through route bends without slot snapping")
+require(formation, "mover.setDeltaMovement(momentum)",
+        "manual-control handoffs must preserve momentum for continuous animation")
 require(formation, "QUICK_PATH_BUDGET_NANOS = 20_000_000L",
         "difficult route planning must use the 20 ms staged-planning budget")
 require(formation, "state.routeGoal = requestedDestination",
@@ -73,6 +86,8 @@ require(formation, "recruit.getVehicle() == mover && mover.onGround()",
         "mounted tactical waypoints must actively jump a safe rise")
 require(pathfinder, "if (!dryAt(level, mover, feet)) return null;", "fluid rejection must remain")
 require(pathfinder, "if (shape.isEmpty()) return null;", "unsupported terrain rejection must remain")
+require(pathfinder, "segmentSafe(level, mover", "safe open routes must be straightened")
+require(pathfinder, "requiredAnchors.contains", "route smoothing must preserve constrained terrain anchors")
 
 require(keys, "GLFW.GLFW_KEY_E", "E must move the camera up")
 require(keys, "GLFW.GLFW_KEY_Q", "Q must move the camera down")
@@ -131,8 +146,14 @@ require(mode_packet, "FormationStateSyncPacket.forPlayer(sender)",
         "entering RTS mode must restore saved loose-spacing state")
 require(attack_packet, "import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;",
         "charge-order timing must import its declaring combat manager")
+require(animation_hints, 'MOVEMENT_KEY = "RecruitsRTSMovementState"',
+        "animation integrations need a stable semantic movement-state key")
+require(animation_hints, "public enum MovementState { IDLE, WALKING, RUNNING }",
+        "animation integrations need explicit walking and running states")
+require(animation_hints, "IDLE_HYSTERESIS_TICKS = 6",
+        "one-tick movement handoffs must not reset locomotion animations")
 
 require(network, 'PROTOCOL = "rts-camera-150"', "wire-compatible release must retain protocol 150")
-require(source("gradle.properties"), "mod_version=0.15.4-server.2", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.5-server.1", "semantic version must be updated")
 
-print("0.15.4 source contracts passed")
+print("0.15.5 source contracts passed")

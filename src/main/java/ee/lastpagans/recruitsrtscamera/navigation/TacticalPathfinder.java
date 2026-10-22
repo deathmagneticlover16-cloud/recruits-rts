@@ -401,10 +401,10 @@ public final class TacticalPathfinder {
         Collections.reverse(reversed);
         boolean constrained = false;
         List<Vec3> points = new ArrayList<>(reversed.size());
+        Set<BlockPos> requiredAnchors = new HashSet<>();
         Cell previous = null;
         for (int i = 0; i < reversed.size(); i++) {
             Cell cell = reversed.get(i);
-            points.add(cell.position);
             int clearance = openSides(level, mover, cell);
             boolean narrow = cell.climbable;
             // A broad stair or gentle height change can carry formation slots. Column mode is
@@ -412,12 +412,64 @@ public final class TacticalPathfinder {
             boolean changingLevel = previous != null
                     && Math.abs(cell.position.y - previous.position.y) > 0.40D;
             if (!changingLevel && i > 0 && i + 1 < reversed.size() && clearance <= 2) narrow = true;
-            if (narrow) constrained = true;
+            if (narrow) {
+                constrained = true;
+                requiredAnchors.add(cell.key);
+            }
             previous = cell;
         }
+        for (Cell cell : simplify(level, mover, reversed, requiredAnchors)) points.add(cell.position);
         List<Vec3> immutable = List.copyOf(points);
         return new Route(immutable, complete, constrained,
                 TacticalTerrainRevisions.snapshot(level, immutable));
+    }
+
+    /** Remove grid stair-stepping when a longer straight segment is equally safe. */
+    private static List<Cell> simplify(
+            ServerLevel level, Mob mover, List<Cell> cells, Set<BlockPos> requiredAnchors
+    ) {
+        if (cells.size() < 3) return cells;
+        List<Cell> result = new ArrayList<>();
+        int from = 0;
+        result.add(cells.get(0));
+        while (from < cells.size() - 1) {
+            int best = from + 1;
+            // Bound smoothing work on very long or complex routes. Repeated 48-cell
+            // windows still collapse an open route without turning build() quadratic.
+            int furthest = Math.min(cells.size() - 1, from + 48);
+            for (int candidate = furthest; candidate > from + 1; candidate--) {
+                boolean containsRequiredAnchor = false;
+                for (int i = from + 1; i < candidate; i++) {
+                    if (requiredAnchors.contains(cells.get(i).key)) {
+                        containsRequiredAnchor = true;
+                        break;
+                    }
+                }
+                if (!containsRequiredAnchor && segmentSafe(level, mover,
+                        cells.get(from).position, cells.get(candidate).position)) {
+                    best = candidate;
+                    break;
+                }
+            }
+            result.add(cells.get(best));
+            from = best;
+        }
+        return result;
+    }
+
+    private static boolean segmentSafe(ServerLevel level, Mob mover, Vec3 from, Vec3 to) {
+        double horizontal = Math.hypot(to.x - from.x, to.z - from.z);
+        int samples = Math.max(1, (int) Math.ceil(horizontal / 0.35D));
+        double previousY = from.y;
+        for (int i = 1; i <= samples; i++) {
+            Vec3 probe = from.lerp(to, i / (double) samples);
+            Cell cell = nearestCell(level, mover, probe, 0, 2);
+            if (cell == null || cell.climbable) return false;
+            double change = cell.position.y - previousY;
+            if (change > MAX_STEP_UP || change < -0.60D) return false;
+            previousY = cell.position.y;
+        }
+        return true;
     }
 
     private static int openSides(ServerLevel level, Mob mover, Cell cell) {
@@ -445,8 +497,11 @@ public final class TacticalPathfinder {
     }
 
     private static double heuristic(Cell a, Cell b) {
-        return Math.abs(a.position.x - b.position.x) + Math.abs(a.position.z - b.position.z)
-                + Math.abs(a.position.y - b.position.y) * 1.25D;
+        double dx = a.position.x - b.position.x;
+        double dz = a.position.z - b.position.z;
+        // Euclidean horizontal distance is admissible with diagonal movement and avoids
+        // the bend-heavy routes produced by a Manhattan estimate on an eight-way grid.
+        return Math.sqrt(dx * dx + dz * dz) + Math.abs(a.position.y - b.position.y) * 0.65D;
     }
 
     private static boolean reached(Cell current, Cell goal) {

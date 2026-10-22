@@ -2,6 +2,7 @@ package ee.lastpagans.recruitsrtscamera.formation;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
+import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.compat.TerrainSurfaceResolver;
 import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
@@ -89,7 +90,10 @@ public final class NativeFormationController {
         List<FormationSlotMath.Point> unitPoints = units.stream()
                 .map(unit -> new FormationSlotMath.Point(controlled(unit).getX(), controlled(unit).getZ()))
                 .toList();
-        List<FormationSlotMath.Point> slotPoints = worldSlotPoints(plan.destination(), heading, offsets);
+        // Assign against the live formation, never the distant destination. Destination-
+        // based matching could send a horse to the opposite end of the line after a
+        // reverse order even though the same nearby physical slot was available.
+        List<FormationSlotMath.Point> slotPoints = worldSlotPoints(start, heading, offsets);
         int[] assignment = FormationSlotMath.assign(unitPoints, slotPoints);
         Map<UUID, FormationSlotMath.Offset> assigned = new LinkedHashMap<>();
         for (int i = 0; i < units.size() && i < assignment.length; i++) {
@@ -445,7 +449,8 @@ public final class NativeFormationController {
         }
         state.velocity = state.center.subtract(previousCenter);
         if (travelling) state.travelHeading = movementHeading(state);
-        float slotHeading = travelling ? state.travelHeading : state.heading;
+        updateSlotHeading(state, members, travelling);
+        float slotHeading = state.slotHeading;
 
         int laggards = 0;
         int index = 0;
@@ -474,6 +479,8 @@ public final class NativeFormationController {
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
             boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit,
                     state.velocity, catchUpScale);
+            CommanderAnimationHints.updateMovement(recruit, travelling || !arrived,
+                    RTSMovementBoostManager.isHastyActive(state.groupId));
             // Formation movement owns rotation in exactly one place. Native MoveControl,
             // ownerRot and mount/rider body rotation previously received competing values
             // during the same tick, producing constant alternating yaw. Keep every moving
@@ -537,6 +544,69 @@ public final class NativeFormationController {
         return (float) Math.toDegrees(Math.atan2(-direction.x, direction.z));
     }
 
+    private static void updateSlotHeading(
+            State state, List<AbstractRecruitEntity> members, boolean travelling
+    ) {
+        float target = travelling ? state.travelHeading : state.heading;
+        if (travelling != state.wasTravelling) {
+            // A 180-degree order should make horses turn in their current places instead
+            // of preserving abstract row identities and crossing the full formation.
+            stabilizeMountedSlots(state, members, target);
+            state.slotHeading = target;
+        } else if (travelling) {
+            // Route-cell corners otherwise rotate far slots several blocks in one tick.
+            // Ease the stencil through bends while every member retains its chosen slot.
+            state.slotHeading = approachHeading(state.slotHeading, target, 9.0F);
+        } else {
+            state.slotHeading = target;
+        }
+        state.wasTravelling = travelling;
+    }
+
+    private static void stabilizeMountedSlots(
+            State state, List<AbstractRecruitEntity> members, float heading
+    ) {
+        if (members.size() != state.offsets.size()
+                || members.stream().filter(member -> member.getVehicle() instanceof Mob).count() * 2L
+                < members.size()) return;
+        List<FormationSlotMath.Offset> available = new ArrayList<>(state.offsets.values());
+        List<FormationSlotMath.Point> positions = members.stream()
+                .map(member -> controlled(member).position())
+                .map(position -> new FormationSlotMath.Point(position.x, position.z))
+                .toList();
+        int[] assignment = FormationSlotMath.assign(
+                positions, worldSlotPoints(state.center, heading, available));
+        Map<UUID, FormationSlotMath.Offset> stable = new LinkedHashMap<>();
+        for (int i = 0; i < members.size() && i < assignment.length; i++) {
+            stable.put(members.get(i).getUUID(), available.get(assignment[i]));
+        }
+        if (stable.size() != state.offsets.size()) return;
+        state.offsets.clear();
+        state.offsets.putAll(stable);
+        rebuildTransitOrder(state);
+    }
+
+    private static void rebuildTransitOrder(State state) {
+        List<Map.Entry<UUID, FormationSlotMath.Offset>> transitOrder = new ArrayList<>(state.offsets.entrySet());
+        transitOrder.sort(Comparator
+                .comparingDouble((Map.Entry<UUID, FormationSlotMath.Offset> entry) -> entry.getValue().back())
+                .thenComparingDouble(entry -> Math.abs(entry.getValue().right()))
+                .thenComparing(entry -> entry.getKey().toString()));
+        state.order.clear();
+        int index = 0;
+        for (Map.Entry<UUID, FormationSlotMath.Offset> entry : transitOrder) {
+            state.order.put(entry.getKey(), index++);
+        }
+    }
+
+    private static float approachHeading(float current, float target, float maximumStep) {
+        float delta = (target - current) % 360.0F;
+        if (delta > 180.0F) delta -= 360.0F;
+        if (delta < -180.0F) delta += 360.0F;
+        if (Math.abs(delta) <= maximumStep) return target;
+        return current + Math.copySign(maximumStep, delta);
+    }
+
     private static boolean constraintImmediatelyAhead(ServerLevel level, Mob mover, State state) {
         List<Vec3> points = state.route.points();
         if (points.isEmpty()) return false;
@@ -588,7 +658,10 @@ public final class NativeFormationController {
             boolean manual = LocalFormationSteering.steer(level, recruit, mover, desired,
                     RecruitRuntimeRegistry.brain(recruit).desiredVelocity(), catchUpScale);
             agent.manualControl = manual;
-            if (!manual) agent.directSafe = false;
+            if (!manual) {
+                agent.directSafe = false;
+                agent.directBlockedUntil = now + 12L;
+            }
             return false;
         }
 
@@ -791,6 +864,7 @@ public final class NativeFormationController {
             if (stop) {
                 Mob mover = controlledMob(recruit);
                 if (mover != null) mover.getNavigation().stop();
+                CommanderAnimationHints.clearMovement(recruit);
             }
         }
     }
@@ -987,6 +1061,8 @@ public final class NativeFormationController {
         long nextRouteAt;
         long lastRouteSyncAt = Long.MIN_VALUE;
         boolean lastSyncedMoving;
+        float slotHeading;
+        boolean wasTravelling;
 
         State(UUID groupId, UUID ownerId, ResourceKey<Level> levelKey, FormationKind kind,
               float heading, Vec3 center, Vec3 destination,
@@ -997,18 +1073,13 @@ public final class NativeFormationController {
             this.kind = kind;
             this.heading = heading;
             this.travelHeading = heading;
+            this.slotHeading = heading;
             this.center = center;
             this.destination = destination;
             this.offsets = new LinkedHashMap<>(offsets);
             this.facings = new HashMap<>(facings);
             this.hold = hold;
-            List<Map.Entry<UUID, FormationSlotMath.Offset>> transitOrder = new ArrayList<>(offsets.entrySet());
-            transitOrder.sort(Comparator
-                    .comparingDouble((Map.Entry<UUID, FormationSlotMath.Offset> entry) -> entry.getValue().back())
-                    .thenComparingDouble(entry -> Math.abs(entry.getValue().right()))
-                    .thenComparing(entry -> entry.getKey().toString()));
-            int index = 0;
-            for (Map.Entry<UUID, FormationSlotMath.Offset> entry : transitOrder) order.put(entry.getKey(), index++);
+            rebuildTransitOrder(this);
             rememberTrail(this, center);
         }
     }
@@ -1068,6 +1139,7 @@ public final class NativeFormationController {
         Vec3 groundingGoal;
         Vec3 groundedGoal;
         long groundingRevision = Long.MIN_VALUE;
+        long directBlockedUntil;
 
         Agent(UUID recruitId) {
             steeringPhase = Math.floorMod(recruitId.hashCode(), 10);
@@ -1075,7 +1147,11 @@ public final class NativeFormationController {
 
         void beginManual(Mob mover) {
             if (!manualControl) {
+                Vec3 momentum = mover.getDeltaMovement();
                 mover.getNavigation().stop();
+                // Navigation ownership changes must not create a one-tick zero velocity
+                // pulse that restarts custom walking or galloping animations.
+                mover.setDeltaMovement(momentum);
                 manualControl = true;
             }
         }
@@ -1120,6 +1196,7 @@ public final class NativeFormationController {
         }
 
         Boolean canSteerDirect(ServerLevel level, Mob mover, Vec3 destination, long now) {
+            if (now < directBlockedUntil) return Boolean.FALSE;
             long startRevision = TacticalTerrainRevisions.revisionAt(level, mover.position());
             long goalRevision = TacticalTerrainRevisions.revisionAt(level, destination);
             boolean goalMoved = directGoal == null || directGoal.distanceToSqr(destination) > 1.5D * 1.5D;

@@ -5,6 +5,7 @@ import com.talhanation.recruits.util.AttackUtil;
 import com.talhanation.recruits.util.FormationUtils;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
+import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -59,6 +60,7 @@ public final class CavalryTacticalController {
         ((MobGoalAccess) rider).rts$getGoals().removeGoal(s.goal);
         ((MobGoalAccess) s.mount).rts$getGoals().removeGoal(s.mountGoal);
         s.mount.getNavigation().stop();
+        CommanderAnimationHints.clearMovement(rider);
         if (!rider.isRemoved() && !RoutedGroupManager.isRouting(rider)) {
             rider.setFollowState(0); rider.setTarget(null);
         }
@@ -94,7 +96,6 @@ public final class CavalryTacticalController {
     private static void tick(State s) {
         if (!eligible(s.rider)) return;
         s.rider.setFollowState(3); s.rider.reachedMovePos = false; s.mount.setTarget(null);
-        if (s.pause > 0) { s.pause--; return; }
         Vec3 liveTarget = valid(s.rider, s.target) ? targetPosition(s) : null;
         if (liveTarget == null && s.maneuver.phase() == CavalryManeuver.Phase.REFORM) {
             s.mount.getNavigation().stop();
@@ -102,6 +103,9 @@ public final class CavalryTacticalController {
         }
         CavalryManeuver.Point destination = s.maneuver.tick(point(s.mount.position()),
                 liveTarget == null ? null : point(liveTarget));
+        CommanderAnimationHints.updateMovement(s.rider, true,
+                s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
+                        || s.maneuver.phase() == CavalryManeuver.Phase.PASS);
         matchRiderAndMountFacing(s, destination);
         if (s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
                 || s.maneuver.phase() == CavalryManeuver.Phase.PASS) attack(s);
@@ -110,10 +114,12 @@ public final class CavalryTacticalController {
             else s.stallTicks = 0;
             s.lastPosition = s.mount.position();
             if (s.stallTicks >= 80) {
-                s.mount.getNavigation().stop();
-                if (s.maneuver.blocked(point(s.mount.position()))) s.pause = 40;
-                s.stallTicks = 0; s.repath = -20;
-                return;
+                // Change the maneuver lane without issuing a zero-speed stop. Keeping
+                // the current horizontal motion avoids a visible animation reset.
+                s.maneuver.blocked(point(s.mount.position()));
+                s.stallTicks = 0;
+                s.repath = 10;
+                s.lastNavigationAt = Long.MIN_VALUE;
             }
         }
         if (++s.repath < 10) return;
@@ -121,8 +127,15 @@ public final class CavalryTacticalController {
         // Surface resolution uses local altitude so bridges/hills remain navigation's responsibility.
         BlockPos ground = FormationUtils.getPositionOrSurface((ServerLevel) s.rider.level(),
                 BlockPos.containing(destination.x(), s.mount.getY(), destination.z()));
-        s.mount.getNavigation().moveTo(destination.x(), ground.getY(), destination.z(),
-                s.maneuver.phase() == CavalryManeuver.Phase.CHARGE ? 1.15 : 1.0);
+        Vec3 navigationGoal = new Vec3(destination.x(), ground.getY(), destination.z());
+        long now = s.rider.level().getGameTime();
+        if (s.lastNavigationGoal == null || s.lastNavigationGoal.distanceToSqr(navigationGoal) > 1.5D * 1.5D
+                || s.mount.getNavigation().isDone() || now - s.lastNavigationAt >= 30L) {
+            boolean accepted = s.mount.getNavigation().moveTo(destination.x(), ground.getY(), destination.z(),
+                    s.maneuver.phase() == CavalryManeuver.Phase.CHARGE ? 1.15 : 1.0);
+            s.lastNavigationGoal = accepted ? navigationGoal : null;
+            s.lastNavigationAt = accepted ? now : now - 25L;
+        }
         s.mount.getLookControl().setLookAt(destination.x(), ground.getY(), destination.z());
     }
 
@@ -160,7 +173,9 @@ public final class CavalryTacticalController {
         UUID group;
         CavalryManeuver maneuver;
         Vec3 lastPosition;
-        int repath, samples, stallTicks, pause;
+        Vec3 lastNavigationGoal;
+        int repath, samples, stallTicks;
+        long lastNavigationAt = Long.MIN_VALUE;
         long refreshed;
         boolean active;
         State(AbstractRecruitEntity rider, AbstractHorse mount) {
