@@ -29,6 +29,7 @@ public final class RTSCameraClientEvents {
         InputGate.suppressDisallowedKeyMappings();
         if (event.phase == TickEvent.Phase.END) {
             RTSCameraController.clientTick();
+            CavalryRumbleClient.tick();
             AdvisorClient.tick();
             InputGate.suppressDisallowedKeyMappings();
         }
@@ -81,6 +82,7 @@ public final class RTSCameraClientEvents {
         ClientBattleState.reset();
         ClientTactics.reset();
         AdvisorClient.reset();
+        CavalryRumbleClient.reset();
         FogOfWarWorldRenderer.reset();
     }
 

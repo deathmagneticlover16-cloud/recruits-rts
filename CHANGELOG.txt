@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.15.7-server.1
+Fading positional cavalry audio and regression fixes
+
+- Replaced the cavalry rumble asset with the newly supplied stereo recording.
+- Cavalry rumble is now a continuously positioned client loop per group with a very slow six-second fade in and fade out. The server sends an explicit stop as soon as sampled movement ends, so fade-out begins without waiting for the 15-second recording to finish.
+- Rumble sampling now runs every five ticks instead of scanning and attempting playback every server tick. Clients smoothly follow the live group center and stop stale loops automatically if updates cease.
+- Fixed the short-order rotation regression: short moves retain the formation stencil angle, while every moving horse and rider still follows the shared route tangent. MoveControl and formation yaw no longer fight on short moves.
+- Added a 20 ms deadline to each tactical path search and a 15 ms aggregate budget to scheduled non-critical AI work. Difficult searches publish safe partial routes, and one expensive recovery can no longer cause nine more recoveries to run in the same tick while a loaded formation is becoming cohesive.
+- Network protocol is now rts-camera-157 because the new server-to-client cavalry rumble packet changes message registration. Update clients and server together.
+- Source version and packaging references are 0.15.7-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.6-server.1
 Cavalry wedge, troop statistics and mounted polish
 

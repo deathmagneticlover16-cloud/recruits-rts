@@ -6,7 +6,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class RTSCameraNetwork {
-    private static final String PROTOCOL = "rts-camera-156";
+    private static final String PROTOCOL = "rts-camera-157";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(RecruitsRTSCameraMod.MOD_ID, "main"),
@@ -49,7 +49,10 @@ public final class RTSCameraNetwork {
         CHANNEL.registerMessage(id++, BattleStateSyncPacket.class, BattleStateSyncPacket::encode, BattleStateSyncPacket::decode, BattleStateSyncPacket::handle);
         CHANNEL.registerMessage(id++, TacticsControlPacket.class, TacticsControlPacket::encode, TacticsControlPacket::decode, TacticsControlPacket::handle,
                 java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
-        CHANNEL.registerMessage(id, TacticsStateSyncPacket.class, TacticsStateSyncPacket::encode, TacticsStateSyncPacket::decode, TacticsStateSyncPacket::handle,
+        CHANNEL.registerMessage(id++, TacticsStateSyncPacket.class, TacticsStateSyncPacket::encode, TacticsStateSyncPacket::decode, TacticsStateSyncPacket::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id, CavalryRumblePacket.class, CavalryRumblePacket::encode,
+                CavalryRumblePacket::decode, CavalryRumblePacket::handle,
                 java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
     }
 }

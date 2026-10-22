@@ -1,10 +1,17 @@
 RECRUITS: RTS CAMERA / COMMANDER - REGENERATION CONTEXT
-Current source version: 0.15.6-server.1
+Current source version: 0.15.7-server.1
 Minecraft/loader: Forge 1.20.1, Forge 47.2.0
 Base dependency: Villager Recruits 1.15.2. Formation geometry, slot execution and tactical navigation are native to this mod. Freecam is bundled as a compile dependency. Order Relay, Serious Player Animations, Siege Weapons and Small Ships integrations must remain optional.
 VERSION POLICY: Every source behavior change must increment the semantic version in gradle.properties. Use a patch increment unless the change adds a backward-compatible feature (minor) or breaks compatibility (major), and keep CHANGELOG.txt, BUILD.bat, the debug HUD and this file synchronized.
 
-0.15.6 HEADLINE CHANGES (CURRENT)
+0.15.7 HEADLINE CHANGES (CURRENT)
+
+- Cavalry rumble uses the replacement stereo asset and one continuously positioned client loop per group. It fades in/out over six seconds and receives an explicit stop on the first five-tick sample after movement ends.
+- Short moves preserve stencil orientation but moving horse/rider bodies always share the route tangent, removing the yaw ownership regression.
+- Tactical searches yield safe partial routes after 20 ms, and scheduled non-critical AI work has a 15 ms aggregate tick budget, so initial cohesion cannot batch many expensive recovery paths into one server tick.
+- Network protocol is rts-camera-157 because a client-bound rumble-state packet was added.
+
+0.15.6 HEADLINE CHANGES
 
 - Cavalry-majority selections receive a dedicated right-most Wedge command. It uses filled triangular slots and builds a bounded movement bonus while continuously travelling.
 - Ten neutral, troop-wide statistic keys and profiles are available for future data/UI integration. They are not formation-local and do not yet alter gameplay.
@@ -171,7 +178,7 @@ The native group is removed at initial rout, before the escape hook. The hook st
 
 BUILD / TEST CAVEAT
 0.15.5 source verification: all main Java files pass Java 17 syntax parsing. Dependency-free suites cover formation slots, tactical math, custom formations, frontage, artillery, cavalry and projection. Targeted source contracts cover live nearest-slot assignment, one-time mounted stabilization, eased route heading, direct route simplification with constrained anchors, movement-owner hysteresis, combat path continuity and semantic walking/running animation states while retaining earlier safety behavior.
-At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.15.6-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
+At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.15.7-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
 dev-tests/TacticalSystemsSelfTest.java covers the live production maneuver plan, target movement/death during commitment, both turn directions, recovery decisions, skirmish hysteresis, armor scaling and independent settings. It does not simulate Minecraft terrain, networking or shield hit resolution.
 
 FOCUSED IN-GAME CHECKS FOR 0.12.2

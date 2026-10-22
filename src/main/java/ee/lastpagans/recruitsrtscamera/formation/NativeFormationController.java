@@ -492,9 +492,12 @@ public final class NativeFormationController {
             // during the same tick, producing constant alternating yaw. Keep every moving
             // body on the shared route tangent; restore the ordered per-member facing only
             // after both the anchor and this member have settled.
-            float controlledHeading = travelling && state.rotateForTravel
+            // rotateForTravel controls the slot stencil only. Every moving body still
+            // follows the route tangent, including short moves, or MoveControl and this
+            // rotation owner pull a horse in different directions and recreate spinning.
+            float controlledHeading = travelling
                     ? mover != recruit
-                    ? mountedTravelHeading(mover, desired, state.travelHeading)
+                    ? mountedTravelHeading(mover, state.travelHeading)
                     : state.travelHeading
                     : arrived ? memberHeading : headingTo(mover.position(), desired, memberHeading);
             applyFormationFacing(recruit, mover, controlledHeading);
@@ -616,12 +619,11 @@ public final class NativeFormationController {
         return current + Math.copySign(maximumStep, delta);
     }
 
-    private static float mountedTravelHeading(Mob mount, Vec3 desired, float routeHeading) {
-        // Small slot errors are corrected by MoveControl without swinging the horse's
-        // body away from the route. Only a genuine laggard turns toward its recovery slot.
-        float target = horizontalDistanceSq(mount.position(), desired) > 1.50D * 1.50D
-                ? headingTo(mount.position(), desired, routeHeading) : routeHeading;
-        return approachHeading(mount.getYRot(), target, 12.0F);
+    private static float mountedTravelHeading(Mob mount, float routeHeading) {
+        // Slot recovery may adjust translation and pace, never body direction. Turning
+        // laggards toward individual slots reintroduced competing yaw as wider cavalry
+        // crossed the old error threshold together.
+        return approachHeading(mount.getYRot(), routeHeading, 12.0F);
     }
 
     private static boolean constraintImmediatelyAhead(ServerLevel level, Mob mover, State state) {

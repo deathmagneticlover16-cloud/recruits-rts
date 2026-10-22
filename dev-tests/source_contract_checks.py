@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.6 behavior."""
+"""Targeted source contracts for Commander 0.15.7 behavior."""
 
 from pathlib import Path
 
@@ -47,6 +47,8 @@ animation_hints = source("src/main/java/ee/lastpagans/recruitsrtscamera/animatio
 slots = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationSlotMath.java")
 formation_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationService.java")
 rumble = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryRumbleManager.java")
+rumble_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CavalryRumbleClient.java")
+scheduler = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitAIScheduler.java")
 stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
 
@@ -81,8 +83,8 @@ require(formation, "approachHeading(state.slotHeading, target, 9.0F)",
         "formation geometry must ease through route bends without slot snapping")
 require(formation, "mover.setDeltaMovement(momentum)",
         "manual-control handoffs must preserve momentum for continuous animation")
-require(formation, "horizontalDistanceSq(mount.position(), desired) > 1.50D * 1.50D",
-        "minor mounted slot errors must not swing horse facing away from the route")
+require(formation, "return approachHeading(mount.getYRot(), routeHeading, 12.0F);",
+        "mounted laggards must retain the shared route heading while recovering their slot")
 require(formation, "QUICK_PATH_BUDGET_NANOS = 20_000_000L",
         "difficult route planning must use the 20 ms staged-planning budget")
 require(formation, "state.routeGoal = requestedDestination",
@@ -103,6 +105,8 @@ require(pathfinder, "if (!dryAt(level, mover, feet)) return null;", "fluid rejec
 require(pathfinder, "if (shape.isEmpty()) return null;", "unsupported terrain rejection must remain")
 require(pathfinder, "segmentSafe(level, mover", "safe open routes must be straightened")
 require(pathfinder, "requiredAnchors.contains", "route smoothing must preserve constrained terrain anchors")
+require(pathfinder, "SEARCH_TIME_BUDGET_NANOS = 20_000_000L",
+        "each tactical search must yield a safe partial route before a multi-second tick spike")
 
 require(keys, "GLFW.GLFW_KEY_E", "E must move the camera up")
 require(keys, "GLFW.GLFW_KEY_Q", "Q must move the camera down")
@@ -175,12 +179,22 @@ require(slots, "1.7D * (spacing <= 1.10D ? 1.30D : 1.0D)",
 require(formation_service, "previous.spacing() > 1.10D", "frontage dragging must preserve loose spacing")
 require(formation, "state.rotateForTravel = horizontalDistanceSq(state.center, destination) > 4.0D * 4.0D",
         "short orders must not rotate the whole formation out and back")
+require(formation, "float controlledHeading = travelling",
+        "short-move bodies must still share the route tangent instead of fighting MoveControl")
 require(formation, "? slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.08D",
         "mounted laggards need bounded catch-up instead of teleport-like surges")
 require(cavalry_combat, "MOUNT_HEALTH_BONUS = 0.75D", "managed recruited mounts need extra health")
 require(rumble, "riders * speed * emphasis / 12.0D", "rumble volume must use riders x actual speed")
 require(rumble, "(wedge ? 1.15D : 1.0D) * (charging ? 1.15D : 1.0D)",
         "wedge and charge sound emphasis must stack")
+require(rumble, "SAMPLE_TICKS = 5", "rumble sampling must avoid an every-tick server scan")
+require(rumble, "new CavalryRumblePacket(groupId, false", "stopped groups need an explicit client stop")
+require(rumble_client, "FADE_IN_STEP = 1.0F / 120.0F", "rumble needs a very slow fade in")
+require(rumble_client, "FADE_OUT_STEP = 1.0F / 120.0F", "rumble needs a very slow fade out")
+require(rumble_client, "this.looping = true", "rumble must be a controllable loop, not fire-and-forget audio")
+require(rumble_client, "public boolean canStartSilent()", "a zero-gain fade-in must not be culled at startup")
+require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 15_000_000L",
+        "recovery paths need an aggregate tick-time guard during initial cohesion")
 require(overlay, "COMMAND_CAVALRY_WEDGE", "cavalry wedge needs a stable command-bar element")
 require(overlay, "bodyguardFollow, cavalryWedge", "cavalry wedge must be the right-most command")
 for key in ("DAMAGE", "MELEE_SKILL", "MELEE_DEFENCE", "CHARGE_BONUS", "SPEED", "MORALE",
@@ -188,7 +202,7 @@ for key in ("DAMAGE", "MELEE_SKILL", "MELEE_DEFENCE", "CHARGE_BONUS", "SPEED", "
     require(stats, key + "(\"stat.", "all ten troop-wide statistics must have stable IDs")
 require(stat_registry, "Map<UUID, TroopStatProfile>", "statistics must be stored per troop group")
 
-require(network, 'PROTOCOL = "rts-camera-156"', "wedge enum requires protocol 156")
-require(source("gradle.properties"), "mod_version=0.15.6-server.1", "semantic version must be updated")
+require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
+require(source("gradle.properties"), "mod_version=0.15.7-server.1", "semantic version must be updated")
 
-print("0.15.6 source contracts passed")
+print("0.15.7 source contracts passed")

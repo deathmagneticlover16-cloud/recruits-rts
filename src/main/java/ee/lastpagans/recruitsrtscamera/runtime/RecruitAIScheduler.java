@@ -17,6 +17,7 @@ import java.util.Set;
 /** Main-thread budget scheduler with key-based request deduplication. */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RecruitAIScheduler {
+    private static final long SERVER_TICK_WORK_BUDGET_NANOS = 15_000_000L;
     public enum Priority { CRITICAL, HIGH, MEDIUM, LOW }
     public enum WorkType { FORMATION_PATH, AGENT_PATH, PERCEPTION, MAINTENANCE }
 
@@ -45,6 +46,7 @@ public final class RecruitAIScheduler {
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        long workStarted = System.nanoTime();
         EnumMap<WorkType, Integer> budgets = new EnumMap<>(WorkType.class);
         boolean budgeted = RTSServerConfig.AI_SCHEDULER.get();
         budgets.put(WorkType.FORMATION_PATH, budgeted ? RTSServerConfig.FORMATION_PATHS_PER_TICK.get() : Integer.MAX_VALUE);
@@ -52,6 +54,7 @@ public final class RecruitAIScheduler {
         budgets.put(WorkType.PERCEPTION, budgeted ? 32 : Integer.MAX_VALUE);
         budgets.put(WorkType.MAINTENANCE, budgeted ? 32 : Integer.MAX_VALUE);
         int criticalGuard = 256;
+        priorityLoop:
         for (Priority priority : Priority.values()) {
             ArrayDeque<Work> queue = QUEUES.get(priority);
             int checked = queue.size();
@@ -65,6 +68,11 @@ public final class RecruitAIScheduler {
                 if (priority == Priority.CRITICAL && criticalGuard-- <= 0) {
                     queue.addFirst(work);
                     break;
+                }
+                if (priority != Priority.CRITICAL
+                        && System.nanoTime() - workStarted >= SERVER_TICK_WORK_BUDGET_NANOS) {
+                    queue.addFirst(work);
+                    break priorityLoop;
                 }
                 if (priority != Priority.CRITICAL) budgets.put(work.key.type, remaining - 1);
                 PENDING.remove(work.key);

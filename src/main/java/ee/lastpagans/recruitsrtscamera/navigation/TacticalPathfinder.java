@@ -34,6 +34,7 @@ public final class TacticalPathfinder {
     private static final int[][] DIAGONALS = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
     private static final double MAX_STEP_UP = 1.25D;
     private static final double MAX_DROP = 1.50D;
+    private static final long SEARCH_TIME_BUDGET_NANOS = 20_000_000L;
 
     private TacticalPathfinder() {
     }
@@ -62,8 +63,12 @@ public final class TacticalPathfinder {
         Cell closest = start;
         double closestDistance = heuristic(start, goal);
         int visited = 0;
+        long deadline = System.nanoTime() + SEARCH_TIME_BUDGET_NANOS;
 
         while (!open.isEmpty() && visited++ < Math.max(128, maxVisited)) {
+            // A bounded expansion count is insufficient on complex modded collision
+            // shapes. Yield a safe partial route rather than spending seconds in one tick.
+            if ((visited & 7) == 0 && System.nanoTime() >= deadline) break;
             SearchNode search = open.poll();
             Cell current = search.cell;
             if (!closed.add(current.key)) continue;
