@@ -570,7 +570,7 @@ public final class CommanderOverlay {
     private static Bounds bannerBounds(double worldX, double worldY, double worldZ, Layout layout) {
         if (!Double.isFinite(worldX) || !Double.isFinite(worldY) || !Double.isFinite(worldZ)) return null;
         ScreenProjection.ProjectedPoint point = RTSCameraController.commanderProjectWorld(
-                worldX, worldY + 2.4D, worldZ);
+                worldX, worldY + 6.4D, worldZ);
         if (point == null || point.depth() <= 0.0D || point.depth() > 180.0D) return null;
         int centerX = (int) Math.round(point.x() * virtualGuiWidth() / Math.max(1, MC.getWindow().getWidth()));
         int centerY = (int) Math.round(point.y() * virtualGuiHeight() / Math.max(1, MC.getWindow().getHeight()));

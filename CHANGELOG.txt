@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.15.21-server.1
+Supported downhill movement and responsive melee facing
+
+- Continued orders reuse the formation's live horizontal anchor, resolve it onto an actual supported surface, and preserve its eased cohesion pace. A formation spread across several Y levels no longer seeds its replacement route in unsupported interpolated air or drops back to its initial 20 percent pace.
+- Mounted local steering carries an already-verified one-block descent through its short look-ahead safety probe. Horses keep continuous horizontal authority over supported downhill steps while level travel continues rejecting holes, pits, water and unsupported drops.
+- Stationary formation members with an explicit RTS melee target now face that nearby target before swinging, including enemies behind their ordered formation facing. Their assigned slot remains fixed.
+- Raised the cloth-only group flags four blocks above the preceding marker height and kept their projected selection bounds aligned.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.21-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.20-server.1
 Multi-level cohesion, pace-aware routes and formation discipline
 

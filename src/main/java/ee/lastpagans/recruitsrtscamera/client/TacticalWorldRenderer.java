@@ -167,7 +167,7 @@ public final class TacticalWorldRenderer {
         List<FlagView> flags = new ArrayList<>();
         for (RTSCommandFacade.UnitCardView view : RTSCommandFacade.unitCards()) {
             if (!Double.isFinite(view.centerX()) || !Double.isFinite(view.anchorY()) || !Double.isFinite(view.centerZ())) continue;
-            Vec3 target = new Vec3(view.centerX(), view.anchorY() + 2.4D, view.centerZ());
+            Vec3 target = new Vec3(view.centerX(), view.anchorY() + 6.4D, view.centerZ());
             SmoothAnchor anchor = FLAG_ANCHORS.computeIfAbsent(view.groupId(), ignored -> new SmoothAnchor(target));
             anchor.approach(target, smoothing);
             flags.add(new FlagView(view.groupId(), anchor.position, view.selected(), false));
@@ -175,7 +175,7 @@ public final class TacticalWorldRenderer {
         if (CommanderOverlay.worldEnemyBannersVisible()) {
             for (RTSCommandFacade.EnemyBannerView view : RTSCommandFacade.enemyBanners()) {
                 if (!Double.isFinite(view.centerX()) || !Double.isFinite(view.anchorY()) || !Double.isFinite(view.centerZ())) continue;
-                Vec3 target = new Vec3(view.centerX(), view.anchorY() + 2.4D, view.centerZ());
+                Vec3 target = new Vec3(view.centerX(), view.anchorY() + 6.4D, view.centerZ());
                 SmoothAnchor anchor = FLAG_ANCHORS.computeIfAbsent(view.groupId(), ignored -> new SmoothAnchor(target));
                 anchor.approach(target, smoothing);
                 flags.add(new FlagView(view.groupId(), anchor.position, false, true));

@@ -25,6 +25,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.level.Level;
@@ -86,7 +87,11 @@ public final class NativeFormationController {
                 intent.kind(), units.size(), intent.spacing(), intent.ranks(), intent.frontageWidth(), mounted
         );
         float heading = Float.isFinite(intent.facingYaw()) ? intent.facingYaw() : sender.getYRot();
-        Vec3 start = averageControlledPosition(units, plan.destination().y);
+        State old = STATES.get(plan.groupId());
+        boolean continuing = reusableCenter(old, units);
+        Vec3 start = continuing
+                ? supportedRouteSeed(sender.serverLevel(), units, old.center)
+                : supportedFormationCenter(sender.serverLevel(), units, plan.destination().y);
         List<FormationSlotMath.Point> unitPoints = units.stream()
                 .map(unit -> new FormationSlotMath.Point(controlled(unit).getX(), controlled(unit).getZ()))
                 .toList();
@@ -101,10 +106,10 @@ public final class NativeFormationController {
         }
 
         removeOverlapping(sender.getServer(), plan.groupId(), assigned.keySet());
-        State old = STATES.get(plan.groupId());
         if (old != null) releaseMembers(sender.getServer(), old, false);
         State state = new State(plan.groupId(), sender.getUUID(), sender.serverLevel().dimension(), intent.kind(), heading, start,
                 plan.destination(), assigned, Map.of(), intent.hold());
+        if (continuing) state.cohesionScale = old.cohesionScale;
         STATES.put(plan.groupId(), state);
         for (AbstractRecruitEntity unit : units) {
             claim(unit);
@@ -133,7 +138,11 @@ public final class NativeFormationController {
                 .toList();
         if (units.isEmpty()) return false;
         Vec3 destination = average(absoluteSlots.values());
-        Vec3 start = averageControlledPosition(units, destination.y);
+        State old = STATES.get(groupId);
+        boolean continuing = reusableCenter(old, units);
+        Vec3 start = continuing
+                ? supportedRouteSeed(sender.serverLevel(), units, old.center)
+                : supportedFormationCenter(sender.serverLevel(), units, destination.y);
         Map<UUID, FormationSlotMath.Offset> offsets = new LinkedHashMap<>();
         for (AbstractRecruitEntity unit : units) {
             Vec3 slot = absoluteSlots.get(unit.getUUID());
@@ -143,10 +152,10 @@ public final class NativeFormationController {
             ));
         }
         removeOverlapping(sender.getServer(), groupId, offsets.keySet());
-        State old = STATES.get(groupId);
         if (old != null) releaseMembers(sender.getServer(), old, false);
         State state = new State(groupId, sender.getUUID(), sender.serverLevel().dimension(), FormationKind.MARCH, 0.0F, start,
                 destination, offsets, facings == null ? Map.of() : facings, true);
+        if (continuing) state.cohesionScale = old.cohesionScale;
         STATES.put(groupId, state);
         for (AbstractRecruitEntity unit : units) {
             claim(unit);
@@ -518,8 +527,19 @@ public final class NativeFormationController {
             // after both the anchor and this member have settled.
             // Every moving body follows the route tangent. The authored slot stencil stays
             // fixed, so a route bend cannot throw outside members across the formation.
+            LivingEntity combatTarget = recruit.getTarget();
+            boolean faceNearbyTarget = !travelling && TacticalCombatManager.ownsTarget(recruit)
+                    && combatTarget != null && combatTarget.isAlive() && !combatTarget.isRemoved()
+                    && recruit.distanceToSqr(combatTarget) <= 4.5D * 4.5D;
             float controlledHeading;
-            if (mover != recruit && (travelling || !arrived)) {
+            if (faceNearbyTarget) {
+                // Formation ownership must not leave an engaged recruit staring past an
+                // enemy behind him. Keep the slot fixed, but turn the body and weapon into
+                // the leased melee target while it is within the immediate engagement area.
+                Entity targetBody = combatTarget.getVehicle() == null
+                        ? combatTarget : combatTarget.getVehicle();
+                controlledHeading = headingTo(mover.position(), targetBody.position(), memberHeading);
+            } else if (mover != recruit && (travelling || !arrived)) {
                 // Every rider/mount pair receives the same group-owned travel yaw. Per-member
                 // easing allowed tiny differences to survive after repeated angled orders.
                 controlledHeading = state.travelHeading;
@@ -921,7 +941,19 @@ public final class NativeFormationController {
         return controlled instanceof Mob mob ? mob : null;
     }
 
-    private static Vec3 averageControlledPosition(List<AbstractRecruitEntity> units, double fallbackY) {
+    private static boolean reusableCenter(State old, List<AbstractRecruitEntity> units) {
+        if (old == null || old.center == null || units.size() != old.offsets.size()) return false;
+        for (AbstractRecruitEntity unit : units) {
+            if (!old.offsets.containsKey(unit.getUUID())) return false;
+        }
+        return true;
+    }
+
+    private static Vec3 supportedFormationCenter(
+            ServerLevel level,
+            List<AbstractRecruitEntity> units,
+            double fallbackY
+    ) {
         double x = 0.0D, z = 0.0D;
         List<Double> elevations = new ArrayList<>(units.size());
         for (AbstractRecruitEntity unit : units) {
@@ -932,10 +964,34 @@ public final class NativeFormationController {
         }
         double inverse = 1.0D / units.size();
         elevations.sort(Double::compareTo);
-        // A mean between two terraces is unsupported air. Use a real occupied level as
-        // the next route's seed so a fresh order can start while ranks span stairs/ledges.
+        // Resolve the averaged horizontal centre onto a real surface. Pairing averaged X/Z
+        // with a member's median Y can create a point in unsupported air when ranks span a
+        // ledge, causing every later order to begin with an impossible route seed.
         double routeY = elevations.isEmpty() ? fallbackY : elevations.get((elevations.size() - 1) / 2);
-        return new Vec3(x * inverse, routeY, z * inverse);
+        Vec3 candidate = new Vec3(x * inverse, routeY, z * inverse);
+        return supportedRouteSeed(level, units, candidate);
+    }
+
+    private static Vec3 supportedRouteSeed(
+            ServerLevel level,
+            List<AbstractRecruitEntity> units,
+            Vec3 candidate
+    ) {
+        Mob representative = units.stream()
+                .map(NativeFormationController::controlledMob)
+                .filter(java.util.Objects::nonNull)
+                .min(Comparator.comparingDouble(mob -> horizontalDistanceSq(mob.position(), candidate)))
+                .orElse(null);
+        if (representative == null) return candidate;
+        Vec3 supported = TacticalPathfinder.standableAt(level, representative, candidate);
+        // Never turn an averaged centre above a cave into a route seeded on its floor.
+        // If the averaged column has no same-level support, prefer nearby formation-level
+        // support and finally the closest live member as a guaranteed physical start.
+        if (supported != null && supported.y < candidate.y - 1.25D) supported = null;
+        if (supported == null) {
+            supported = TacticalPathfinder.nearestFormationStandable(level, representative, candidate);
+        }
+        return supported == null ? representative.position() : supported;
     }
 
     private static Vec3 average(Iterable<Vec3> positions) {

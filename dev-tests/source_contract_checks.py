@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.20 behavior."""
+"""Targeted source contracts for Commander 0.15.21 behavior."""
 
 from pathlib import Path
 
@@ -124,8 +124,8 @@ require(formation, "desired.y - mover.getY() <= 1.25D",
         "continuous rise handling must remain bounded to an ordinary supported step")
 require(pathfinder, "FORMATION_SLOT_MAX_DROP = 1.25D",
         "final formation slots must accept an ordinary supported one-block descent")
-require(pathfinder, "destination.y < start.y - 0.60D ? FORMATION_SLOT_MAX_DROP : 0.60D",
-        "direct descent must be allowed only when the commanded destination is lower")
+require(pathfinder, "allowOrdinaryDescent || destination.y < start.y - 0.60D",
+        "direct descent must require a lower destination or an explicitly verified continuation")
 require(formation, "TacticalPathfinder.standableAt(level, mover, mover.position())",
         "an unsafe outer slot must hold its current supported column instead of targeting air")
 require(formation, "travelling && state.route.complete()",
@@ -281,7 +281,7 @@ require(steering, "setWantedPosition(mover.getX(), mover.getY(), mover.getZ(), 0
         "mounted steering must neutralize MoveControl's competing yaw target")
 require(mounted_motion, "currentX * 0.30D + requestedX * 0.70D",
         "mounted velocity changes must be damped across ticks")
-require(steering, "TacticalPathfinder.canSteerDirect(level, mover, probe)",
+require(steering, "TacticalPathfinder.canSteerDirect(level, mover, probe, supportedDescent)",
         "direct mounted velocity must retain terrain and hole safety checks")
 require(formation_packet, "packet.kind == FormationKind.CAVALRY_WEDGE || packet.kind == FormationKind.SQUARE",
         "wedge and its square toggle must use one native formation controller")
@@ -362,7 +362,8 @@ forbid(render_scene, "FormationFootprint", "transparent formation polygon estima
 forbid(controller, "scene.footprint", "formation previews must render slots without a transparent polygon")
 forbid(controller, "scene.route(List.of(start, end)", "frontage planning must not render the long centre bar")
 require(controller, "TACTICAL_ROUTE_COLOR = 0xD8FFD36A", "tactical previews must use original yellow")
-require(world_renderer, "view.anchorY() + 2.4D", "the flag must use its original marker height")
+require(world_renderer, "view.anchorY() + 6.4D", "the cloth flag must be raised four blocks")
+require(overlay, "worldY + 6.4D", "raised flag selection must follow the rendered cloth")
 forbid(world_renderer, "drawFlagPole", "temporary Betsy Ross markers must render as cloth only")
 forbid(world_renderer, "verticalBox", "temporary markers must not synthesize a pole model")
 require(render_scene, "float flowSpeed", "animated route ribbons must carry movement speed")
@@ -377,6 +378,18 @@ require(steering, "Math.min(distanceToSlot, Math.max(0.35D, requested.length() *
         "mounted ledge probes must never overshoot the final slot")
 require(steering, "position.y + (desired.y - position.y) * slotFraction",
         "mounted ledge probes must retain the grounded slot elevation")
+require(steering, "canSteerDirect(level, mover, probe, supportedDescent)",
+        "a verified one-block descent must survive the mounted inner safety probe")
+require(pathfinder, "boolean allowOrdinaryDescent",
+        "direct terrain checks need an explicit supported-descent continuation")
+require(formation, "supportedRouteSeed(sender.serverLevel(), units, old.center)",
+        "replacement orders must ground the live anchor instead of combining unrelated XYZ averages")
+require(formation, "TacticalPathfinder.nearestFormationStandable(level, representative, candidate)",
+        "replacement route seeds must not fall through an averaged centre into a cave")
+require(formation, "state.cohesionScale = old.cohesionScale",
+        "replacement orders must preserve their current eased formation pace")
+require(formation, "faceNearbyTarget = !travelling && TacticalCombatManager.ownsTarget(recruit)",
+        "stationary formation melee must turn into its explicit nearby target")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/TranslateGroupsPacket.java"),
         "RTSMovementBoostManager.registerHastyMove", "Alt-drag translation must default to run")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/FrontageGroupsPacket.java"),
@@ -388,6 +401,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.20-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.21-server.1", "semantic version must be updated")
 
-print("0.15.20 source contracts passed")
+print("0.15.21 source contracts passed")

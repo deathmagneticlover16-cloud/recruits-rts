@@ -107,7 +107,9 @@ public final class LocalFormationSteering {
         } else {
             probe = position;
         }
-        if (!TacticalPathfinder.canSteerDirect(level, mover, probe)) {
+        boolean supportedDescent = desired.y < position.y - 0.60D
+                && desired.y >= position.y - 1.25D;
+        if (!TacticalPathfinder.canSteerDirect(level, mover, probe, supportedDescent)) {
             mover.getNavigation().moveTo(desired.x, desired.y, desired.z, 0.86D * safeScale);
             return false;
         }

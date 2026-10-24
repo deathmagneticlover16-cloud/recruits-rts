@@ -160,6 +160,20 @@ public final class TacticalPathfinder {
      * standing point with a traversable height change; unsupported samples make a hole impassable.
      */
     public static boolean canSteerDirect(ServerLevel level, Mob mover, Vec3 destination) {
+        return canSteerDirect(level, mover, destination, false);
+    }
+
+    /**
+     * Variant used after a grounded formation slot has already proved that the immediate
+     * destination is one supported level below the mover. The explicit flag prevents a
+     * level route from treating the first block of a hole as a valid descent.
+     */
+    public static boolean canSteerDirect(
+            ServerLevel level,
+            Mob mover,
+            Vec3 destination,
+            boolean allowOrdinaryDescent
+    ) {
         Vec3 start = mover.position();
         double horizontal = Math.hypot(destination.x - start.x, destination.z - start.z);
         int samples = Math.max(1, (int) Math.ceil(horizontal / 0.45D));
@@ -167,7 +181,8 @@ public final class TacticalPathfinder {
         // A commanded lower destination may descend one ordinary supported block. A route
         // whose destination remains level may not dip through a one-block hole and climb
         // out again, preserving the existing pit/canyon rejection.
-        double allowedDrop = destination.y < start.y - 0.60D ? FORMATION_SLOT_MAX_DROP : 0.60D;
+        double allowedDrop = allowOrdinaryDescent || destination.y < start.y - 0.60D
+                ? FORMATION_SLOT_MAX_DROP : 0.60D;
         for (int i = 1; i <= samples; i++) {
             double fraction = i / (double) samples;
             Vec3 probe = start.lerp(destination, fraction);

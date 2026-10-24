@@ -1,10 +1,18 @@
 RECRUITS: RTS CAMERA / COMMANDER - REGENERATION CONTEXT
-Current source version: 0.15.20-server.1
+Current source version: 0.15.21-server.1
 Minecraft/loader: Forge 1.20.1, Forge 47.2.0
 Base dependency: Villager Recruits 1.15.2. Formation geometry, slot execution and tactical navigation are native to this mod. Freecam is bundled as a compile dependency. Order Relay, Serious Player Animations, Siege Weapons and Small Ships integrations must remain optional.
 VERSION POLICY: Every source behavior change must increment the semantic version in gradle.properties. Use a patch increment unless the change adds a backward-compatible feature (minor) or breaks compatibility (major), and keep CHANGELOG.txt, BUILD.bat, the debug HUD and this file synchronized.
 
-0.15.20 HEADLINE CHANGES (CURRENT)
+0.15.21 HEADLINE CHANGES (CURRENT)
+
+- Replacement orders reuse the live horizontal formation anchor, resolve it to actual support, and retain cohesion pace across multi-level terrain.
+- Verified supported one-block descents remain under continuous mounted steering through the inner look-ahead probe; level routes still reject holes and unsupported drops.
+- Formation-held recruits turn into nearby explicitly leased melee targets before attacking.
+- Cloth-only group flags are four blocks higher than the preceding marker height.
+- Network protocol remains rts-camera-157 because packet compatibility is unchanged.
+
+0.15.20 HEADLINE CHANGES
 
 - New orders start from a real occupied median elevation. Vertical terrain spread is excluded from laggard and catch-up calculations; horizontal slot error remains authoritative for cohesion.
 - Temporary group markers are again the original pole-free Betsy Ross cloth at its initial height, and command geometry is back to the original yellow palette.
@@ -253,7 +261,7 @@ The native group is removed at initial rout, before the escape hook. The hook st
 
 BUILD / TEST CAVEAT
 0.15.5 source verification: all main Java files pass Java 17 syntax parsing. Dependency-free suites cover formation slots, tactical math, custom formations, frontage, artillery, cavalry and projection. Targeted source contracts cover live nearest-slot assignment, one-time mounted stabilization, eased route heading, direct route simplification with constrained anchors, movement-owner hysteresis, combat path continuity and semantic walking/running animation states while retaining earlier safety behavior.
-At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.15.20-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
+At the user's direction, the full Forge build is left to the packager. Run BUILD.bat or gradlew.bat clean build with Java 17; expected output build/libs/recruits-rts-camera-0.15.21-server.1.jar. No semantic Forge compile, mixin application, dedicated-server startup or gameplay pass is claimed.
 dev-tests/TacticalSystemsSelfTest.java covers the live production maneuver plan, target movement/death during commitment, both turn directions, recovery decisions, skirmish hysteresis, armor scaling and independent settings. It does not simulate Minecraft terrain, networking or shield hit resolution.
 
 FOCUSED IN-GAME CHECKS FOR 0.12.2
