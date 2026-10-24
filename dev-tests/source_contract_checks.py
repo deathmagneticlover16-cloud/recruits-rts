@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.16 behavior."""
+"""Targeted source contracts for Commander 0.15.17 behavior."""
 
 from pathlib import Path
 
@@ -333,6 +333,8 @@ require(battle, "ARCHER_MELEE_ROUTING_MORALE = 8.0F",
         "archer-heavy groups caught in melee must retain their stronger rout vulnerability")
 require(battle, "TacticalCombatManager.ranged(recruit)",
         "archer melee vulnerability must use the actual tactical ranged classification")
+require(battle, "import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;",
+        "battle mechanics must import the tactical ranged classifier")
 require(world_renderer, "RenderLevelStageEvent.Stage.AFTER_PARTICLES",
         "battlefield previews must render in world space")
 require(world_renderer, "1.0D - Math.exp(-seconds * 7.5D)",
@@ -350,6 +352,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.16-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.17-server.1", "semantic version must be updated")
 
-print("0.15.16 source contracts passed")
+print("0.15.17 source contracts passed")

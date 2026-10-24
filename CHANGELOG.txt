@@ -1,3 +1,10 @@
+Recruits: RTS Camera 0.15.17-server.1
+Battle mechanics compile correction
+
+- Added the missing TacticalCombatManager import used by the new archer-in-melee morale checks, correcting the compileJava failure without changing their behavior.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.17-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.16-server.1
 Unified battlefield rendering and reliable terrain/combat movement
 

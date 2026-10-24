@@ -8,6 +8,7 @@ import com.talhanation.recruits.world.RecruitsGroupsSaveData;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.advisor.AdvisorEvent;
 import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
+import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.combat.RTSGroupAttackManager;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
