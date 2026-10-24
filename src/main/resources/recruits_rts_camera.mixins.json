@@ -8,7 +8,8 @@
     "KeyMappingMixin",
     "KeyboardHandlerMixin",
     "EntityTeamColorMixin",
-    "MinecraftSelectionGlowMixin"
+    "MinecraftSelectionGlowMixin",
+    "ImmersivePaintingScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

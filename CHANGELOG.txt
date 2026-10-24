@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.15.23-server.1
+Stable routing UI, causal morale and the real painting editor
+
+- Routing no longer removes a formation's Commander card or drops it from the live selection. The routing badge remains visible and open command panels stay open; server authority continues rejecting orders for a routing group.
+- Removed two lossless-combat morale leaks: ordinary hits from behind no longer subtract morale from the entire group every 1.5 seconds, and ranged recruits no longer lose morale continuously merely because a target is within melee distance. Casualties, exhaustion, commander/standard loss and bounded charge shock remain meaningful morale events; archers caught in melee retain their higher routing threshold.
+- Replaced the substitute flag thumbnail grid with Immersive Paintings' actual `ImmersivePaintingScreen`. Its native tabs, search, uploads, filtering, pagination and tooltips run against a private client proxy; completing image selection redirects the chosen motive to the persistent RTS group flag packet.
+- Raised the optional Immersive Paintings integration floor to the supplied and verified 0.6.13 Forge API.
+- Network protocol remains rts-camera-158 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.15.23-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.22-server.2
 Readable group selection for custom flags
 

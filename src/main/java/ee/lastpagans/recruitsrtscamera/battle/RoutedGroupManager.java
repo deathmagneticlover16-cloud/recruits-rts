@@ -92,13 +92,9 @@ public final class RoutedGroupManager {
         CustomFormationExecutor.releaseForAttack(groupId, loaded);
         for (AbstractRecruitEntity recruit : loaded) enforce(recruit);
 
-        // Remove and SAVE native bookkeeping now. Its command bar uses a different packet
-        // from Commander, and hiding a Commander card never changed this registry.
-        if (RecruitEvents.recruitsGroupsManager != null) {
-            RecruitEvents.recruitsGroupsManager.removeGroup(groupId);
-            RecruitEvents.recruitsGroupsManager.save(level);
-            RecruitEvents.recruitsGroupsManager.broadCastGroupsToPlayer(level, ownerId);
-        }
+        // Keep native bookkeeping while the retreat is visible. Command resolution is already
+        // blocked by RTSRoutingSavedData, so deleting the group here only made its Commander
+        // card and open command UI collapse. Remove it after the last deserter escapes or dies.
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -236,14 +232,27 @@ public final class RoutedGroupManager {
             recruit.stopRiding();
             recruit.discard();
         }
+        removeNativeGroupIfRoutFinished(level, groupId, owner);
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onDeath(LivingDeathEvent event) {
         if (event.getEntity() instanceof AbstractRecruitEntity recruit
                 && recruit.level() instanceof ServerLevel level && isRouting(recruit)) {
+            CompoundTag rout = recruit.getPersistentData().getCompound(KEY);
+            UUID groupId = rout.hasUUID("group") ? rout.getUUID("group") : null;
+            UUID ownerId = rout.hasUUID("owner") ? rout.getUUID("owner") : null;
             RTSRoutingSavedData.get(level).removeMember(recruit.getUUID());
+            removeNativeGroupIfRoutFinished(level, groupId, ownerId);
         }
+    }
+
+    private static void removeNativeGroupIfRoutFinished(ServerLevel level, UUID groupId, UUID ownerId) {
+        if (level == null || groupId == null || RTSRoutingSavedData.get(level).containsGroup(groupId)
+                || RecruitEvents.recruitsGroupsManager == null) return;
+        RecruitEvents.recruitsGroupsManager.removeGroup(groupId);
+        RecruitEvents.recruitsGroupsManager.save(level);
+        if (ownerId != null) RecruitEvents.recruitsGroupsManager.broadCastGroupsToPlayer(level, ownerId);
     }
 
     @SubscribeEvent

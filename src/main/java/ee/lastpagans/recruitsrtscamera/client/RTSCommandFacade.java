@@ -103,11 +103,8 @@ public final class RTSCommandFacade {
                     : cached != null ? cached.averageLevel() : -1.0F;
             float averageMorale = sample == null ? -1.0F : sample.averageMorale();
             GroupBattleSnapshot battle = ClientBattleState.get(group.getUUID());
-            // A routed group has broken as a command formation. It remains in the world while
-            // fleeing, but must disappear from the command cards immediately.
-            if (battle != null && battle.moraleState() >= 2) {
-                continue;
-            }
+            // Routed formations remain visible in Commander with their routing state. Server
+            // command resolution still excludes them, but routing never closes or reshapes UI.
             float averageFatigue = battle == null ? -1.0F : battle.fatigue();
             int moraleState = battle == null ? (averageMorale >= 0.0F && averageMorale < 15.0F ? 2
                     : averageMorale >= 0.0F && averageMorale < 35.0F ? 1 : 0) : battle.moraleState();

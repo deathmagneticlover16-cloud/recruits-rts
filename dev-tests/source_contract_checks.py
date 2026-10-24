@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.22 behavior."""
+"""Targeted source contracts for Commander 0.15.23 behavior."""
 
 from pathlib import Path
 
@@ -29,6 +29,7 @@ keys = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCameraKey
 controller = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCameraController.java")
 overlay = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CommanderOverlay.java")
 facade = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCommandFacade.java")
+client_battle = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/ClientBattleState.java")
 gate = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/InputGate.java")
 network = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/RTSCameraNetwork.java")
 rotate_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/RotateFormationPacket.java")
@@ -66,6 +67,7 @@ scheduler = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/Recrui
 stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
 battle = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/BattleMechanicsManager.java")
+routing = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/RoutedGroupManager.java")
 world_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalWorldRenderer.java")
 render_scene = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalRenderScene.java")
 
@@ -414,6 +416,19 @@ require(controller, "ORDER_RADIUS = 288.0D", "temporary client order reach must 
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroupsPacket.java"),
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
+forbid(client_battle, "commanderDropRoutedGroups",
+        "routing must not collapse Commander selection or close its command UI")
+forbid(facade, "battle.moraleState() >= 2",
+        "routed formations must remain visible as status-bearing Commander cards")
+forbid(battle, "REAR_SHOCK_COOLDOWN",
+        "ordinary rear contact must not repeatedly drain the entire group's morale")
+forbid(battle, "ARCHER_MELEE_MORALE_LOSS_PER_SAMPLE",
+        "merely having a nearby melee target must not passively drain archer morale")
+require(routing, "removeNativeGroupIfRoutFinished",
+        "native group deletion must wait until the visible rout has actually finished")
+require(client_battle, "routed.forEach(GROUPS::putIfAbsent)",
+        "the ROUTING card badge must survive omission from ordinary runtime samples")
+
 require(group_flag_command, 'Commands.literal("setflag")', "group flags need the requested setflag command")
 require(group_flag_command, "StringArgumentType.greedyString()",
         "setflag must accept readable group names, including names containing spaces")
@@ -425,6 +440,9 @@ require(group_flag_screen, "ClientPaintingManager.getPaintings()",
         "the group flag browser must use Immersive Paintings' synchronized library")
 require(group_flag_screen, "new SetGroupFlagPacket(",
         "choosing a painting must send the group selection to server authority")
+require(group_flag_screen, "extends ImmersivePaintingScreen",
+        "group flags must use Immersive Paintings' real editor rather than a substitute grid")
+forbid(group_flag_screen, "COLUMNS", "the removed homemade painting grid must not return")
 require(group_flag_data, 'DATA_NAME = "recruits_rts_camera_group_flags"',
         "group painting selections must persist across world reloads")
 require(group_flag_sync, "RTSGroupFlagSavedData.get(player.serverLevel()).snapshot()",
@@ -440,6 +458,6 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
 require(network, 'PROTOCOL = "rts-camera-158"', "group flag packets require protocol 158")
-require(source("gradle.properties"), "mod_version=0.15.22-server.2", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.23-server.1", "semantic version must be updated")
 
-print("0.15.22 source contracts passed")
+print("0.15.23 source contracts passed")

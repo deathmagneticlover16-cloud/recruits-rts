@@ -14,4 +14,4 @@ if errorlevel 1 exit /b %errorlevel%
 
 echo.
 echo Built JAR:
-echo   build\libs\recruits-rts-camera-0.15.22-server.2.jar
+echo   build\libs\recruits-rts-camera-0.15.23-server.1.jar

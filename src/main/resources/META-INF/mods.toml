@@ -71,6 +71,6 @@ side="BOTH"
 [[dependencies.${mod_id}]]
 modId="immersive_paintings"
 mandatory=false
-versionRange="[0.6.11,)"
+versionRange="[0.6.13,)"
 ordering="AFTER"
 side="CLIENT"

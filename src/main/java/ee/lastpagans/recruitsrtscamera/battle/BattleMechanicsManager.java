@@ -11,7 +11,6 @@ import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.combat.RTSGroupAttackManager;
-import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.network.AdvisorEventPacket;
 import ee.lastpagans.recruitsrtscamera.network.BattleStateSyncPacket;
@@ -64,7 +63,6 @@ public final class BattleMechanicsManager {
 
     private static final int SAMPLE_INTERVAL = 5;
     private static final int COMBAT_SESSION_TIMEOUT = 20 * 25;
-    private static final int REAR_SHOCK_COOLDOWN = 30;
     private static final double STANDARD_GUARD_RADIUS = 10.0D;
     private static final int STANDARD_GUARD_COUNT = 4;
     private static final double BODYGUARD_GUARD_RADIUS = 12.0D;
@@ -73,7 +71,6 @@ public final class BattleMechanicsManager {
     private static final float STANDARD_FALLEN_SHOCK = -10.0F;
     private static final float ROUTING_MORALE = 4.0F;
     private static final float ARCHER_MELEE_ROUTING_MORALE = 8.0F;
-    private static final float ARCHER_MELEE_MORALE_LOSS_PER_SAMPLE = 0.08F;
     private static final double FATIGUE_GAIN_SCALE = 1.0D / 2.3D;
     private static final float WAVERING_MORALE = 24.0F;
     private static final double COMMANDER_AURA_RADIUS = 28.0D;
@@ -81,7 +78,6 @@ public final class BattleMechanicsManager {
 
     private static final Map<UUID, Vec3> LAST_POSITIONS = new ConcurrentHashMap<>();
     private static final Map<UUID, CombatState> COMBAT = new ConcurrentHashMap<>();
-    private static final Map<UUID, Long> REAR_SHOCK = new ConcurrentHashMap<>();
     private static final Map<String, Long> ADVISOR_COOLDOWNS = new ConcurrentHashMap<>();
     private static int tickCounter;
 
@@ -139,13 +135,6 @@ public final class BattleMechanicsManager {
         if (attacker != null && !recruit.isAlliedTo(attacker)) {
             if (isMoraleBearer(recruit)) {
                 rallyStandardGuard((ServerLevel) recruit.level(), recruit, attacker);
-            }
-            if (isRearAttack(recruit, attacker)) {
-                long last = REAR_SHOCK.getOrDefault(groupId, Long.MIN_VALUE / 4);
-                if (now - last >= REAR_SHOCK_COOLDOWN) {
-                    REAR_SHOCK.put(groupId, now);
-                    adjustGroupMorale((ServerLevel) recruit.level(), groupId, -2.0F);
-                }
             }
         }
     }
@@ -248,10 +237,6 @@ public final class BattleMechanicsManager {
         // but does not drain morale while resting or simply travelling.
         if (stage >= 3 && inMelee) {
             recruit.setMoral(Math.max(0.0F, recruit.getMorale() - 0.05F * SAMPLE_INTERVAL));
-        }
-        if (inMelee && TacticalCombatManager.ranged(recruit)) {
-            recruit.setMoral(Math.max(0.0F,
-                    recruit.getMorale() - ARCHER_MELEE_MORALE_LOSS_PER_SAMPLE * SAMPLE_INTERVAL));
         }
     }
 
@@ -546,20 +531,6 @@ public final class BattleMechanicsManager {
             defender.setTarget(attacker);
             assigned++;
         }
-    }
-
-    private static boolean isRearAttack(AbstractRecruitEntity recruit, LivingEntity attacker) {
-        float facing = recruit.getYRot();
-        if (recruit.getGroup() != null && recruit.level() instanceof ServerLevel level) {
-            var state = FormationService.state(level, recruit.getGroup());
-            if (state != null && Float.isFinite(state.facingYaw())) facing = state.facingYaw();
-        }
-        double rad = Math.toRadians(facing);
-        Vec3 forward = new Vec3(-Math.sin(rad), 0.0D, Math.cos(rad));
-        Vec3 toAttacker = attacker.position().subtract(recruit.position());
-        toAttacker = new Vec3(toAttacker.x, 0.0D, toAttacker.z);
-        if (toAttacker.lengthSqr() < 1.0E-5D) return false;
-        return forward.dot(toAttacker.normalize()) < -0.50D;
     }
 
     public static void adjustGroupMorale(ServerLevel level, UUID groupId, float delta) {
