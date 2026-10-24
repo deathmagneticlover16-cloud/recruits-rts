@@ -552,7 +552,9 @@ public final class NativeFormationController {
             if (horizontalDistanceSq(state.center, point) > 0.20D * 0.20D) remaining.add(point);
         }
         Vec3 routeEnd = effectiveDestination(state);
-        if (travelling && (remaining.isEmpty()
+        // Never draw or advertise an unverified straight tail from a bounded partial
+        // route to its raw destination. That looked like a path floating over caves.
+        if (travelling && state.route.complete() && (remaining.isEmpty()
                 || remaining.get(remaining.size() - 1).distanceToSqr(routeEnd) > 0.25D)) {
             remaining.add(routeEnd);
         }
@@ -1225,9 +1227,16 @@ public final class NativeFormationController {
                 groundingGoal = desired;
                 groundingRevision = revision;
                 groundedGoal = TacticalPathfinder.standableAt(level, mover, desired);
-                if (groundedGoal != null && groundedGoal.y < desired.y - 0.70D) groundedGoal = null;
+                if (groundedGoal != null && groundedGoal.y < desired.y - 1.25D) groundedGoal = null;
                 if (groundedGoal == null) {
                     groundedGoal = TacticalPathfinder.nearestFormationStandable(level, mover, desired);
+                }
+                // A wide formation may place an outer slot over a cave even though its
+                // centre route is safe. Hold this member on its present supported column
+                // until the moving stencil offers a safe slot; never path toward air.
+                if (groundedGoal == null) {
+                    groundedGoal = TacticalPathfinder.standableAt(level, mover, mover.position());
+                    if (groundedGoal == null) groundedGoal = mover.position();
                 }
             }
             return groundedGoal;

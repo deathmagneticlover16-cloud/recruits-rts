@@ -7,6 +7,7 @@ public final class MountedFormationMotionSelfTest {
         convergesWithoutSway();
         preservesContinuousPaceChanges();
         settlesWithoutTeleporting();
+        rejectsExceptionalIncomingImpulse();
         System.out.println("MountedFormationMotionSelfTest passed " + checks + " checks.");
     }
 
@@ -60,6 +61,13 @@ public final class MountedFormationMotionSelfTest {
         }
         check(Math.abs(position) < 0.05D, "stationary slot recovery settles accurately");
         check(maximum < 0.30D, "slot recovery remains bounded");
+    }
+
+    private static void rejectsExceptionalIncomingImpulse() {
+        MountedFormationMotion.Vector next = MountedFormationMotion.velocity(
+                3.0D, -2.0D, 0.4D, 0.0D, 0.20D, 0.0D, 1.0D);
+        check(Math.hypot(next.x(), next.z()) < 0.45D,
+                "exceptional incoming impulse cannot fling one horse across the formation");
     }
 
     private static void check(boolean condition, String message) {

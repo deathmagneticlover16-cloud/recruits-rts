@@ -17,7 +17,6 @@ import net.minecraftforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,9 +76,6 @@ public final class TacticalWorldRenderer {
         BufferBuilder buffer = Tesselator.getInstance().getBuilder();
         buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
         for (TacticalRenderScene.RouteRibbon route : scene.routes()) drawRibbon(buffer, matrix, route);
-        for (TacticalRenderScene.FormationFootprint footprint : scene.footprints()) {
-            drawFootprint(buffer, matrix, footprint);
-        }
         for (TacticalRenderScene.FacingArrow arrow : scene.arrows()) drawArrow(buffer, matrix, arrow);
         Tesselator.getInstance().end();
     }
@@ -122,22 +118,6 @@ public final class TacticalWorldRenderer {
                             tip, tip, chevron);
                 }
             }
-        }
-    }
-
-    private static void drawFootprint(BufferBuilder buffer, Matrix4f matrix,
-                                      TacticalRenderScene.FormationFootprint footprint) {
-        List<Vec3> hull = convexHull(footprint.points());
-        if (hull.size() < 3) return;
-        Vec3 center = Vec3.ZERO;
-        for (Vec3 point : hull) center = center.add(point);
-        center = center.scale(1.0D / hull.size()).add(0.0D, 0.025D, 0.0D);
-        int color = withAlpha(footprint.color(), 34);
-        // QUADS require four vertices; degenerate the final edge into the centre to form triangles.
-        for (int i = 0; i < hull.size(); i++) {
-            Vec3 a = hull.get(i).add(0.0D, 0.025D, 0.0D);
-            Vec3 b = hull.get((i + 1) % hull.size()).add(0.0D, 0.025D, 0.0D);
-            quad(buffer, matrix, center, a, b, center, color);
         }
     }
 
@@ -186,7 +166,10 @@ public final class TacticalWorldRenderer {
         List<FlagView> flags = new ArrayList<>();
         for (RTSCommandFacade.UnitCardView view : RTSCommandFacade.unitCards()) {
             if (!Double.isFinite(view.centerX()) || !Double.isFinite(view.anchorY()) || !Double.isFinite(view.centerZ())) continue;
-            Vec3 target = new Vec3(view.centerX(), view.anchorY() + 2.4D, view.centerZ());
+            // Unit-card anchorY is already max entity height + 2.2. Lower it back to a
+            // physical standard base so the pole visibly reaches into the formation.
+            double poleDrop = view.majorityMounted() ? 5.4D : 3.6D;
+            Vec3 target = new Vec3(view.centerX(), view.anchorY() - poleDrop, view.centerZ());
             SmoothAnchor anchor = FLAG_ANCHORS.computeIfAbsent(view.groupId(), ignored -> new SmoothAnchor(target));
             anchor.approach(target, smoothing);
             flags.add(new FlagView(view.groupId(), anchor.position, view.selected(), false));
@@ -194,7 +177,9 @@ public final class TacticalWorldRenderer {
         if (CommanderOverlay.worldEnemyBannersVisible()) {
             for (RTSCommandFacade.EnemyBannerView view : RTSCommandFacade.enemyBanners()) {
                 if (!Double.isFinite(view.centerX()) || !Double.isFinite(view.anchorY()) || !Double.isFinite(view.centerZ())) continue;
-                Vec3 target = new Vec3(view.centerX(), view.anchorY() + 2.4D, view.centerZ());
+                boolean mountedMarker = view.unitType() == CommanderUnitType.CAVALRY
+                        || view.unitType() == CommanderUnitType.NOMAD;
+                Vec3 target = new Vec3(view.centerX(), view.anchorY() - (mountedMarker ? 5.4D : 3.6D), view.centerZ());
                 SmoothAnchor anchor = FLAG_ANCHORS.computeIfAbsent(view.groupId(), ignored -> new SmoothAnchor(target));
                 anchor.approach(target, smoothing);
                 flags.add(new FlagView(view.groupId(), anchor.position, false, true));
@@ -223,12 +208,20 @@ public final class TacticalWorldRenderer {
         double horizontal = Math.hypot(toCamera.x, toCamera.z);
         Vec3 right = horizontal < 1.0E-4D ? new Vec3(1.0D, 0.0D, 0.0D)
                 : new Vec3(toCamera.z / horizontal, 0.0D, -toCamera.x / horizontal);
+        Vec3 toward = horizontal < 1.0E-4D ? new Vec3(0.0D, 0.0D, 1.0D)
+                : new Vec3(toCamera.x / horizontal, 0.0D, toCamera.z / horizontal);
         double scale = Mth.clamp(0.82D + cameraPos.distanceTo(flag.position) / 90.0D, 0.82D, 1.55D);
-        Vec3 side = right.scale(0.045D * scale);
-        Vec3 bottom = flag.position.add(0.0D, -1.25D * scale, 0.0D);
-        Vec3 top = flag.position.add(0.0D, 1.10D * scale, 0.0D);
-        int color = flag.enemy ? 0xE8703030 : flag.selected ? 0xFFF1D374 : 0xE8A88B52;
+        Vec3 side = right.scale(0.070D * scale);
+        Vec3 depth = toward.scale(0.070D * scale);
+        Vec3 bottom = flag.position;
+        Vec3 top = flag.position.add(0.0D, 4.35D * scale, 0.0D);
+        int color = flag.enemy ? 0xFF713C35 : flag.selected ? 0xFFD6B675 : 0xFF8B7048;
         quad(buffer, matrix, bottom.add(side), bottom.subtract(side), top.subtract(side), top.add(side), color);
+        quad(buffer, matrix, bottom.add(depth), bottom.subtract(depth), top.subtract(depth), top.add(depth), color);
+        // A broad finial makes the pole readable even at strategic camera distance.
+        Vec3 finialTop = top.add(0.0D, 0.18D * scale, 0.0D);
+        quad(buffer, matrix, top.add(side.scale(1.7D)), top.subtract(side.scale(1.7D)),
+                finialTop, finialTop, flag.selected ? 0xFFFFE9A6 : 0xFFE3C47A);
     }
 
     private static void drawFlag(BufferBuilder buffer, Matrix4f matrix, FlagView flag, Vec3 cameraPos) {
@@ -242,6 +235,7 @@ public final class TacticalWorldRenderer {
         double scale = Mth.clamp(0.82D + distance / 90.0D, 0.82D, 1.55D);
         double width = 2.7D * scale;
         double height = 1.8D * scale;
+        Vec3 clothCenter = flag.position.add(0.0D, 3.25D * scale, 0.0D);
         int color = flag.enemy ? 0xE8FFB8B8 : flag.selected ? 0xFFFFFFFF : 0xE8E8E8E8;
         double time = (MC.level.getGameTime() + MC.getFrameTime()) * 0.12D;
         int strips = 8;
@@ -250,42 +244,17 @@ public final class TacticalWorldRenderer {
             double u1 = (i + 1) / (double) strips;
             double wave0 = Math.sin(time + u0 * Math.PI * 2.2D) * 0.12D * scale * u0;
             double wave1 = Math.sin(time + u1 * Math.PI * 2.2D) * 0.12D * scale * u1;
-            Vec3 x0 = right.scale((u0 - 0.5D) * width).add(toward.scale(wave0));
-            Vec3 x1 = right.scale((u1 - 0.5D) * width).add(toward.scale(wave1));
-            Vec3 top0 = flag.position.add(x0).add(0.0D, height * 0.5D, 0.0D);
-            Vec3 bottom0 = flag.position.add(x0).add(0.0D, -height * 0.5D, 0.0D);
-            Vec3 top1 = flag.position.add(x1).add(0.0D, height * 0.5D, 0.0D);
-            Vec3 bottom1 = flag.position.add(x1).add(0.0D, -height * 0.5D, 0.0D);
+            Vec3 x0 = right.scale(u0 * width).add(toward.scale(wave0));
+            Vec3 x1 = right.scale(u1 * width).add(toward.scale(wave1));
+            Vec3 top0 = clothCenter.add(x0).add(0.0D, height * 0.5D, 0.0D);
+            Vec3 bottom0 = clothCenter.add(x0).add(0.0D, -height * 0.5D, 0.0D);
+            Vec3 top1 = clothCenter.add(x1).add(0.0D, height * 0.5D, 0.0D);
+            Vec3 bottom1 = clothCenter.add(x1).add(0.0D, -height * 0.5D, 0.0D);
             texVertex(buffer, matrix, top0, (float) u0, 0.0F, color);
             texVertex(buffer, matrix, bottom0, (float) u0, 1.0F, color);
             texVertex(buffer, matrix, bottom1, (float) u1, 1.0F, color);
             texVertex(buffer, matrix, top1, (float) u1, 0.0F, color);
         }
-    }
-
-    private static List<Vec3> convexHull(List<Vec3> points) {
-        if (points.size() <= 3) return points;
-        List<Vec3> sorted = new ArrayList<>(points);
-        sorted.sort(Comparator.comparingDouble((Vec3 v) -> v.x).thenComparingDouble(v -> v.z));
-        List<Vec3> hull = new ArrayList<>();
-        for (Vec3 point : sorted) {
-            while (hull.size() >= 2 && cross(hull.get(hull.size() - 2), hull.get(hull.size() - 1), point) <= 0.0D)
-                hull.remove(hull.size() - 1);
-            hull.add(point);
-        }
-        int lower = hull.size();
-        for (int i = sorted.size() - 2; i >= 0; i--) {
-            Vec3 point = sorted.get(i);
-            while (hull.size() > lower && cross(hull.get(hull.size() - 2), hull.get(hull.size() - 1), point) <= 0.0D)
-                hull.remove(hull.size() - 1);
-            hull.add(point);
-        }
-        if (!hull.isEmpty()) hull.remove(hull.size() - 1);
-        return hull;
-    }
-
-    private static double cross(Vec3 a, Vec3 b, Vec3 c) {
-        return (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
     }
 
     private static void quad(BufferBuilder buffer, Matrix4f matrix, Vec3 a, Vec3 b, Vec3 c, Vec3 d, int color) {

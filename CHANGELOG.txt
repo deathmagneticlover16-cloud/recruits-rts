@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.15.18-server.1
+Final-step terrain safety and cleaner tactical previews
+
+- Formation slots now accept a supported one-block descent when the commanded destination is genuinely lower. Level routes still reject one-block pits, unsupported drops, fluids and canyons.
+- Unsafe outer slots over cave openings hold their last supported column instead of asking recruits to path toward air. Incomplete bounded routes no longer publish an unverified straight preview tail to the destination.
+- Clamped exceptional incoming mounted velocity before formation damping, preventing isolated horsemen from being flung across formation bounds after knockback or a navigation handoff.
+- Rebuilt temporary Betsy Ross markers as visible standards: a thick pole begins inside the formation, includes a finial, and supports the waving cloth from its edge.
+- Removed the long frontage centre bar and transparent formation polygon. World-space paths, slots and facing arrows now use a cool blue/cyan palette.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.18-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.17-server.1
 Battle mechanics compile correction
 

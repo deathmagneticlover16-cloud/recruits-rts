@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.17 behavior."""
+"""Targeted source contracts for Commander 0.15.18 behavior."""
 
 from pathlib import Path
 
@@ -122,6 +122,14 @@ require(formation, "ordinarySupportedRise = fallenBehind && direct",
         "verified one-block rises must stay under the continuous slot controller")
 require(formation, "desired.y - mover.getY() <= 1.25D",
         "continuous rise handling must remain bounded to an ordinary supported step")
+require(pathfinder, "FORMATION_SLOT_MAX_DROP = 1.25D",
+        "final formation slots must accept an ordinary supported one-block descent")
+require(pathfinder, "destination.y < start.y - 0.60D ? FORMATION_SLOT_MAX_DROP : 0.60D",
+        "direct descent must be allowed only when the commanded destination is lower")
+require(formation, "TacticalPathfinder.standableAt(level, mover, mover.position())",
+        "an unsafe outer slot must hold its current supported column instead of targeting air")
+require(formation, "travelling && state.route.complete()",
+        "route synchronization must not append an unverified tail to an incomplete route")
 require(formation, "state.routeGeneration != routeGeneration",
         "obsolete queued formation routes must not overwrite a replacement order")
 require(formation, "agent.pathGeneration != pathGeneration",
@@ -344,7 +352,15 @@ require(world_renderer, "Math.sin(time + u0 * Math.PI * 2.2D)",
 require(world_renderer, '"textures/misc/betsy_ross_group_marker.png"',
         "the temporary 3D group marker must use the Betsy Ross texture")
 require(render_scene, "List<RouteRibbon> routes", "the unified scene must own route ribbons")
-require(render_scene, "List<FormationFootprint> footprints", "the unified scene must own formation footprints")
+forbid(render_scene, "FormationFootprint", "transparent formation polygon estimation must remain removed")
+forbid(controller, "scene.footprint", "formation previews must render slots without a transparent polygon")
+forbid(controller, "scene.route(List.of(start, end)", "frontage planning must not render the long centre bar")
+require(controller, "TACTICAL_ROUTE_COLOR = 0xD84ECFFF", "tactical previews must use the new cool-blue palette")
+require(world_renderer, "view.majorityMounted() ? 5.4D : 3.6D",
+        "flag anchors must lower the pole into foot and mounted formations")
+require(world_renderer, "Vec3 bottom = flag.position", "group standards need a full pole from their base")
+require(mounted_motion, "currentSpeed > retainedLimit",
+        "mounted damping must reject exceptional incoming fling impulses")
 forbid(controller, "drawWorldPathSegment(", "battlefield routes must not fall back to pixel-stamped HUD lines")
 forbid(controller, "drawYellowWorldPoint(", "formation slots must not fall back to fixed HUD squares")
 require(controller, "ORDER_RADIUS = 288.0D", "temporary client order reach must be tripled")
@@ -352,6 +368,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.17-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.18-server.1", "semantic version must be updated")
 
-print("0.15.17 source contracts passed")
+print("0.15.18 source contracts passed")

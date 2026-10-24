@@ -34,6 +34,7 @@ public final class TacticalPathfinder {
     private static final int[][] DIAGONALS = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
     private static final double MAX_STEP_UP = 1.25D;
     private static final double MAX_DROP = 1.50D;
+    private static final double FORMATION_SLOT_MAX_DROP = 1.25D;
     private static final long SEARCH_TIME_BUDGET_NANOS = 20_000_000L;
 
     private TacticalPathfinder() {
@@ -117,7 +118,7 @@ public final class TacticalPathfinder {
                     for (int floorY = origin.getY() - 1; floorY <= origin.getY() + 2; floorY++) {
                         Cell cell = standingOn(level, mover,
                                 new BlockPos(origin.getX() + dx, floorY, origin.getZ() + dz));
-                        if (cell == null || cell.position.y < desired.y - 0.70D) continue;
+                        if (cell == null || cell.position.y < desired.y - FORMATION_SLOT_MAX_DROP) continue;
                         double vertical = Math.abs(cell.position.y - desired.y);
                         double score = horizontalDistanceSq(cell.position, desired) + vertical * vertical * 2.0D;
                         if (score < bestScore) {
@@ -163,6 +164,10 @@ public final class TacticalPathfinder {
         double horizontal = Math.hypot(destination.x - start.x, destination.z - start.z);
         int samples = Math.max(1, (int) Math.ceil(horizontal / 0.45D));
         double previousY = start.y;
+        // A commanded lower destination may descend one ordinary supported block. A route
+        // whose destination remains level may not dip through a one-block hole and climb
+        // out again, preserving the existing pit/canyon rejection.
+        double allowedDrop = destination.y < start.y - 0.60D ? FORMATION_SLOT_MAX_DROP : 0.60D;
         for (int i = 1; i <= samples; i++) {
             double fraction = i / (double) samples;
             Vec3 probe = start.lerp(destination, fraction);
@@ -172,7 +177,7 @@ public final class TacticalPathfinder {
             // Direct steering must never interpret the first block down into a pit as a
             // clear straight route. A* may still choose a supported descent when it is
             // genuinely required, but it can then prefer a level detour around the hole.
-            if (!cell.climbable && (change > MAX_STEP_UP || change < -0.60D)) return false;
+            if (!cell.climbable && (change > MAX_STEP_UP || change < -allowedDrop)) return false;
             previousY = cell.position.y;
         }
         return true;

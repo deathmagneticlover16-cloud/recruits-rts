@@ -90,6 +90,10 @@ public final class RTSCameraController {
     private static final long HASTY_DOUBLE_CLICK_MS = 340L;
     private static final int HASTY_TARGET_TOLERANCE = 2;
     private static final double ROTATE_MIN_RADIUS = 1.5D;
+    private static final int TACTICAL_ROUTE_COLOR = 0xD84ECFFF;
+    private static final int TACTICAL_SLOT_COLOR = 0xC889E8FF;
+    private static final int TACTICAL_ACCENT_COLOR = 0xE8C8F5FF;
+    private static final int TACTICAL_CUSTOM_COLOR = 0xE866D9C2;
 
     private static final Set<UUID> SELECTED_GROUPS = new LinkedHashSet<>();
     private static final Map<UUID, GlowState> MODIFIED_GLOW = new HashMap<>();
@@ -2340,7 +2344,7 @@ public final class RTSCameraController {
                     true);
         }
 
-        // Battlefield paths, slots, footprints, frontage and facing now render as one
+        // Battlefield paths, slots, frontage and facing now render as one
         // interpolated world-space scene in TacticalWorldRenderer. GuiGraphics remains
         // responsible only for the command interface and the screen-space drag box.
     }
@@ -2360,7 +2364,7 @@ public final class RTSCameraController {
         }
         if (draggingCustom && CUSTOM_STROKE.size() >= 2) {
             scene.route(CUSTOM_STROKE.stream().map(CustomStrokePoint::world).toList(),
-                    0xE8FFB84D, 0.28F, true);
+                    TACTICAL_CUSTOM_COLOR, 0.28F, true);
         }
         if (rotatingFormation) appendRotationScene(scene);
         return scene.build();
@@ -2433,7 +2437,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.17-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.18-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2577,20 +2581,15 @@ public final class RTSCameraController {
             List<Vec3> route = new ArrayList<>();
             route.add(center);
             route.addAll(preview.waypoints());
-            scene.route(route, 0xD8FFD36A, 0.32F, true);
-            if (preview.frontageStart() != null && preview.frontageEnd() != null) {
-                scene.route(List.of(preview.frontageStart(), preview.frontageEnd()),
-                        0xE8FFE7A3, 0.42F, false);
-            }
+            scene.route(route, TACTICAL_ROUTE_COLOR, 0.32F, true);
             Vec3 delta = preview.destination().subtract(center);
             List<Vec3> stencil = new ArrayList<>();
             for (AbstractRecruitEntity recruit : recruits) {
                 if (stencil.size() >= 192) break;
                 Vec3 slot = interpolatedVisualUnitPosition(recruit, partialTick).add(delta).add(0.0D, 0.06D, 0.0D);
                 stencil.add(slot);
-                scene.slot(slot, selectedArmyFacing(), 0xC8FFD36A, false);
+                scene.slot(slot, selectedArmyFacing(), TACTICAL_SLOT_COLOR, false);
             }
-            scene.footprint(stencil, 0x70FFD36A);
         }
     }
 
@@ -2602,9 +2601,9 @@ public final class RTSCameraController {
         for (BlockPos pos : ROUTE_POINTS) {
             Vec3 point = new Vec3(pos.getX() + 0.5D, pos.getY() + 0.08D, pos.getZ() + 0.5D);
             route.add(point);
-            scene.slot(point, selectedArmyFacing(), 0xFFFFE7A3, true);
+            scene.slot(point, selectedArmyFacing(), TACTICAL_ACCENT_COLOR, true);
         }
-        scene.route(route, 0xFFFFD36A, 0.36F, true);
+        scene.route(route, TACTICAL_ROUTE_COLOR, 0.36F, true);
         Vec3 target = route.size() > 1 ? route.get(route.size() - 1) : null;
         if (target == null) {
             GroundHit hit = raycastGroundHit(cursorX, cursorY);
@@ -2619,7 +2618,7 @@ public final class RTSCameraController {
         Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
         Vec3 armyCenter = selectedArmyCenterInterpolated(partialTick);
         if (armyCenter != null) scene.route(List.of(armyCenter, armyCenter.add(delta)),
-                0xE8FFD36A, 0.34F, true);
+                TACTICAL_ROUTE_COLOR, 0.34F, true);
         List<Vec3> stencil = new ArrayList<>();
         for (List<AbstractRecruitEntity> recruits : groups.values()) {
             for (AbstractRecruitEntity recruit : recruits) {
@@ -2628,13 +2627,12 @@ public final class RTSCameraController {
                 Vec3 transformed = rotateAround(source, armyCenter, translationRotationDegrees).add(delta);
                 stencil.add(transformed);
                 scene.slot(transformed, selectedArmyFacing() + (float) translationRotationDegrees,
-                        0xC8FFD36A, false);
+                        TACTICAL_SLOT_COLOR, false);
             }
         }
-        scene.footprint(stencil, 0x70FFD36A);
         if (armyCenter != null && (translationControlWasDown || Math.abs(translationRotationDegrees) >= 0.25D)) {
             scene.arrow(armyCenter.add(delta), FormationRotationMath.normalizeYaw(
-                    selectedArmyFacing() + (float) translationRotationDegrees), 0xE8FFE07A);
+                    selectedArmyFacing() + (float) translationRotationDegrees), TACTICAL_ACCENT_COLOR);
         }
     }
 
@@ -2649,7 +2647,7 @@ public final class RTSCameraController {
                 ground.pos().getZ() + 0.5D);
         if (destination.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) return;
         appendTranslatedStencil(scene, destination, partialTick, 256);
-        scene.route(List.of(oldCenter, destination), 0xD8FFD36A, 0.32F, true);
+        scene.route(List.of(oldCenter, destination), TACTICAL_ROUTE_COLOR, 0.32F, true);
     }
 
     private static void appendRotationScene(TacticalRenderScene.Builder scene) {
@@ -2663,12 +2661,11 @@ public final class RTSCameraController {
             Vec3 slot = new Vec3(rotated.x(), world.y + 0.05D, rotated.z());
             stencil.add(slot);
             scene.slot(slot, FormationRotationMath.normalizeYaw(
-                    rotationBaseFacingYaw + (float) rotationDegrees), 0xC8FFD36A, false);
+                    rotationBaseFacingYaw + (float) rotationDegrees), TACTICAL_SLOT_COLOR, false);
         }
-        scene.footprint(stencil, 0x70FFD36A);
-        scene.slot(rotationPivot, rotationBaseFacingYaw, 0xFFFFE7A3, true);
+        scene.slot(rotationPivot, rotationBaseFacingYaw, TACTICAL_ACCENT_COLOR, true);
         scene.arrow(rotationPivot, FormationRotationMath.normalizeYaw(
-                rotationBaseFacingYaw + (float) rotationDegrees), 0xE8FFE07A);
+                rotationBaseFacingYaw + (float) rotationDegrees), TACTICAL_ACCENT_COLOR);
     }
 
     private static void appendTranslatedStencil(TacticalRenderScene.Builder scene, Vec3 target,
@@ -2682,9 +2679,8 @@ public final class RTSCameraController {
             if (stencil.size() >= maximum) break;
             Vec3 slot = interpolatedVisualUnitPosition(recruit, partialTick).add(delta).add(0.0D, 0.05D, 0.0D);
             stencil.add(slot);
-            scene.slot(slot, selectedArmyFacing(), 0xC8FFD36A, false);
+            scene.slot(slot, selectedArmyFacing(), TACTICAL_SLOT_COLOR, false);
         }
-        scene.footprint(stencil, 0x70FFD36A);
     }
 
     private static void appendFrontageScene(TacticalRenderScene.Builder scene) {
@@ -2701,8 +2697,6 @@ public final class RTSCameraController {
         double lineX = dx / rawWidth;
         double lineZ = dz / rawWidth;
         float facing = FrontageMath.facingYaw(dx, dz);
-        scene.route(List.of(start, end), 0xFFFFD36A, 0.42F, false);
-
         Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
         List<UUID> ordered = new ArrayList<>(groups.keySet());
         ordered.sort(java.util.Comparator.comparingDouble(id -> clientGroupProjection(groups.get(id), lineX, lineZ)));
@@ -2750,7 +2744,7 @@ public final class RTSCameraController {
                     Vec3 slot = new Vec3(centerX + rightX * offset.right() - forwardX * offset.back(),
                             midY + 0.05D, centerZ + rightZ * offset.right() - forwardZ * offset.back());
                     allSlots.add(slot);
-                    scene.slot(slot, facing, 0xC8FFD36A, false);
+                    scene.slot(slot, facing, TACTICAL_SLOT_COLOR, false);
                 }
             }
             double heavySpacing = artillery <= 1 ? 0.0D : Math.max(ArtilleryFormationMath.MIN_GUN_SPACING,
@@ -2759,7 +2753,7 @@ public final class RTSCameraController {
                 double offset = (i - (artillery - 1) * 0.5D) * heavySpacing;
                 Vec3 slot = new Vec3(centerX + rightX * offset, midY + 0.08D, centerZ + rightZ * offset);
                 allSlots.add(slot);
-                scene.slot(slot, facing, 0xD8FFD36A, true);
+                scene.slot(slot, facing, TACTICAL_ROUTE_COLOR, true);
             }
             double shipSpacing = ships <= 1 ? 0.0D : Math.max(SmallShipsCompat.MIN_SPACING,
                     Math.min(SmallShipsCompat.MAX_SPACING, segment.allocatedWidth() / (ships - 1.0D)));
@@ -2767,11 +2761,10 @@ public final class RTSCameraController {
                 double offset = (i - (ships - 1) * 0.5D) * shipSpacing;
                 Vec3 slot = new Vec3(centerX + rightX * offset, midY + 0.10D, centerZ + rightZ * offset);
                 allSlots.add(slot);
-                scene.slot(slot, facing, 0xD8FFD36A, true);
+                scene.slot(slot, facing, TACTICAL_ROUTE_COLOR, true);
             }
         }
-        scene.footprint(allSlots, 0x70FFD36A);
-        scene.arrow(new Vec3(midX, midY, midZ), facing, 0xE8FFE07A);
+        scene.arrow(new Vec3(midX, midY, midZ), facing, TACTICAL_ACCENT_COLOR);
     }
 
     private static Vec3 selectedArmyCenterInterpolated(float partialTick) {

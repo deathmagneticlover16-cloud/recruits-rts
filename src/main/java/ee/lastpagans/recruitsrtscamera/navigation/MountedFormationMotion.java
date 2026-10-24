@@ -14,6 +14,15 @@ public final class MountedFormationMotion {
             double catchUpScale
     ) {
         double formationSpeed = Math.hypot(formationX, formationZ);
+        // Knockback, a navigation handoff or another mod can occasionally leave one mount
+        // with a many-block-per-second horizontal impulse. Do not blend that exceptional
+        // velocity into slot correction and fling the horse through the formation.
+        double currentSpeed = Math.hypot(currentX, currentZ);
+        double retainedLimit = Math.max(0.32D, formationSpeed + 0.16D) * 1.10D;
+        if (currentSpeed > retainedLimit) {
+            currentX *= retainedLimit / currentSpeed;
+            currentZ *= retainedLimit / currentSpeed;
+        }
         double slotDistance = Math.hypot(errorX, errorZ);
         double safeScale = clamp(catchUpScale, 1.0D, 1.25D);
         double requestedX;
