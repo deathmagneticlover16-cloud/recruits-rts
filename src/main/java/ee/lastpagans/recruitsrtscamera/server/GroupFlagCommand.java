@@ -1,6 +1,6 @@
 package ee.lastpagans.recruitsrtscamera.server;
 
-import net.minecraft.commands.arguments.UuidArgument;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.talhanation.recruits.world.RecruitsGroup;
 import com.talhanation.recruits.world.RecruitsGroupsSaveData;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
@@ -15,6 +15,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.PacketDistributor;
 
+import java.util.List;
 import java.util.UUID;
 
 /** Opens the client painting library for one owned Recruits group. */
@@ -25,30 +26,57 @@ public final class GroupFlagCommand {
     @SubscribeEvent
     public static void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("setflag")
-                .then(Commands.argument("group", UuidArgument.uuid())
+                .executes(context -> openOnlyOwnedGroup(context.getSource().getPlayerOrException()))
+                .then(Commands.argument("group", StringArgumentType.greedyString())
                         .suggests((context, builder) -> {
                             ServerPlayer player = context.getSource().getPlayer();
                             if (player == null) return builder.buildFuture();
                             return SharedSuggestionProvider.suggest(
-                                    RecruitsGroupsSaveData.get(player.serverLevel()).getAllGroups().stream()
-                                            .filter(group -> group != null && !group.removed
-                                                    && player.getUUID().equals(group.getPlayerUUID()))
-                                            .map(group -> group.getUUID().toString()), builder);
+                                    ownedGroups(player).stream().map(RecruitsGroup::getName).distinct(), builder);
                         })
                         .executes(context -> open(context.getSource().getPlayerOrException(),
-                                UuidArgument.getUuid(context, "group")))));
+                                StringArgumentType.getString(context, "group")))));
     }
 
-    private static int open(ServerPlayer player, UUID groupId) {
-        for (RecruitsGroup group : RecruitsGroupsSaveData.get(player.serverLevel()).getAllGroups()) {
-            if (group != null && !group.removed && groupId.equals(group.getUUID())
-                    && player.getUUID().equals(group.getPlayerUUID())) {
-                RTSCameraNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                        new OpenGroupFlagEditorPacket(groupId));
-                return 1;
-            }
-        }
-        player.displayClientMessage(Component.literal("That Recruits group is not owned by you."), false);
+    private static int openOnlyOwnedGroup(ServerPlayer player) {
+        List<RecruitsGroup> groups = ownedGroups(player);
+        if (groups.size() == 1) return open(player, groups.get(0));
+        player.displayClientMessage(Component.literal(groups.isEmpty()
+                ? "You do not own a Recruits group."
+                : "Choose a group by name: /setflag <group name>"), false);
         return 0;
+    }
+
+    private static int open(ServerPlayer player, String groupNameOrId) {
+        String query = groupNameOrId == null ? "" : groupNameOrId.trim();
+        UUID requestedId = null;
+        try {
+            requestedId = UUID.fromString(query);
+        } catch (IllegalArgumentException ignored) {
+            // Readable group names are the normal path; UUID remains a precise fallback.
+        }
+        final UUID exactId = requestedId;
+        List<RecruitsGroup> matches = ownedGroups(player).stream()
+                .filter(group -> exactId != null ? exactId.equals(group.getUUID())
+                        : group.getName().equalsIgnoreCase(query))
+                .toList();
+        if (matches.size() == 1) return open(player, matches.get(0));
+        player.displayClientMessage(Component.literal(matches.size() > 1
+                ? "More than one owned group is named '" + query + "'. Rename one or use its UUID."
+                : "No owned Recruits group is named '" + query + "'. Type /setflag and press Tab."), false);
+        return 0;
+    }
+
+    private static int open(ServerPlayer player, RecruitsGroup group) {
+        RTSCameraNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new OpenGroupFlagEditorPacket(group.getUUID()));
+        return 1;
+    }
+
+    private static List<RecruitsGroup> ownedGroups(ServerPlayer player) {
+        return RecruitsGroupsSaveData.get(player.serverLevel()).getAllGroups().stream()
+                .filter(group -> group != null && !group.removed
+                        && player.getUUID().equals(group.getPlayerUUID()))
+                .toList();
     }
 }

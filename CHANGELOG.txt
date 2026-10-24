@@ -1,3 +1,11 @@
+Recruits: RTS Camera 0.15.22-server.2
+Readable group selection for custom flags
+
+- `/setflag <group name>` now accepts and suggests the same readable names shown on Commander unit cards. Names containing spaces work without quoting because the group argument consumes the remainder of the command.
+- Running `/setflag` with exactly one owned group opens that group's browser immediately. With multiple groups it explains how to choose one; UUID input remains only as a precise fallback when owned groups share a name.
+- Network protocol remains rts-camera-158 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.15.22-server.2. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.22-server.1
 Immersive group flags and bounded mounted speed
 

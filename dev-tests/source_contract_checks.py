@@ -415,6 +415,10 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(group_flag_command, 'Commands.literal("setflag")', "group flags need the requested setflag command")
+require(group_flag_command, "StringArgumentType.greedyString()",
+        "setflag must accept readable group names, including names containing spaces")
+require(group_flag_command, "map(RecruitsGroup::getName)",
+        "setflag completion must suggest visible group names instead of UUIDs")
 require(group_flag_command, "player.getUUID().equals(group.getPlayerUUID())",
         "setflag must only open for a group owned by the command sender")
 require(group_flag_screen, "ClientPaintingManager.getPaintings()",
@@ -436,6 +440,6 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
 require(network, 'PROTOCOL = "rts-camera-158"', "group flag packets require protocol 158")
-require(source("gradle.properties"), "mod_version=0.15.22-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.22-server.2", "semantic version must be updated")
 
 print("0.15.22 source contracts passed")
