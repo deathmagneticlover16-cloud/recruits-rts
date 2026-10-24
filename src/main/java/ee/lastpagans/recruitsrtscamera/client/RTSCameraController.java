@@ -39,6 +39,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.entity.Entity;
@@ -2339,55 +2340,30 @@ public final class RTSCameraController {
                     true);
         }
 
-        if (draggingFrontage) {
-            if (isFrontageGesture()) {
-                int x1 = toGuiX(frontageStartX);
-                int y1 = toGuiY(frontageStartY);
-                int x2 = toGuiX(frontageCurrentX);
-                int y2 = toGuiY(frontageCurrentY);
-                drawScreenLine(graphics, x1, y1, x2, y2, 0xFFFFD36A);
-                graphics.fill(x1 - 3, y1 - 3, x1 + 4, y1 + 4, 0xFFFFE7A3);
-                graphics.fill(x2 - 3, y2 - 3, x2 + 4, y2 + 4, 0xFFFFE7A3);
-                renderFrontageFormationPreview(graphics);
-            } else {
-                renderMovePreview(graphics);
-            }
-        }
+        // Battlefield paths, slots, footprints, frontage and facing now render as one
+        // interpolated world-space scene in TacticalWorldRenderer. GuiGraphics remains
+        // responsible only for the command interface and the screen-space drag box.
+    }
 
-        if (draggingCustom && CUSTOM_STROKE.size() >= 2) {
-            for (int i = 1; i < CUSTOM_STROKE.size(); i++) {
-                CustomStrokePoint a = CUSTOM_STROKE.get(i - 1);
-                CustomStrokePoint b = CUSTOM_STROKE.get(i);
-                drawScreenLine(
-                        graphics,
-                        toGuiX(a.screenX()), toGuiY(a.screenY()),
-                        toGuiX(b.screenX()), toGuiY(b.screenY()),
-                        0xFFFFB84D
-                );
-            }
-            CustomStrokePoint first = CUSTOM_STROKE.get(0);
-            CustomStrokePoint last = CUSTOM_STROKE.get(CUSTOM_STROKE.size() - 1);
-            graphics.fill(toGuiX(first.screenX()) - 3, toGuiY(first.screenY()) - 3,
-                    toGuiX(first.screenX()) + 4, toGuiY(first.screenY()) + 4, 0xFFFFE0A3);
-            graphics.fill(toGuiX(last.screenX()) - 3, toGuiY(last.screenY()) - 3,
-                    toGuiX(last.screenX()) + 4, toGuiY(last.screenY()) + 4, 0xFFFFE0A3);
-        }
-
-        if (draggingTranslation) {
-            renderTranslationPreview(graphics);
-        }
-
+    /** Snapshot all battlefield-preview state for the batched world-space renderer. */
+    static TacticalRenderScene tacticalRenderScene(float partialTick) {
+        if (!active || !commandCursor || MC.level == null) return TacticalRenderScene.EMPTY;
+        TacticalRenderScene.Builder scene = new TacticalRenderScene.Builder();
         if (!routeMode && !draggingTranslation && !draggingFrontage && !draggingCustom && !rotatingFormation) {
-            renderCurrentOrderPreviews(graphics);
+            appendCurrentOrders(scene, partialTick);
         }
-
-        if (routeMode) {
-            renderRoutePreview(graphics);
+        if (routeMode) appendRouteScene(scene, partialTick);
+        if (draggingTranslation) appendTranslationScene(scene, partialTick);
+        if (draggingFrontage) {
+            if (isFrontageGesture()) appendFrontageScene(scene);
+            else appendMoveScene(scene, partialTick);
         }
-
-        if (rotatingFormation) {
-            renderRotationPreview(graphics);
+        if (draggingCustom && CUSTOM_STROKE.size() >= 2) {
+            scene.route(CUSTOM_STROKE.stream().map(CustomStrokePoint::world).toList(),
+                    0xE8FFB84D, 0.28F, true);
         }
+        if (rotatingFormation) appendRotationScene(scene);
+        return scene.build();
     }
 
     private static void renderReleaseCommandPanel(
@@ -2457,7 +2433,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.15-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.16-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2578,66 +2554,174 @@ public final class RTSCameraController {
         ) >= FRONTAGE_DRAG_THRESHOLD;
     }
 
-    /** Full frontage ghost: mirrors FrontageMath rank/spacing selection before release. */
-    private static void renderFrontageFormationPreview(GuiGraphics graphics) {
-        if (!isFrontageGesture() || frontageStartGround == null || SELECTED_GROUPS.isEmpty()) {
-            return;
+    private static void appendCurrentOrders(TacticalRenderScene.Builder scene, float partialTick) {
+        if (CURRENT_ORDER_PREVIEWS.isEmpty()) return;
+        Set<UUID> visible = new LinkedHashSet<>(SELECTED_GROUPS);
+        if (hoveredFriendlyGroupId != null) visible.add(hoveredFriendlyGroupId);
+        if (capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown()) {
+            visible.addAll(CURRENT_ORDER_PREVIEWS.keySet());
         }
+        Map<UUID, List<AbstractRecruitEntity>> loaded = loadedGroups(visible);
+        long now = System.currentTimeMillis();
+        for (UUID groupId : List.copyOf(visible)) {
+            CurrentOrderPreview preview = CURRENT_ORDER_PREVIEWS.get(groupId);
+            List<AbstractRecruitEntity> recruits = loaded.get(groupId);
+            if (preview == null || recruits == null || recruits.isEmpty()) continue;
+            Vec3 center = interpolatedCenter(recruits, partialTick);
+            if (center == null) continue;
+            if (horizontalDistanceClient(center, preview.destination()) < 1.2D
+                    && now - preview.issuedMillis() > 750L) {
+                CURRENT_ORDER_PREVIEWS.remove(groupId, preview);
+                continue;
+            }
+            List<Vec3> route = new ArrayList<>();
+            route.add(center);
+            route.addAll(preview.waypoints());
+            scene.route(route, 0xD8FFD36A, 0.32F, true);
+            if (preview.frontageStart() != null && preview.frontageEnd() != null) {
+                scene.route(List.of(preview.frontageStart(), preview.frontageEnd()),
+                        0xE8FFE7A3, 0.42F, false);
+            }
+            Vec3 delta = preview.destination().subtract(center);
+            List<Vec3> stencil = new ArrayList<>();
+            for (AbstractRecruitEntity recruit : recruits) {
+                if (stencil.size() >= 192) break;
+                Vec3 slot = interpolatedVisualUnitPosition(recruit, partialTick).add(delta).add(0.0D, 0.06D, 0.0D);
+                stencil.add(slot);
+                scene.slot(slot, selectedArmyFacing(), 0xC8FFD36A, false);
+            }
+            scene.footprint(stencil, 0x70FFD36A);
+        }
+    }
+
+    private static void appendRouteScene(TacticalRenderScene.Builder scene, float partialTick) {
+        Vec3 army = selectedArmyCenterInterpolated(partialTick);
+        if (army == null) return;
+        List<Vec3> route = new ArrayList<>();
+        route.add(army);
+        for (BlockPos pos : ROUTE_POINTS) {
+            Vec3 point = new Vec3(pos.getX() + 0.5D, pos.getY() + 0.08D, pos.getZ() + 0.5D);
+            route.add(point);
+            scene.slot(point, selectedArmyFacing(), 0xFFFFE7A3, true);
+        }
+        scene.route(route, 0xFFFFD36A, 0.36F, true);
+        Vec3 target = route.size() > 1 ? route.get(route.size() - 1) : null;
+        if (target == null) {
+            GroundHit hit = raycastGroundHit(cursorX, cursorY);
+            if (hit != null) target = hit.location();
+        }
+        if (target != null) appendTranslatedStencil(scene, target, partialTick, 192);
+    }
+
+    private static void appendTranslationScene(TacticalRenderScene.Builder scene, float partialTick) {
+        if (translationStartGround == null || translationCurrentGround == null) return;
+        Vec3 delta = translationCurrentGround.subtract(translationStartGround);
+        Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
+        Vec3 armyCenter = selectedArmyCenterInterpolated(partialTick);
+        if (armyCenter != null) scene.route(List.of(armyCenter, armyCenter.add(delta)),
+                0xE8FFD36A, 0.34F, true);
+        List<Vec3> stencil = new ArrayList<>();
+        for (List<AbstractRecruitEntity> recruits : groups.values()) {
+            for (AbstractRecruitEntity recruit : recruits) {
+                if (stencil.size() >= 384) break;
+                Vec3 source = interpolatedVisualUnitPosition(recruit, partialTick);
+                Vec3 transformed = rotateAround(source, armyCenter, translationRotationDegrees).add(delta);
+                stencil.add(transformed);
+                scene.slot(transformed, selectedArmyFacing() + (float) translationRotationDegrees,
+                        0xC8FFD36A, false);
+            }
+        }
+        scene.footprint(stencil, 0x70FFD36A);
+        if (armyCenter != null && (translationControlWasDown || Math.abs(translationRotationDegrees) >= 0.25D)) {
+            scene.arrow(armyCenter.add(delta), FormationRotationMath.normalizeYaw(
+                    selectedArmyFacing() + (float) translationRotationDegrees), 0xE8FFE07A);
+        }
+    }
+
+    private static void appendMoveScene(TacticalRenderScene.Builder scene, float partialTick) {
+        if (SELECTED_GROUPS.isEmpty()) return;
+        LivingEntity attackTarget = raycastAttackTarget(cursorX, cursorY);
+        if (isAttackableTarget(attackTarget)) return;
+        GroundHit ground = raycastGroundHit(cursorX, cursorY);
+        Vec3 oldCenter = selectedArmyCenterInterpolated(partialTick);
+        if (ground == null || oldCenter == null) return;
+        Vec3 destination = new Vec3(ground.pos().getX() + 0.5D, ground.location().y,
+                ground.pos().getZ() + 0.5D);
+        if (destination.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) return;
+        appendTranslatedStencil(scene, destination, partialTick, 256);
+        scene.route(List.of(oldCenter, destination), 0xD8FFD36A, 0.32F, true);
+    }
+
+    private static void appendRotationScene(TacticalRenderScene.Builder scene) {
+        FormationRotationMath.Point pivot = new FormationRotationMath.Point(rotationPivot.x, rotationPivot.z);
+        List<Vec3> stencil = new ArrayList<>();
+        for (RotationPreviewPoint preview : ROTATION_PREVIEW) {
+            if (stencil.size() >= 256) break;
+            Vec3 world = preview.world();
+            FormationRotationMath.Point rotated = FormationRotationMath.rotate(
+                    new FormationRotationMath.Point(world.x, world.z), pivot, rotationDegrees);
+            Vec3 slot = new Vec3(rotated.x(), world.y + 0.05D, rotated.z());
+            stencil.add(slot);
+            scene.slot(slot, FormationRotationMath.normalizeYaw(
+                    rotationBaseFacingYaw + (float) rotationDegrees), 0xC8FFD36A, false);
+        }
+        scene.footprint(stencil, 0x70FFD36A);
+        scene.slot(rotationPivot, rotationBaseFacingYaw, 0xFFFFE7A3, true);
+        scene.arrow(rotationPivot, FormationRotationMath.normalizeYaw(
+                rotationBaseFacingYaw + (float) rotationDegrees), 0xE8FFE07A);
+    }
+
+    private static void appendTranslatedStencil(TacticalRenderScene.Builder scene, Vec3 target,
+                                                 float partialTick, int maximum) {
+        Vec3 oldCenter = selectedArmyCenterInterpolated(partialTick);
+        if (oldCenter == null || target == null) return;
+        Vec3 delta = target.subtract(oldCenter);
+        List<Vec3> stencil = new ArrayList<>();
+        for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
+            if (recruit.getGroup() == null || !SELECTED_GROUPS.contains(recruit.getGroup())) continue;
+            if (stencil.size() >= maximum) break;
+            Vec3 slot = interpolatedVisualUnitPosition(recruit, partialTick).add(delta).add(0.0D, 0.05D, 0.0D);
+            stencil.add(slot);
+            scene.slot(slot, selectedArmyFacing(), 0xC8FFD36A, false);
+        }
+        scene.footprint(stencil, 0x70FFD36A);
+    }
+
+    private static void appendFrontageScene(TacticalRenderScene.Builder scene) {
+        if (frontageStartGround == null || SELECTED_GROUPS.isEmpty()) return;
         GroundHit endHit = raycastGroundHit(frontageCurrentX, frontageCurrentY);
-        if (endHit == null) {
-            return;
-        }
+        if (endHit == null) return;
         Vec3 start = frontageStartGround.location();
         Vec3 end = endHit.location();
         double dx = end.x - start.x;
         double dz = end.z - start.z;
         double rawWidth = Math.hypot(dx, dz);
-        if (rawWidth < FrontageMath.MIN_FRONTAGE) {
-            return;
-        }
+        if (rawWidth < FrontageMath.MIN_FRONTAGE) return;
         double width = Math.min(FrontageMath.MAX_FRONTAGE, rawWidth);
         double lineX = dx / rawWidth;
         double lineZ = dz / rawWidth;
-        float facingYaw = FrontageMath.facingYaw(dx, dz);
+        float facing = FrontageMath.facingYaw(dx, dz);
+        scene.route(List.of(start, end), 0xFFFFD36A, 0.42F, false);
+
         Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
-        if (groups.isEmpty()) {
-            return;
-        }
-
         List<UUID> ordered = new ArrayList<>(groups.keySet());
-        ordered.sort(java.util.Comparator.comparingDouble(
-                id -> clientGroupProjection(groups.get(id), lineX, lineZ)
-        ));
-        List<Integer> counts = new ArrayList<>(ordered.size());
-        for (UUID id : ordered) {
-            counts.add(groups.get(id).size());
-        }
+        ordered.sort(java.util.Comparator.comparingDouble(id -> clientGroupProjection(groups.get(id), lineX, lineZ)));
+        List<Integer> counts = ordered.stream().map(id -> groups.get(id).size()).toList();
         List<FrontageMath.GroupSegment> segments = FrontageMath.split(counts, width);
-        if (segments.size() != ordered.size()) {
-            return;
-        }
-
-        ScreenProjection.CameraSpec camera = cameraSpec();
-        if (camera == null) {
-            return;
-        }
+        if (segments.size() != ordered.size()) return;
         double midX = (start.x + end.x) * 0.5D;
         double midY = (start.y + end.y) * 0.5D;
         double midZ = (start.z + end.z) * 0.5D;
-        double yaw = Math.toRadians(facingYaw);
-        double rightX = Math.cos(yaw);
-        double rightZ = Math.sin(yaw);
-        double forwardX = -Math.sin(yaw);
-        double forwardZ = Math.cos(yaw);
-        int drawn = 0;
-
-        for (int gi = 0; gi < ordered.size() && drawn < 384; gi++) {
+        double yaw = Math.toRadians(facing);
+        double rightX = Math.cos(yaw), rightZ = Math.sin(yaw);
+        double forwardX = -Math.sin(yaw), forwardZ = Math.cos(yaw);
+        List<Vec3> allSlots = new ArrayList<>();
+        for (int gi = 0; gi < ordered.size() && allSlots.size() < 384; gi++) {
             UUID groupId = ordered.get(gi);
             List<AbstractRecruitEntity> recruits = groups.get(groupId);
             FrontageMath.GroupSegment segment = segments.get(gi);
             double centerX = midX + lineX * segment.centerOffset();
             double centerZ = midZ + lineZ * segment.centerOffset();
-
             int artillery = 0;
             int ships = 0;
             int infantry = 0;
@@ -2645,64 +2729,80 @@ public final class RTSCameraController {
             for (AbstractRecruitEntity recruit : recruits) {
                 if (ClientPermissionState.siegeWeaponsAvailable()
                         && recruit instanceof SiegeEngineerEntity engineer
-                        && SiegeWeaponsCompat.isAttachedToSiegeWeapon(engineer)) {
-                    artillery++;
-                } else if (ClientPermissionState.smallShipsAvailable()
+                        && SiegeWeaponsCompat.isAttachedToSiegeWeapon(engineer)) artillery++;
+                else if (ClientPermissionState.smallShipsAvailable()
                         && recruit instanceof CaptainEntity captain
-                        && SmallShipsCompat.isCaptainAboard(captain)) {
-                    ships++;
-                } else {
+                        && SmallShipsCompat.isCaptainAboard(captain)) ships++;
+                else {
                     infantry++;
                     if (recruit.getVehicle() != null) mounted = true;
                 }
             }
-
+            boolean wedge = LOCAL_FORMATIONS.get(groupId) == FormationKind.CAVALRY_WEDGE;
+            double spacing = LOCAL_LOOSE_SPACING_GROUPS.contains(groupId) ? 2.20D : wedge ? 1.0D : segment.spacing();
             if (infantry > 0) {
-                boolean wedge = LOCAL_FORMATIONS.get(groupId) == FormationKind.CAVALRY_WEDGE;
-                double previewSpacing = LOCAL_LOOSE_SPACING_GROUPS.contains(groupId)
-                        ? 2.20D : wedge ? 1.0D : segment.spacing();
                 int ranks = wedge ? 0 : FormationSlotMath.bestRanksForWidth(
-                        infantry, segment.allocatedWidth(), previewSpacing, mounted
-                );
-                FormationKind previewKind = wedge ? FormationKind.CAVALRY_WEDGE : FormationKind.LINE;
-                List<FormationSlotMath.Offset> offsets = FormationSlotMath.create(
-                        previewKind, infantry, previewSpacing, ranks,
-                        segment.allocatedWidth(), mounted
-                );
-                for (FormationSlotMath.Offset offset : offsets) {
-                    if (drawn >= 384) break;
-                    double wx = centerX + rightX * offset.right() - forwardX * offset.back();
-                    double wz = centerZ + rightZ * offset.right() - forwardZ * offset.back();
-                    drawYellowWorldPoint(graphics, camera, wx, midY + 0.15D, wz, false);
-                    drawn++;
+                        infantry, segment.allocatedWidth(), spacing, mounted);
+                FormationKind kind = wedge ? FormationKind.CAVALRY_WEDGE : FormationKind.LINE;
+                for (FormationSlotMath.Offset offset : FormationSlotMath.create(
+                        kind, infantry, spacing, ranks, segment.allocatedWidth(), mounted)) {
+                    if (allSlots.size() >= 384) break;
+                    Vec3 slot = new Vec3(centerX + rightX * offset.right() - forwardX * offset.back(),
+                            midY + 0.05D, centerZ + rightZ * offset.right() - forwardZ * offset.back());
+                    allSlots.add(slot);
+                    scene.slot(slot, facing, 0xC8FFD36A, false);
                 }
             }
-
-            if (artillery > 0 && drawn < 384) {
-                double spacing = artillery <= 1 ? 0.0D
-                        : Math.max(ArtilleryFormationMath.MIN_GUN_SPACING,
-                        Math.min(ArtilleryFormationMath.MAX_GUN_SPACING, segment.allocatedWidth() / (artillery - 1.0D)));
-                for (int i = 0; i < artillery && drawn < 384; i++) {
-                    double off = (i - (artillery - 1) * 0.5D) * spacing;
-                    drawYellowWorldPoint(graphics, camera,
-                            centerX + rightX * off, midY + 0.2D, centerZ + rightZ * off, true);
-                    drawn++;
-                }
+            double heavySpacing = artillery <= 1 ? 0.0D : Math.max(ArtilleryFormationMath.MIN_GUN_SPACING,
+                    Math.min(ArtilleryFormationMath.MAX_GUN_SPACING, segment.allocatedWidth() / (artillery - 1.0D)));
+            for (int i = 0; i < artillery && allSlots.size() < 384; i++) {
+                double offset = (i - (artillery - 1) * 0.5D) * heavySpacing;
+                Vec3 slot = new Vec3(centerX + rightX * offset, midY + 0.08D, centerZ + rightZ * offset);
+                allSlots.add(slot);
+                scene.slot(slot, facing, 0xD8FFD36A, true);
             }
-            if (ships > 0 && drawn < 384) {
-                double spacing = ships <= 1 ? 0.0D
-                        : Math.max(SmallShipsCompat.MIN_SPACING,
-                        Math.min(SmallShipsCompat.MAX_SPACING, segment.allocatedWidth() / (ships - 1.0D)));
-                for (int i = 0; i < ships && drawn < 384; i++) {
-                    double off = (i - (ships - 1) * 0.5D) * spacing;
-                    drawYellowWorldPoint(graphics, camera,
-                            centerX + rightX * off, midY + 0.3D, centerZ + rightZ * off, true);
-                    drawn++;
-                }
+            double shipSpacing = ships <= 1 ? 0.0D : Math.max(SmallShipsCompat.MIN_SPACING,
+                    Math.min(SmallShipsCompat.MAX_SPACING, segment.allocatedWidth() / (ships - 1.0D)));
+            for (int i = 0; i < ships && allSlots.size() < 384; i++) {
+                double offset = (i - (ships - 1) * 0.5D) * shipSpacing;
+                Vec3 slot = new Vec3(centerX + rightX * offset, midY + 0.10D, centerZ + rightZ * offset);
+                allSlots.add(slot);
+                scene.slot(slot, facing, 0xD8FFD36A, true);
             }
         }
+        scene.footprint(allSlots, 0x70FFD36A);
+        scene.arrow(new Vec3(midX, midY, midZ), facing, 0xE8FFE07A);
     }
 
+    private static Vec3 selectedArmyCenterInterpolated(float partialTick) {
+        List<AbstractRecruitEntity> selected = loadedOwnedRecruits().stream()
+                .filter(recruit -> recruit.getGroup() != null && SELECTED_GROUPS.contains(recruit.getGroup())).toList();
+        return interpolatedCenter(selected, partialTick);
+    }
+
+    private static Vec3 interpolatedCenter(List<AbstractRecruitEntity> recruits, float partialTick) {
+        if (recruits == null || recruits.isEmpty()) return null;
+        Vec3 sum = Vec3.ZERO;
+        int count = 0;
+        for (AbstractRecruitEntity recruit : recruits) {
+            if (recruit == null || !recruit.isAlive()) continue;
+            sum = sum.add(interpolatedVisualUnitPosition(recruit, partialTick));
+            count++;
+        }
+        return count == 0 ? null : sum.scale(1.0D / count);
+    }
+
+    private static Vec3 interpolatedVisualUnitPosition(AbstractRecruitEntity recruit, float partialTick) {
+        if (ClientPermissionState.smallShipsAvailable() && recruit instanceof CaptainEntity captain
+                && SmallShipsCompat.isCaptainAboard(captain)) return SmallShipsCompat.shipPosition(captain);
+        Entity entity = recruit.getVehicle() == null ? recruit : recruit.getVehicle();
+        double amount = Math.max(0.0D, Math.min(1.0D, partialTick));
+        return new Vec3(Mth.lerp(amount, entity.xo, entity.getX()),
+                Mth.lerp(amount, entity.yo, entity.getY()),
+                Mth.lerp(amount, entity.zo, entity.getZ()));
+    }
+
+    /** Full frontage ghost: mirrors FrontageMath rank/spacing selection before release. */
     private static void rememberMoveOrderPreview(Vec3 armyTarget) {
         Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
         if (armyTarget == null || groups.isEmpty()) {
@@ -2831,151 +2931,8 @@ public final class RTSCameraController {
         for (UUID groupId : groups) CURRENT_ORDER_PREVIEWS.remove(groupId);
     }
 
-    private static void renderCurrentOrderPreviews(GuiGraphics graphics) {
-        if (CURRENT_ORDER_PREVIEWS.isEmpty()) return;
-        Set<UUID> visible = new LinkedHashSet<>(SELECTED_GROUPS);
-        if (hoveredFriendlyGroupId != null) visible.add(hoveredFriendlyGroupId);
-        if (capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown()) {
-            visible.addAll(CURRENT_ORDER_PREVIEWS.keySet());
-        }
-        if (visible.isEmpty()) return;
-        ScreenProjection.CameraSpec camera = cameraSpec();
-        if (camera == null) return;
-        Map<UUID, List<AbstractRecruitEntity>> loaded = loadedGroups(visible);
-        long now = System.currentTimeMillis();
-
-        for (UUID groupId : List.copyOf(visible)) {
-            CurrentOrderPreview preview = CURRENT_ORDER_PREVIEWS.get(groupId);
-            List<AbstractRecruitEntity> recruits = loaded.get(groupId);
-            if (preview == null || recruits == null || recruits.isEmpty()) continue;
-
-            Vec3 center = clientGroupCenters(Map.of(groupId, recruits)).get(groupId);
-            if (center == null) continue;
-            if (horizontalDistanceClient(center, preview.destination()) < 1.2D && now - preview.issuedMillis() > 750L) {
-                CURRENT_ORDER_PREVIEWS.remove(groupId, preview);
-                continue;
-            }
-
-            Vec3 previous = center;
-            for (Vec3 point : preview.waypoints()) {
-                drawWorldPathSegment(graphics, camera, previous, point);
-                previous = point;
-            }
-            if (preview.frontageStart() != null && preview.frontageEnd() != null) {
-                drawWorldPathSegment(graphics, camera, preview.frontageStart(), preview.frontageEnd());
-            }
-
-            double dx = preview.destination().x - center.x;
-            double dy = preview.destination().y - center.y;
-            double dz = preview.destination().z - center.z;
-            int drawn = 0;
-            for (AbstractRecruitEntity recruit : recruits) {
-                if (drawn++ >= 192) break;
-                Vec3 source = visualUnitPosition(recruit);
-                drawYellowWorldPoint(graphics, camera, source.x + dx, source.y + dy + 0.15D, source.z + dz, false);
-            }
-        }
-    }
-
-    private static void renderTranslationPreview(GuiGraphics graphics) {
-        if (translationStartGround == null || translationCurrentGround == null) return;
-        Vec3 delta = translationCurrentGround.subtract(translationStartGround);
-        ScreenProjection.CameraSpec camera = cameraSpec();
-        if (camera == null) return;
-        Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
-        Map<UUID, Vec3> centers = clientGroupCenters(groups);
-        Vec3 armyCenter = averageCenters(centers.values());
-        if (armyCenter != null) drawWorldPathSegment(graphics, camera, armyCenter, armyCenter.add(delta));
-        int drawn = 0;
-        for (List<AbstractRecruitEntity> recruits : groups.values()) {
-            for (AbstractRecruitEntity recruit : recruits) {
-                if (drawn++ >= 384) return;
-                Vec3 source = visualUnitPosition(recruit);
-                Vec3 transformed = rotateAround(source, armyCenter, translationRotationDegrees).add(delta);
-                drawYellowWorldPoint(graphics, camera,
-                        transformed.x, transformed.y + 0.15D, transformed.z, false);
-            }
-        }
-        if (armyCenter != null && (translationControlWasDown || Math.abs(translationRotationDegrees) >= 0.25D)) {
-            drawFacingArrow(graphics, camera, armyCenter.add(delta),
-                    FormationRotationMath.normalizeYaw(
-                            selectedArmyFacing() + (float) translationRotationDegrees));
-        }
-    }
-
-    private static void drawWorldPathSegment(GuiGraphics graphics, ScreenProjection.CameraSpec camera, Vec3 from, Vec3 to) {
-        if (from == null || to == null) return;
-        ScreenProjection.ProjectedPoint a = ScreenProjection.project(camera, from.x, from.y + 0.25D, from.z);
-        ScreenProjection.ProjectedPoint b = ScreenProjection.project(camera, to.x, to.y + 0.25D, to.z);
-        if (a != null && b != null) {
-            drawScreenLine(graphics, toGuiX(a.x()), toGuiY(a.y()), toGuiX(b.x()), toGuiY(b.y()), 0xD8FFD36A);
-        }
-    }
-
     private static double horizontalDistanceClient(Vec3 a, Vec3 b) {
         return a == null || b == null ? Double.POSITIVE_INFINITY : Math.hypot(a.x - b.x, a.z - b.z);
-    }
-
-    private static void renderRoutePreview(GuiGraphics graphics) {
-        if (!routeMode || SELECTED_GROUPS.isEmpty()) {
-            return;
-        }
-        ScreenProjection.CameraSpec camera = cameraSpec();
-        Vec3 army = selectedArmyCenter();
-        if (camera == null || army == null) {
-            return;
-        }
-        Vec3 previous = army;
-        for (int i = 0; i < ROUTE_POINTS.size(); i++) {
-            BlockPos pos = ROUTE_POINTS.get(i);
-            Vec3 world = new Vec3(pos.getX() + 0.5D, pos.getY() + 0.35D, pos.getZ() + 0.5D);
-            ScreenProjection.ProjectedPoint a = ScreenProjection.project(camera, previous.x, previous.y + 0.25D, previous.z);
-            ScreenProjection.ProjectedPoint b = ScreenProjection.project(camera, world.x, world.y, world.z);
-            if (a != null && b != null) {
-                drawScreenLine(graphics, toGuiX(a.x()), toGuiY(a.y()), toGuiX(b.x()), toGuiY(b.y()), 0xFFFFD36A);
-                int bx = toGuiX(b.x());
-                int by = toGuiY(b.y());
-                graphics.fill(bx - 4, by - 4, bx + 5, by + 5, 0xFFFFE7A3);
-                graphics.drawString(MC.font, Integer.toString(i + 1), bx + 6, by - 5, 0xFFFFE7A3, true);
-            }
-            previous = world;
-        }
-
-        // Show the end arrangement at the final committed waypoint; while the route is
-        // empty, show the prospective current-cursor endpoint instead.
-        Vec3 previewTarget = null;
-        if (!ROUTE_POINTS.isEmpty()) {
-            BlockPos last = ROUTE_POINTS.get(ROUTE_POINTS.size() - 1);
-            previewTarget = new Vec3(last.getX() + 0.5D, last.getY(), last.getZ() + 0.5D);
-        } else {
-            GroundHit hit = raycastGroundHit(cursorX, cursorY);
-            if (hit != null) {
-                previewTarget = new Vec3(hit.pos().getX() + 0.5D, hit.location().y, hit.pos().getZ() + 0.5D);
-            }
-        }
-        if (previewTarget != null) {
-            renderTranslatedStencilAt(graphics, previewTarget, 192);
-        }
-    }
-
-    private static void renderTranslatedStencilAt(GuiGraphics graphics, Vec3 newArmyCenter, int maxPoints) {
-        Vec3 oldArmyCenter = selectedArmyCenter();
-        ScreenProjection.CameraSpec camera = cameraSpec();
-        if (oldArmyCenter == null || camera == null) {
-            return;
-        }
-        double dx = newArmyCenter.x - oldArmyCenter.x;
-        double dy = newArmyCenter.y - oldArmyCenter.y;
-        double dz = newArmyCenter.z - oldArmyCenter.z;
-        int drawn = 0;
-        for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
-            UUID groupId = recruit.getGroup();
-            if (groupId == null || !SELECTED_GROUPS.contains(groupId) || drawn++ >= maxPoints) {
-                continue;
-            }
-            Vec3 source = visualUnitPosition(recruit);
-            drawYellowWorldPoint(graphics, camera, source.x + dx, source.y + dy + 0.15D, source.z + dz, false);
-        }
     }
 
     private static Vec3 visualUnitPosition(AbstractRecruitEntity recruit) {
@@ -2985,20 +2942,6 @@ public final class RTSCameraController {
             return SmallShipsCompat.shipPosition(captain);
         }
         return recruit.position();
-    }
-
-    private static void drawYellowWorldPoint(
-            GuiGraphics graphics, ScreenProjection.CameraSpec camera,
-            double x, double y, double z, boolean heavy
-    ) {
-        ScreenProjection.ProjectedPoint projected = ScreenProjection.project(camera, x, y, z);
-        if (projected == null) {
-            return;
-        }
-        int sx = toGuiX(projected.x());
-        int sy = toGuiY(projected.y());
-        int radius = heavy ? 3 : 2;
-        graphics.fill(sx - radius, sy - radius, sx + radius + 1, sy + radius + 1, 0xC8FFD36A);
     }
 
     private static Map<UUID, List<AbstractRecruitEntity>> selectedLoadedGroups() {
@@ -3040,66 +2983,6 @@ public final class RTSCameraController {
      * This previews the same formation-preserving semantics as a walk/run terrain order:
      * existing group spacing and internal arrangement are translated, not reformed.
      */
-    private static void renderMovePreview(GuiGraphics graphics) {
-        if (!draggingFrontage || isFrontageGesture() || SELECTED_GROUPS.isEmpty()) {
-            return;
-        }
-
-        // An RMB over a hostile is an attack order, not a move. Do not lie with a
-        // destination stencil in that case.
-        LivingEntity attackTarget = raycastAttackTarget(cursorX, cursorY);
-        if (isAttackableTarget(attackTarget)) {
-            return;
-        }
-
-        GroundHit ground = raycastGroundHit(cursorX, cursorY);
-        Vec3 oldArmyCenter = selectedArmyCenter();
-        if (ground == null || oldArmyCenter == null) {
-            return;
-        }
-
-        Vec3 newArmyCenter = new Vec3(
-                ground.pos().getX() + 0.5D,
-                ground.location().y,
-                ground.pos().getZ() + 0.5D
-        );
-        if (newArmyCenter.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
-            return;
-        }
-
-        double dx = newArmyCenter.x - oldArmyCenter.x;
-        double dy = newArmyCenter.y - oldArmyCenter.y;
-        double dz = newArmyCenter.z - oldArmyCenter.z;
-        ScreenProjection.CameraSpec camera = cameraSpec();
-        if (camera == null) {
-            return;
-        }
-
-        int drawn = 0;
-        for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
-            UUID groupId = recruit.getGroup();
-            if (groupId == null || !SELECTED_GROUPS.contains(groupId)) {
-                continue;
-            }
-            if (drawn++ >= 256) {
-                break;
-            }
-            Vec3 source = visualUnitPosition(recruit);
-            ScreenProjection.ProjectedPoint projected = ScreenProjection.project(
-                    camera,
-                    source.x + dx,
-                    source.y + dy + 0.15D,
-                    source.z + dz
-            );
-            if (projected == null) {
-                continue;
-            }
-            int x = toGuiX(projected.x());
-            int y = toGuiY(projected.y());
-            graphics.fill(x - 2, y - 2, x + 3, y + 3, 0xB8FFD36A);
-        }
-    }
-
     private static String movePreviewText() {
         if (!draggingFrontage) {
             return hoverText();
@@ -3129,74 +3012,7 @@ public final class RTSCameraController {
                 + ": " + SELECTED_GROUPS.size() + " group(s) · release RMB to commit";
     }
 
-    private static void renderRotationPreview(GuiGraphics graphics) {
-        ScreenProjection.CameraSpec camera = cameraSpec();
-        if (camera == null) {
-            return;
-        }
-        ScreenProjection.ProjectedPoint pivotPoint = ScreenProjection.project(
-                camera, rotationPivot.x, rotationPivot.y + 0.25D, rotationPivot.z
-        );
-        if (pivotPoint != null) {
-            int px = toGuiX(pivotPoint.x());
-            int py = toGuiY(pivotPoint.y());
-            // Rotation owns the preview exclusively: mark the pivot, but do not draw
-            // a pivot-to-cursor stroke that looks like an RMB frontage/custom line.
-            graphics.fill(px - 3, py - 3, px + 4, py + 4, 0xFFFFE7A3);
-        }
-
-        FormationRotationMath.Point pivot = new FormationRotationMath.Point(rotationPivot.x, rotationPivot.z);
-        int drawn = 0;
-        for (RotationPreviewPoint preview : ROTATION_PREVIEW) {
-            if (drawn++ >= 256) {
-                break;
-            }
-            Vec3 world = preview.world();
-            FormationRotationMath.Point rotated = FormationRotationMath.rotate(
-                    new FormationRotationMath.Point(world.x, world.z),
-                    pivot,
-                    rotationDegrees
-            );
-            ScreenProjection.ProjectedPoint projected = ScreenProjection.project(
-                    camera, rotated.x(), world.y + 0.15D, rotated.z()
-            );
-            if (projected == null) {
-                continue;
-            }
-            int x = toGuiX(projected.x());
-            int yy = toGuiY(projected.y());
-            graphics.fill(x - 2, yy - 2, x + 3, yy + 3, 0xB8FFD36A);
-        }
-
-        drawFacingArrow(graphics, camera, rotationPivot, FormationRotationMath.normalizeYaw(
-                rotationBaseFacingYaw + (float) rotationDegrees));
-    }
-
     /** Shared FACING arrow for Z rotation and Alt+Ctrl transform previews. */
-    private static void drawFacingArrow(
-            GuiGraphics graphics, ScreenProjection.CameraSpec camera, Vec3 pivot, float previewYaw
-    ) {
-        ScreenProjection.ProjectedPoint pivotPoint = ScreenProjection.project(
-                camera, pivot.x, pivot.y + 0.25D, pivot.z);
-        double radians = Math.toRadians(previewYaw);
-        double facingX = -Math.sin(radians);
-        double facingZ = Math.cos(radians);
-        ScreenProjection.ProjectedPoint facingTip = ScreenProjection.project(
-                camera,
-                pivot.x + facingX * 8.0D,
-                pivot.y + 0.35D,
-                pivot.z + facingZ * 8.0D
-        );
-        if (pivotPoint != null && facingTip != null) {
-            int fromX = toGuiX(pivotPoint.x());
-            int fromY = toGuiY(pivotPoint.y());
-            int tipX = toGuiX(facingTip.x());
-            int tipY = toGuiY(facingTip.y());
-            drawScreenArrow(graphics, fromX, fromY, tipX, tipY, 0xFFFFE07A);
-            graphics.drawString(MC.font, "FACING", tipX + 5, tipY - 5, 0xFFFFE7A3, true);
-        }
-    }
-
     /** Compact Total War-style missile target reticle. */
     private static void drawRangedTargetCursor(GuiGraphics graphics, int centerX, int centerY) {
         int color = 0xFFFFE07A;
@@ -3231,47 +3047,6 @@ public final class RTSCameraController {
         graphics.pose().scale(1.55F, 1.55F, 1.0F);
         graphics.renderItem(IRON_SWORD_CURSOR, 0, 0);
         graphics.pose().popPose();
-    }
-
-    private static void drawScreenArrow(
-            GuiGraphics graphics, int x1, int y1, int x2, int y2, int color
-    ) {
-        drawScreenLine(graphics, x1, y1, x2, y2, color);
-        double dx = x2 - x1;
-        double dy = y2 - y1;
-        double length = Math.hypot(dx, dy);
-        if (length < 2.0D) {
-            return;
-        }
-        double ux = dx / length;
-        double uy = dy / length;
-        double px = -uy;
-        double py = ux;
-        double head = 8.0D;
-        double wing = 4.5D;
-        int leftX = (int) Math.round(x2 - ux * head + px * wing);
-        int leftY = (int) Math.round(y2 - uy * head + py * wing);
-        int rightX = (int) Math.round(x2 - ux * head - px * wing);
-        int rightY = (int) Math.round(y2 - uy * head - py * wing);
-        drawScreenLine(graphics, x2, y2, leftX, leftY, color);
-        drawScreenLine(graphics, x2, y2, rightX, rightY, color);
-    }
-
-    private static void drawScreenLine(GuiGraphics graphics, int x1, int y1, int x2, int y2, int color) {
-        int dx = x2 - x1;
-        int dy = y2 - y1;
-        int steps = Math.max(Math.abs(dx), Math.abs(dy));
-        if (steps <= 0) {
-            graphics.fill(x1 - 1, y1 - 1, x1 + 2, y1 + 2, color);
-            return;
-        }
-        int capped = Math.min(1024, steps);
-        for (int i = 0; i <= capped; i++) {
-            double t = i / (double) capped;
-            int x = (int) Math.round(x1 + dx * t);
-            int y = (int) Math.round(y1 + dy * t);
-            graphics.fill(x - 1, y - 1, x + 2, y + 2, color);
-        }
     }
 
     private static String frontagePreviewText() {

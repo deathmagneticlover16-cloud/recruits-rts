@@ -399,7 +399,7 @@ public final class RTSGroupAttackManager {
         Vec3 destination = new Vec3(desired.x, surface.getY(), desired.z);
         for (var attacker : attackers) TacticalCombatManager.lock(attacker, state.sourceGroupId, null);
         RecruitCommanderUtil.setRecruitsClearTargets(attackers);
-        boolean preserved = FormationRuntime.retargetFormation(state.sourceGroupId, destination)
+        boolean preserved = FormationRuntime.retargetFormationImmediately(state.sourceGroupId, destination)
                 || FormationService.movePreserved(state.sender, state.sourceGroupId, attackers, destination);
         if (!preserved) {
             RecruitCommanderUtil.setRecruitsMove(attackers, surface);

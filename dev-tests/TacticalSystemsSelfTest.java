@@ -31,15 +31,15 @@ public final class TacticalSystemsSelfTest {
         var plan = new CavalryManeuver(start, target, 1);
         check(plan.phase() == CavalryManeuver.Phase.CHARGE, "Room for immediate run-up");
         Point exit = plan.committedExit();
-        check(near(exit, new Point(0, 22)), "Pass exits twenty-two blocks beyond line");
+        check(near(exit, new Point(0, 5.5)), "Pass exits five and a half blocks beyond line");
         check(near(plan.tick(start, new Point(20, 0)), exit), "Moving target cannot bend committed charge");
         check(near(plan.committedImpact(), target), "Impact geometry remains frozen");
         check(near(plan.tick(new Point(0, 3), null), exit), "Target death does not stop pass");
         check(plan.phase() == CavalryManeuver.Phase.PASS, "Crossing impact advances to pass");
-        plan.tick(new Point(0, 22), null);
+        plan.tick(new Point(0, 5.5), null);
         check(plan.phase() == CavalryManeuver.Phase.TURN, "Turn begins beyond line");
-        Point firstTurn = plan.tick(new Point(0, 22), null);
-        check(firstTurn.z() > 22 && firstTurn.x() < 0, "First turn point continues forward and outward");
+        Point firstTurn = plan.tick(new Point(0, 5.5), null);
+        check(firstTurn.z() > 5.5 && firstTurn.x() < 0, "First turn point continues forward and outward");
 
         for (int sign : new int[]{-1, 1}) {
             var cycle = new CavalryManeuver(start, target, sign);
@@ -57,7 +57,8 @@ public final class TacticalSystemsSelfTest {
             check(reformed, "Cavalry completes full pass and curved turn in either direction");
             check(phases.containsAll(List.of(CavalryManeuver.Phase.CHARGE, CavalryManeuver.Phase.PASS,
                     CavalryManeuver.Phase.TURN)), "All committed phases visited");
-            check(position.z() > 16 && Math.abs(position.x()) > 18, "Reform occurs outside melee zone");
+            check(position.z() > 3 && Math.abs(position.x()) > 4,
+                    "Quarter-sized reform still clears the immediate melee pocket");
             check(near(cycle.tick(position, null), position), "No target means wait clear of line");
             cycle.tick(position, new Point(4, -10));
             check(near(cycle.committedImpact(), new Point(4, -10)), "Next pass accepts new formation target");
@@ -66,7 +67,8 @@ public final class TacticalSystemsSelfTest {
         check(distant.phase() == CavalryManeuver.Phase.APPROACH, "Distant cavalry stages before charging");
         check(near(distant.tick(new Point(0, -60), target), new Point(0, -22)), "Staging leaves run-up distance");
         check(!distant.blocked(new Point(0, -40)), "Blocked lane first requests turn-out");
-        check(distant.blocked(new Point(0, -40)), "Blocked turn requests pause/replan");
+        check(!distant.blocked(new Point(0, -40)), "Blocked first turn tries the opposite side");
+        check(distant.blocked(new Point(0, -40)), "Both blocked turn directions request pause/replan");
 
         check(TacticalMath.projectileDamage(10, 0, 2) == 20, "Unarmored arrow lethality");
         check(TacticalMath.projectileDamage(10, 10, 2) == 15, "Partial armor reduces bonus");

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.15 behavior."""
+"""Targeted source contracts for Commander 0.15.16 behavior."""
 
 from pathlib import Path
 
@@ -59,6 +59,9 @@ mount_control = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/R
 scheduler = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitAIScheduler.java")
 stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
+battle = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/BattleMechanicsManager.java")
+world_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalWorldRenderer.java")
+render_scene = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalRenderScene.java")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -77,8 +80,9 @@ require(cavalry, "lastNavigationGoal.distanceToSqr(navigationGoal) > 2.5D * 2.5D
         "combat navigation must avoid redundant path resets")
 require(cavalry, "approachHeading(state.appliedHeading, desiredYaw, 4.5F)",
         "combat cavalry must ease rider and mount yaw through the broad turn")
-require(cavalry, "CommanderAnimationHints.updateMovement(s.rider, true, true)",
-        "the complete cavalry attack cycle must retain its running animation")
+require(cavalry, "CommanderAnimationHints.updateMovement(s.rider, true, galloping)",
+        "only charge and pass phases should publish the cavalry running animation")
+require(cavalry, "case TURN -> 0.78D", "cycling cavalry must turn at an ordinary controlled pace")
 forbid(cavalry, "now - s.lastNavigationAt >= 30L",
        "accepted combat paths must not be periodically restarted")
 require(cavalry, "!s.navigationAccepted && now - s.lastNavigationAt >= 5L",
@@ -92,11 +96,11 @@ require(cavalry, "s.mount.getMoveControl().setWantedPosition(",
 require(cavalry, "s.mount.setDeltaMovement(momentum);",
         "navigation-to-pass control must preserve animation momentum")
 maneuver = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryManeuver.java")
-require(maneuver, "TURN_RADIUS = 12.0D", "cavalry needs a broad fly-by hairpin")
+require(maneuver, "TURN_RADIUS = 3.0D", "cavalry attack loops must use the quarter-radius hairpin")
 require(maneuver, "TURN_STEPS = 12", "cavalry hairpins need small stable steering changes")
-require(maneuver, "PASS_DISTANCE = 22.0D", "cavalry must clear the victim before turning")
+require(maneuver, "PASS_DISTANCE = 5.5D", "cavalry attack loops must use the quarter-length pass")
 require(maneuver, "return turnWaypoint(turnStep);", "pass-to-turn handoff must not insert a stopped tick")
-require(maneuver, "turnPoint.add(direction.scale(-6.0D))", "hairpin exit must carry motion into replanning")
+require(maneuver, "turnPoint.add(direction.scale(-1.5D))", "short hairpin exit must carry motion into replanning")
 forbid(cavalry, "if (++s.repath < 10) return;",
        "combat maneuvers must not wait after reaching an intermediate waypoint")
 forbid(formation[formation.index("private static void claim("):formation.index("private static void releaseMembers(")],
@@ -114,6 +118,14 @@ require(formation, "cohesionTarget - state.cohesionScale, -0.04D, 0.04D",
         "cohesion pace changes must be eased instead of pulsing")
 require(formation, "mover.setDeltaMovement(momentum)",
         "manual-control handoffs must preserve momentum for continuous animation")
+require(formation, "ordinarySupportedRise = fallenBehind && direct",
+        "verified one-block rises must stay under the continuous slot controller")
+require(formation, "desired.y - mover.getY() <= 1.25D",
+        "continuous rise handling must remain bounded to an ordinary supported step")
+require(formation, "state.routeGeneration != routeGeneration",
+        "obsolete queued formation routes must not overwrite a replacement order")
+require(formation, "agent.pathGeneration != pathGeneration",
+        "obsolete queued member paths must not restore a discarded steering goal")
 require(formation, "desiredTravelHeading = movementHeading(state)",
         "formation travel yaw must come from the shared route tangent")
 require(formation, "angleDifference(state.travelHeading, desiredTravelHeading)",
@@ -171,8 +183,8 @@ require(controller, "GLFW.GLFW_KEY_LEFT_CONTROL", "Ctrl must rotate during Alt t
 require(controller, "freeCamera.setPos(anchor.x, anchor.y + 14.0D, anchor.z)",
         "RTS camera must begin fourteen blocks above the player")
 require(controller, "-scrollDelta * step", "the wheel's vertical direction must be inverted")
-require(controller, "drawFacingArrow(graphics, camera, armyCenter.add(delta)",
-        "Alt+Ctrl must render the shared FACING arrow")
+require(controller, "scene.arrow(armyCenter.add(delta)",
+        "Alt+Ctrl must render the world-space facing arrow")
 require(controller, "InputConstants.isKeyDown", "vertical movement must use physical key state")
 require(controller, "RTSCameraKeyMappings.CAMERA_UP.setDown(false)",
         "released vertical keys must clear stale mapping state")
@@ -211,7 +223,8 @@ require(tactical, "rearImpact(attacker, victim) ? 2.0D : 1.0D",
         "rear charge impacts must apply double morale shock")
 require(cavalry_combat, "TacticalCombatManager.rearImpact(rider, victim) ? 2.0D : 1.0D",
         "mounted rear impacts must apply double morale shock")
-require(attack, "FormationRuntime.retargetFormation", "attack approaches must retarget without resetting movement")
+require(attack, "FormationRuntime.retargetFormationImmediately",
+        "attack approaches must replace an obsolete route while preserving formation slots")
 require(attack, "state.charge && state.approachKind == ApproachKind.INFANTRY",
         "melee charges must retain formation through first contact")
 require(mode_packet, "FormationStateSyncPacket.forPlayer(sender)",
@@ -314,11 +327,29 @@ for key in ("DAMAGE", "MELEE_SKILL", "MELEE_DEFENCE", "CHARGE_BONUS", "SPEED", "
             "FATIGUE", "ACCURACY", "AMMUNITION", "RATE_OF_FIRE"):
     require(stats, key + "(\"stat.", "all ten troop-wide statistics must have stable IDs")
 require(stat_registry, "Map<UUID, TroopStatProfile>", "statistics must be stored per troop group")
+require(battle, "FATIGUE_GAIN_SCALE = 1.0D / 2.3D", "battle fatigue growth must be 2.3x slower")
+require(battle, "ROUTING_MORALE = 4.0F", "ordinary rout susceptibility must be halved")
+require(battle, "ARCHER_MELEE_ROUTING_MORALE = 8.0F",
+        "archer-heavy groups caught in melee must retain their stronger rout vulnerability")
+require(battle, "TacticalCombatManager.ranged(recruit)",
+        "archer melee vulnerability must use the actual tactical ranged classification")
+require(world_renderer, "RenderLevelStageEvent.Stage.AFTER_PARTICLES",
+        "battlefield previews must render in world space")
+require(world_renderer, "1.0D - Math.exp(-seconds * 7.5D)",
+        "group marker anchors need frame-rate-independent smoothing")
+require(world_renderer, "Math.sin(time + u0 * Math.PI * 2.2D)",
+        "temporary cloth markers need smooth sine-wave animation")
+require(world_renderer, '"textures/misc/betsy_ross_group_marker.png"',
+        "the temporary 3D group marker must use the Betsy Ross texture")
+require(render_scene, "List<RouteRibbon> routes", "the unified scene must own route ribbons")
+require(render_scene, "List<FormationFootprint> footprints", "the unified scene must own formation footprints")
+forbid(controller, "drawWorldPathSegment(", "battlefield routes must not fall back to pixel-stamped HUD lines")
+forbid(controller, "drawYellowWorldPoint(", "formation slots must not fall back to fixed HUD squares")
 require(controller, "ORDER_RADIUS = 288.0D", "temporary client order reach must be tripled")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroupsPacket.java"),
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.15-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.16-server.1", "semantic version must be updated")
 
-print("0.15.15 source contracts passed")
+print("0.15.16 source contracts passed")

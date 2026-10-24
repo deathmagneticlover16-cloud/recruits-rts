@@ -70,7 +70,10 @@ public final class BattleMechanicsManager {
     private static final int BODYGUARD_GUARD_COUNT = 6;
     // 0.10.7 deliberately makes morale much less brittle than the base Recruit scale.
     private static final float STANDARD_FALLEN_SHOCK = -10.0F;
-    private static final float ROUTING_MORALE = 8.0F;
+    private static final float ROUTING_MORALE = 4.0F;
+    private static final float ARCHER_MELEE_ROUTING_MORALE = 8.0F;
+    private static final float ARCHER_MELEE_MORALE_LOSS_PER_SAMPLE = 0.08F;
+    private static final double FATIGUE_GAIN_SCALE = 1.0D / 2.3D;
     private static final float WAVERING_MORALE = 24.0F;
     private static final double COMMANDER_AURA_RADIUS = 28.0D;
     private static final float COMMANDER_AURA_RECOVERY_PER_SAMPLE = 0.10F;
@@ -207,21 +210,21 @@ public final class BattleMechanicsManager {
         boolean slow = groupId != null && RTSMovementBoostManager.isSlowMarchActive(groupId);
         boolean inMelee = recruit.getTarget() != null && recruit.distanceTo(recruit.getTarget()) < 4.5F;
 
-        double fatigue = recruit.getPersistentData().getDouble(FATIGUE_KEY);
+        double oldFatigue = recruit.getPersistentData().getDouble(FATIGUE_KEY);
+        double fatigue = oldFatigue;
         if (hasty && moved > 0.035D) {
-            fatigue += 0.12D * SAMPLE_INTERVAL;
+            fatigue += 0.12D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE;
         } else if (inMelee) {
-            fatigue += 0.07D * SAMPLE_INTERVAL;
+            fatigue += 0.07D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE;
         } else if (moved > 0.075D && !slow) {
-            fatigue += 0.020D * SAMPLE_INTERVAL;
+            fatigue += 0.020D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE;
         } else if (moved > 0.035D) {
-            fatigue += 0.004D * SAMPLE_INTERVAL;
+            fatigue += 0.004D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE;
         } else {
             fatigue -= 0.100D * SAMPLE_INTERVAL;
         }
         if (recruit instanceof HorsemanEntity) {
-            fatigue = recruit.getPersistentData().getDouble(FATIGUE_KEY)
-                    + (fatigue - recruit.getPersistentData().getDouble(FATIGUE_KEY)) * 0.70D;
+            fatigue = oldFatigue + (fatigue - oldFatigue) * 0.70D;
         }
         fatigue = Math.max(0.0D, Math.min(100.0D, fatigue));
         recruit.getPersistentData().putDouble(FATIGUE_KEY, fatigue);
@@ -244,6 +247,10 @@ public final class BattleMechanicsManager {
         // but does not drain morale while resting or simply travelling.
         if (stage >= 3 && inMelee) {
             recruit.setMoral(Math.max(0.0F, recruit.getMorale() - 0.05F * SAMPLE_INTERVAL));
+        }
+        if (inMelee && TacticalCombatManager.ranged(recruit)) {
+            recruit.setMoral(Math.max(0.0F,
+                    recruit.getMorale() - ARCHER_MELEE_MORALE_LOSS_PER_SAMPLE * SAMPLE_INTERVAL));
         }
     }
 
@@ -358,7 +365,9 @@ public final class BattleMechanicsManager {
     }
 
     private static int applyMoraleRouting(GroupRuntime group, float morale, CombatState combat, long now) {
-        if (morale < ROUTING_MORALE || RoutedGroupManager.isGroupRouting(group.groupId)
+        float routingThreshold = archerMajorityInMelee(group)
+                ? ARCHER_MELEE_ROUTING_MORALE : ROUTING_MORALE;
+        if (morale < routingThreshold || RoutedGroupManager.isGroupRouting(group.groupId)
                 || (combat != null && combat.routedThisBattle)) {
             if (combat == null) {
                 combat = new CombatState(group.ownerId, group.members.size(), group.members.size(), now);
@@ -382,6 +391,20 @@ public final class BattleMechanicsManager {
             return 1;
         }
         return 0;
+    }
+
+    private static boolean archerMajorityInMelee(GroupRuntime group) {
+        if (group == null || group.members.isEmpty()) return false;
+        int alive = 0;
+        int vulnerableArchers = 0;
+        for (AbstractRecruitEntity recruit : group.members) {
+            if (recruit == null || !recruit.isAlive()) continue;
+            alive++;
+            LivingEntity target = recruit.getTarget();
+            if (target != null && target.isAlive() && recruit.distanceTo(target) < 4.5F
+                    && TacticalCombatManager.ranged(recruit)) vulnerableArchers++;
+        }
+        return alive > 0 && vulnerableArchers * 2 >= alive;
     }
 
     private static void applyCommanderAura(MinecraftServer server, GroupRuntime group) {

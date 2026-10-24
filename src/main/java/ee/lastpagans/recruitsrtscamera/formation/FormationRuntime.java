@@ -38,6 +38,11 @@ public final class FormationRuntime {
         return NativeFormationController.retarget(groupId, destination);
     }
 
+    /** Explicit combat orders replace an older route without rebuilding formation slots. */
+    public static boolean retargetFormationImmediately(UUID groupId, Vec3 destination) {
+        return NativeFormationController.retargetImmediately(groupId, destination);
+    }
+
     public static Vec3 advanceFormationCenter(UUID groupId, double extraStep) {
         return NativeFormationController.advance(groupId, extraStep);
     }

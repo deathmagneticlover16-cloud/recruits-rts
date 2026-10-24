@@ -114,8 +114,11 @@ public final class CavalryTacticalController {
         }
         CavalryManeuver.Point destination = s.maneuver.tick(point(s.mount.position()),
                 liveTarget == null ? null : point(liveTarget));
-        // A combat pass is one continuous gallop, including staging and the hairpin.
-        CommanderAnimationHints.updateMovement(s.rider, true, true);
+        // Only the committed strike is a gallop. Approach, hairpin and reform use an
+        // ordinary controlled cavalry pace instead of sprinting around every attack loop.
+        boolean galloping = s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
+                || s.maneuver.phase() == CavalryManeuver.Phase.PASS;
+        CommanderAnimationHints.updateMovement(s.rider, true, galloping);
         if (s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
                 || s.maneuver.phase() == CavalryManeuver.Phase.PASS) attack(s);
         if (++s.samples % 20 == 0) {
@@ -151,7 +154,7 @@ public final class CavalryTacticalController {
                 s.directPassControl = true;
             }
             s.mount.getMoveControl().setWantedPosition(
-                    navigationGoal.x, navigationGoal.y, navigationGoal.z, 1.15D);
+                    navigationGoal.x, navigationGoal.y, navigationGoal.z, maneuverSpeed(s.maneuver.phase()));
             s.lastNavigationGoal = navigationGoal;
             s.navigationAccepted = false;
             s.lastNavigationAt = now;
@@ -163,12 +166,22 @@ public final class CavalryTacticalController {
                 || s.navigationAccepted && s.mount.getNavigation().isDone()
                 || !s.navigationAccepted && now - s.lastNavigationAt >= 5L)) {
             boolean accepted = s.mount.getNavigation().moveTo(destination.x(), ground.getY(), destination.z(),
-                    s.maneuver.phase() == CavalryManeuver.Phase.CHARGE ? 1.15 : 1.0);
+                    maneuverSpeed(s.maneuver.phase()));
             s.lastNavigationGoal = navigationGoal;
             s.navigationAccepted = accepted;
             s.lastNavigationAt = now;
         }
         matchRiderAndMountFacing(s, destination);
+    }
+
+    private static double maneuverSpeed(CavalryManeuver.Phase phase) {
+        return switch (phase) {
+            case CHARGE -> 1.05D;
+            case PASS -> 0.95D;
+            case APPROACH -> 0.90D;
+            case TURN -> 0.78D;
+            case REFORM -> 0.82D;
+        };
     }
 
     private static boolean directPassSafe(State state, Vec3 destination) {

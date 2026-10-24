@@ -1,3 +1,17 @@
+Recruits: RTS Camera 0.15.16-server.1
+Unified battlefield rendering and reliable terrain/combat movement
+
+- Replaced HUD-projected, pixel-stamped paths, slot squares, frontage lines and facing arrows with one batched world-space tactical scene. Routes are translucent ribbons with a smooth moving chevron flow; formation destinations use oriented decals, filled footprints and mesh arrows.
+- Added frame-interpolated formation ghosts and exponentially smoothed group-marker anchors. Friendly and optional enemy markers are temporary two-sided Betsy Ross cloth standards with distance scaling, poles and sine-wave motion; the previous static 2D floating banners no longer render.
+- Preserved the existing raycasts, banner hit regions, authoritative server route previews, Space hold preview, formation math and order backend. Selection rings now enter through the same battlefield renderer.
+- Fixed infantry and cavalry collapsing at ordinary one-block rises. A member whose direct corridor has already passed support, clearance, fluid and drop checks remains under continuous slot steering and jumps the rise instead of bouncing between local steering and PathNavigation.
+- Attack and charge approaches now replace an obsolete active route immediately while retaining formation slots, fixing orders that appeared to do nothing or continued an older movement plan.
+- Reduced cavalry cycling passes from 22 to 5.5 blocks and hairpin radius from 12 to 3 blocks. Approach, turn and reform phases now use normal controlled speeds; only the committed charge/pass publishes running animation.
+- Slowed all positive battle-fatigue accumulation by 2.3x while leaving stationary recovery intact.
+- Halved ordinary routing susceptibility by lowering the routing threshold from 8 to 4 morale. Archer-majority groups actively caught in melee retain an 8-morale threshold and receive an additional melee morale drain.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.16-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.15-server.1
 Exact mounted facing and stronger close cavalry sound
 

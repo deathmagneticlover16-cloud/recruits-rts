@@ -230,6 +230,15 @@ public final class NativeFormationController {
         return true;
     }
 
+    /** Replace an active route immediately for an explicit attack/charge order. */
+    public static boolean retargetImmediately(UUID groupId, Vec3 destination) {
+        State state = STATES.get(groupId);
+        if (state == null || destination == null) return false;
+        state.destination = destination;
+        invalidateRoutes(state);
+        return true;
+    }
+
     public static Vec3 advance(UUID groupId, double step) {
         State state = STATES.get(groupId);
         if (state == null) return null;
@@ -241,10 +250,7 @@ public final class NativeFormationController {
         State state = STATES.get(groupId);
         if (state == null) return;
         state.destination = state.center;
-        state.route = TacticalPathfinder.Route.EMPTY;
-        state.routeIndex = 0;
-        state.dispersed = false;
-        state.agents.values().forEach(Agent::clearPath);
+        invalidateRoutes(state);
     }
 
     public static void release(ServerPlayer sender, UUID groupId) {
@@ -385,13 +391,15 @@ public final class NativeFormationController {
                 || Math.abs(state.center.y - state.destination.y) > 0.65D)
                 && !state.routePending && level.getGameTime() >= state.nextRouteAt) {
             Vec3 requestedDestination = state.destination;
+            long routeGeneration = state.routeGeneration;
             state.routePending = RecruitAIScheduler.submit(
                     RecruitAIScheduler.Priority.HIGH,
                     RecruitAIScheduler.WorkType.FORMATION_PATH,
                     state.groupId,
                     () -> {
                         try {
-                            if (STATES.get(state.groupId) != state || !representative.isAlive()) return;
+                            if (STATES.get(state.groupId) != state || !representative.isAlive()
+                                    || state.routeGeneration != routeGeneration) return;
                             long started = System.nanoTime();
                             TacticalPathfinder.Route planned = TacticalPathfinder.find(
                                     level, representative, state.center, requestedDestination, QUICK_FORMATION_SEARCH);
@@ -404,6 +412,7 @@ public final class NativeFormationController {
                                 planned = TacticalPathfinder.find(
                                         level, representative, state.center, requestedDestination, MAX_FORMATION_SEARCH);
                             }
+                            if (state.routeGeneration != routeGeneration) return;
                             state.route = planned;
                             state.routeGoal = requestedDestination;
                             RecruitRuntimeMetrics.FORMATION_PATHS.increment();
@@ -644,7 +653,14 @@ public final class NativeFormationController {
         Boolean directSafety = localCandidate ? agent.canSteerDirect(level, mover, desired, now) : Boolean.FALSE;
         boolean fallenBehind = desired.y - mover.getY() > 0.72D;
         boolean direct = Boolean.TRUE.equals(directSafety);
-        if (direct && !fallenBehind && !agent.stuck(mover.position(), desired, now)) {
+        // A supported one-block rise is ordinary terrain, not evidence that the member
+        // fell off the formation. Sending every rider/footman through PathNavigation at
+        // the lip caused a controller handoff, bounce, random yaw and abandoned slots.
+        // The direct proof already checks support, clearance, fluids and bounded drops.
+        boolean ordinarySupportedRise = fallenBehind && direct
+                && desired.y - mover.getY() <= 1.25D;
+        if (direct && (!fallenBehind || ordinarySupportedRise)
+                && !agent.stuck(mover.position(), desired, now)) {
             agent.clearPath();
             agent.beginManual(mover);
             boolean manual = LocalFormationSteering.steer(level, recruit, mover, desired,
@@ -674,6 +690,7 @@ public final class NativeFormationController {
                 || goalChanged || !agent.path.isValid(level);
         if (needsPath && directSafety != null && !agent.pathPending && now >= agent.nextPlanAt) {
             Vec3 pathGoal = desired;
+            long pathGeneration = agent.pathGeneration;
             RecruitAIScheduler.Priority priority = catchUpScale > 1.0D
                     ? RecruitAIScheduler.Priority.HIGH : RecruitAIScheduler.Priority.MEDIUM;
             agent.pathPending = RecruitAIScheduler.submit(
@@ -684,8 +701,12 @@ public final class NativeFormationController {
                         try {
                             if (!recruit.isAlive() || recruit.isRemoved() || mover.isRemoved()
                                     || RecruitRuntimeRegistry.brain(recruit).authority()
-                                    != RecruitRuntimeBrain.MovementAuthority.RTS_FORMATION) return;
-                            agent.path = TacticalPathfinder.find(level, mover, pathGoal, MAX_AGENT_SEARCH);
+                                    != RecruitRuntimeBrain.MovementAuthority.RTS_FORMATION
+                                    || agent.pathGeneration != pathGeneration) return;
+                            TacticalPathfinder.Route planned = TacticalPathfinder.find(
+                                    level, mover, pathGoal, MAX_AGENT_SEARCH);
+                            if (agent.pathGeneration != pathGeneration) return;
+                            agent.path = planned;
                             RecruitRuntimeMetrics.AGENT_PATHS.increment();
                             RecruitRuntimeMetrics.RECOVERY_PATHS.increment();
                             if (agent.path.points().isEmpty()) RecruitRuntimeMetrics.PATH_FAILURES.increment();
@@ -871,6 +892,7 @@ public final class NativeFormationController {
     }
 
     private static void invalidateRoutes(State state) {
+        state.routeGeneration++;
         state.route = TacticalPathfinder.Route.EMPTY;
         state.routeGoal = null;
         state.routeIndex = 0;
@@ -1032,6 +1054,7 @@ public final class NativeFormationController {
         int consecutiveFailures;
         boolean dispersed;
         boolean routePending;
+        long routeGeneration;
         long nextRouteAt;
         long lastRouteSyncAt = Long.MIN_VALUE;
         boolean lastSyncedMoving;
@@ -1107,6 +1130,7 @@ public final class NativeFormationController {
         long nextPlanAt;
         boolean pathPending;
         boolean manualControl;
+        long pathGeneration;
         Vec3 lastProgressPosition;
         Vec3 lastProgressGoal;
         double lastProgressDistanceSq = Double.POSITIVE_INFINITY;
@@ -1136,6 +1160,7 @@ public final class NativeFormationController {
         }
 
         void clearPath() {
+            pathGeneration++;
             path = TacticalPathfinder.Route.EMPTY;
             goal = null;
             index = 0;

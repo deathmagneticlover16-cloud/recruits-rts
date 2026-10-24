@@ -3,8 +3,8 @@ package ee.lastpagans.recruitsrtscamera.combat;
 /** Dependency-free cavalry plan. Terrain navigation consumes these waypoints in the adapter. */
 public final class CavalryManeuver {
     private static final double STAGING_DISTANCE = 22.0D;
-    private static final double PASS_DISTANCE = 22.0D;
-    private static final double TURN_RADIUS = 12.0D;
+    private static final double PASS_DISTANCE = 5.5D;
+    private static final double TURN_RADIUS = 3.0D;
     private static final int TURN_STEPS = 12;
     private static final double WAYPOINT_REACHED_SQ = 3.25D * 3.25D;
     public record Point(double x, double z) {
@@ -73,7 +73,7 @@ public final class CavalryManeuver {
                     if (++turnStep > TURN_STEPS) {
                         phase = Phase.REFORM;
                         // Carry speed out of the hairpin until the next pass is planned.
-                        return turnPoint.add(direction.scale(-6.0D));
+                        return turnPoint.add(direction.scale(-1.5D));
                     }
                     else turnPoint = turnWaypoint(turnStep);
                 }
