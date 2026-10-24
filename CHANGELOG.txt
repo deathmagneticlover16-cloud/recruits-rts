@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.15.20-server.1
+Multi-level cohesion, pace-aware routes and formation discipline
+
+- New formation orders seed their route from an actually occupied median Y level instead of averaging ranks on different terraces into unsupported air.
+- Vertical separation on valid stairs and ledges no longer counts as a laggard or increases horizontal catch-up. Cohesion remains based on horizontal slot error, so a formation spread over several elevations can accept and follow its next order.
+- Reverted temporary group standards to the original pole-free waving Betsy Ross cloth and its initial marker height.
+- Restored the original yellow command palette. Flowing route chevrons now animate at the owning formation's current Walk or Run pace.
+- Alt-drag translation and drawn frontage orders now default to Run on both client presentation and server movement state.
+- Formation-controlled recruits discard autonomous sight/retaliation targets unless an explicit RTS combat lease owns the target, preventing stationary slot-bound swinging with formation-owned facing.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.20-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.19-server.1
 Crunchier cavalry rumble and corrected mounted ledge control
 

@@ -63,7 +63,7 @@ public record TranslateGroupsPacket(List<UUID> groupIds, Vec3 delta) {
             }
             if (moved) {
                 RotateFormationPacket.markTranslated(entry.getKey(), sender.level().getGameTime());
-                RTSMovementBoostManager.registerSlowMove(sender, entry.getKey(), entry.getValue());
+                RTSMovementBoostManager.registerHastyMove(sender, entry.getKey(), entry.getValue());
             }
         }
     }

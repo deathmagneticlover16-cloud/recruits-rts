@@ -179,7 +179,7 @@ public record FrontageGroupsPacket(List<UUID> groupIds, Vec3 start, Vec3 end) {
                     // Keep a native Recruits fallback if formation planning rejects the order.
                     RecruitCommanderUtil.setRecruitsMove(formationRecruits, surface);
                 }
-                RTSMovementBoostManager.registerFormationMove(sender, groupId, formationRecruits);
+                RTSMovementBoostManager.registerHastyMove(sender, groupId, formationRecruits);
             }
             if (battery.movedAny()) {
                 artilleryGuns += battery.guns();

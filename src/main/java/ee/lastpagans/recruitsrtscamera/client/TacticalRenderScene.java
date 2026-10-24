@@ -14,7 +14,7 @@ public record TacticalRenderScene(
 ) {
     public static final TacticalRenderScene EMPTY = new TacticalRenderScene(List.of(), List.of(), List.of());
 
-    public record RouteRibbon(List<Vec3> points, int color, float width, boolean flowing) { }
+    public record RouteRibbon(List<Vec3> points, int color, float width, boolean flowing, float flowSpeed) { }
     public record SlotDecal(Vec3 position, float yaw, int color, boolean heavy) { }
     public record FacingArrow(Vec3 origin, float yaw, int color) { }
 
@@ -24,9 +24,14 @@ public record TacticalRenderScene(
         private final List<FacingArrow> arrows = new ArrayList<>();
 
         public Builder route(Collection<Vec3> points, int color, float width, boolean flowing) {
+            return route(points, color, width, flowing, flowing ? 1.0F : 0.0F);
+        }
+
+        public Builder route(Collection<Vec3> points, int color, float width, boolean flowing, float flowSpeed) {
             if (points != null) {
                 List<Vec3> safe = points.stream().filter(java.util.Objects::nonNull).toList();
-                if (safe.size() >= 2) routes.add(new RouteRibbon(safe, color, width, flowing));
+                if (safe.size() >= 2) routes.add(new RouteRibbon(
+                        safe, color, width, flowing, Math.max(0.0F, flowSpeed)));
             }
             return this;
         }

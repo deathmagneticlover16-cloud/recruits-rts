@@ -90,10 +90,10 @@ public final class RTSCameraController {
     private static final long HASTY_DOUBLE_CLICK_MS = 340L;
     private static final int HASTY_TARGET_TOLERANCE = 2;
     private static final double ROTATE_MIN_RADIUS = 1.5D;
-    private static final int TACTICAL_ROUTE_COLOR = 0xD8BA9225;
-    private static final int TACTICAL_SLOT_COLOR = 0xC8BA9225;
-    private static final int TACTICAL_ACCENT_COLOR = 0xE8BA9225;
-    private static final int TACTICAL_CUSTOM_COLOR = 0xE8BA9225;
+    private static final int TACTICAL_ROUTE_COLOR = 0xD8FFD36A;
+    private static final int TACTICAL_SLOT_COLOR = 0xC8FFD36A;
+    private static final int TACTICAL_ACCENT_COLOR = 0xE8FFE07A;
+    private static final int TACTICAL_CUSTOM_COLOR = 0xE8FFB84D;
 
     private static final Set<UUID> SELECTED_GROUPS = new LinkedHashSet<>();
     private static final Map<UUID, GlowState> MODIFIED_GLOW = new HashMap<>();
@@ -1028,8 +1028,8 @@ public final class RTSCameraController {
             translationCurrentGround = null;
             return;
         }
-        LOCAL_RUNNING_GROUPS.removeAll(SELECTED_GROUPS);
         if (moved) {
+            LOCAL_RUNNING_GROUPS.addAll(SELECTED_GROUPS);
             RTSCameraNetwork.CHANNEL.sendToServer(new TranslateGroupsPacket(new ArrayList<>(SELECTED_GROUPS), delta));
         }
         if (rotated) {
@@ -1037,7 +1037,7 @@ public final class RTSCameraController {
                     new ArrayList<>(SELECTED_GROUPS), (float) translationRotationDegrees));
         }
         rememberTranslationOrderPreview(delta, translationRotationDegrees);
-        setStatus("Formation transform ordered for " + SELECTED_GROUPS.size() + " group(s)."
+        setStatus("Run formation transform ordered for " + SELECTED_GROUPS.size() + " group(s)."
                 + (rotated ? " · " + Math.round(translationRotationDegrees) + "°" : ""));
         translationStartGround = null;
         translationCurrentGround = null;
@@ -1748,12 +1748,13 @@ public final class RTSCameraController {
                 start,
                 end
         ));
+        LOCAL_RUNNING_GROUPS.addAll(SELECTED_GROUPS);
         rememberFrontageOrderPreview(start, end);
         for (UUID groupId : SELECTED_GROUPS) {
             LOCAL_FORMATIONS.put(groupId, FormationKind.LINE);
             LOCAL_CUSTOM_GROUPS.remove(groupId);
         }
-        setStatus("Frontage order sent: " + String.format(java.util.Locale.ROOT, "%.1f", width)
+        setStatus("Run frontage order sent: " + String.format(java.util.Locale.ROOT, "%.1f", width)
                 + " blocks · " + SELECTED_GROUPS.size() + " group(s). ");
     }
 
@@ -2437,7 +2438,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.19-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.20-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2581,7 +2582,7 @@ public final class RTSCameraController {
             List<Vec3> route = new ArrayList<>();
             route.add(center);
             route.addAll(preview.waypoints());
-            scene.route(route, TACTICAL_ROUTE_COLOR, 0.32F, true);
+            scene.route(route, TACTICAL_ROUTE_COLOR, 0.32F, true, previewFlowSpeed(groupId));
             Vec3 delta = preview.destination().subtract(center);
             List<Vec3> stencil = new ArrayList<>();
             for (AbstractRecruitEntity recruit : recruits) {
@@ -2603,7 +2604,7 @@ public final class RTSCameraController {
             route.add(point);
             scene.slot(point, selectedArmyFacing(), TACTICAL_ACCENT_COLOR, true);
         }
-        scene.route(route, TACTICAL_ROUTE_COLOR, 0.36F, true);
+        scene.route(route, TACTICAL_ROUTE_COLOR, 0.36F, true, selectedPreviewFlowSpeed());
         Vec3 target = route.size() > 1 ? route.get(route.size() - 1) : null;
         if (target == null) {
             GroundHit hit = raycastGroundHit(cursorX, cursorY);
@@ -2618,7 +2619,7 @@ public final class RTSCameraController {
         Map<UUID, List<AbstractRecruitEntity>> groups = selectedLoadedGroups();
         Vec3 armyCenter = selectedArmyCenterInterpolated(partialTick);
         if (armyCenter != null) scene.route(List.of(armyCenter, armyCenter.add(delta)),
-                TACTICAL_ROUTE_COLOR, 0.34F, true);
+                TACTICAL_ROUTE_COLOR, 0.34F, true, 1.65F);
         List<Vec3> stencil = new ArrayList<>();
         for (List<AbstractRecruitEntity> recruits : groups.values()) {
             for (AbstractRecruitEntity recruit : recruits) {
@@ -2647,7 +2648,8 @@ public final class RTSCameraController {
                 ground.pos().getZ() + 0.5D);
         if (destination.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) return;
         appendTranslatedStencil(scene, destination, partialTick, 256);
-        scene.route(List.of(oldCenter, destination), TACTICAL_ROUTE_COLOR, 0.32F, true);
+        scene.route(List.of(oldCenter, destination), TACTICAL_ROUTE_COLOR, 0.32F, true,
+                selectedPreviewFlowSpeed());
     }
 
     private static void appendRotationScene(TacticalRenderScene.Builder scene) {
@@ -2771,6 +2773,17 @@ public final class RTSCameraController {
         List<AbstractRecruitEntity> selected = loadedOwnedRecruits().stream()
                 .filter(recruit -> recruit.getGroup() != null && SELECTED_GROUPS.contains(recruit.getGroup())).toList();
         return interpolatedCenter(selected, partialTick);
+    }
+
+    private static float previewFlowSpeed(UUID groupId) {
+        return groupId != null && LOCAL_RUNNING_GROUPS.contains(groupId) ? 1.65F : 0.70F;
+    }
+
+    private static float selectedPreviewFlowSpeed() {
+        if (SELECTED_GROUPS.isEmpty()) return 0.70F;
+        double total = 0.0D;
+        for (UUID groupId : SELECTED_GROUPS) total += previewFlowSpeed(groupId);
+        return (float) (total / SELECTED_GROUPS.size());
     }
 
     private static Vec3 interpolatedCenter(List<AbstractRecruitEntity> recruits, float partialTick) {

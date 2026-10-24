@@ -5,6 +5,7 @@ import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.compat.TerrainSurfaceResolver;
+import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
 import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
 import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
 import ee.lastpagans.recruitsrtscamera.navigation.LocalFormationSteering;
@@ -476,6 +477,13 @@ public final class NativeFormationController {
             RecruitRuntimeMetrics.BRAIN_UPDATES.increment();
             float memberHeading = state.facings.getOrDefault(recruit.getUUID(), state.heading);
             claim(recruit);
+            // Native sight/retaliation may still assign a target while formation movement
+            // goals are suppressed. Without an explicit RTS combat lease that produces a
+            // stationary swing from the slot with formation-owned facing. Hold formation
+            // discipline until the commander issues an attack order.
+            if (!TacticalCombatManager.ownsTarget(recruit) && recruit.getTarget() != null) {
+                recruit.setTarget(null);
+            }
             Mob mover = controlledMob(recruit);
             if (mover == null) continue;
             syncMountControl(state, recruit, mover);
@@ -488,13 +496,15 @@ public final class NativeFormationController {
             Vec3 grounded = agent.grounded(level, mover, desired);
             if (grounded != null) desired = grounded;
             double slotError = horizontalDistanceSq(mover.position(), desired);
-            double heightError = Math.abs(mover.getY() - desired.y);
             boolean mountedMember = mover != recruit;
+            // Legitimate stairs and ledges spread a formation across several Y levels.
+            // Cohesion and catch-up are horizontal responsibilities; terrain traversal
+            // handles height independently and must not mark an entire group insubordinate.
             double catchUpScale = mountedMember
-                    ? slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.08D
-                    : slotError > 0.85D * 0.85D || heightError > 0.85D ? 1.04D : 1.0D
-                    : slotError > 4.0D * 4.0D || heightError > 1.35D ? 1.40D
-                    : slotError > 1.55D * 1.55D || heightError > 0.85D ? 1.20D : 1.0D;
+                    ? slotError > 4.0D * 4.0D ? 1.08D
+                    : slotError > 0.85D * 0.85D ? 1.04D : 1.0D
+                    : slotError > 4.0D * 4.0D ? 1.40D
+                    : slotError > 1.55D * 1.55D ? 1.20D : 1.0D;
             recruit.setHoldPos(desired);
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
             boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit,
@@ -528,7 +538,7 @@ public final class NativeFormationController {
                 state.locked.remove(recruit.getUUID());
                 RecruitRuntimeRegistry.brain(recruit).markMoving(level.getGameTime());
                 double cohesionDistance = mountedMember ? 0.85D : 1.55D;
-                if (slotError > cohesionDistance * cohesionDistance || heightError > 0.85D) laggards++;
+                if (slotError > cohesionDistance * cohesionDistance) laggards++;
             }
         }
         state.laggards = laggards;
@@ -912,16 +922,20 @@ public final class NativeFormationController {
     }
 
     private static Vec3 averageControlledPosition(List<AbstractRecruitEntity> units, double fallbackY) {
-        double x = 0.0D, y = 0.0D, z = 0.0D;
+        double x = 0.0D, z = 0.0D;
+        List<Double> elevations = new ArrayList<>(units.size());
         for (AbstractRecruitEntity unit : units) {
             Entity controlled = controlled(unit);
             x += controlled.getX();
-            y += controlled.getY();
             z += controlled.getZ();
+            if (Double.isFinite(controlled.getY())) elevations.add(controlled.getY());
         }
         double inverse = 1.0D / units.size();
-        double averageY = y * inverse;
-        return new Vec3(x * inverse, Double.isFinite(averageY) ? averageY : fallbackY, z * inverse);
+        elevations.sort(Double::compareTo);
+        // A mean between two terraces is unsupported air. Use a real occupied level as
+        // the next route's seed so a fresh order can start while ranks span stairs/ledges.
+        double routeY = elevations.isEmpty() ? fallbackY : elevations.get((elevations.size() - 1) / 2);
+        return new Vec3(x * inverse, routeY, z * inverse);
     }
 
     private static Vec3 average(Iterable<Vec3> positions) {
