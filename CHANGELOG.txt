@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.15.22-server.1
+Immersive group flags and bounded mounted speed
+
+- Added `/setflag <group UUID>` with owned-group UUID suggestions. When Immersive Paintings is installed, it opens a group-oriented browser over the synchronized painting library; choosing an image assigns it to the formation's waving world flag, while Default restores the built-in temporary flag.
+- Group painting selections persist in world SavedData, synchronize on entering RTS mode and broadcast updates so friendly and enemy markers use the same selected artwork in multiplayer.
+- Immersive Paintings remains optional. Its client API is compile-only and isolated behind a mod-presence check; servers and clients without it retain the built-in flag.
+- Reduced both formation and combat horse attribute boosts to a maximum 1.25x. Modifiers exist only while the recruit is the horse's mounted passenger and are removed on dismount, mount replacement, movement completion or unload.
+- Cavalry Wedge remains highlighted after Commander menus close or a frontage merely repositions it; the client now mirrors the server's persistent wedge state instead of locally relabeling every frontage as Line.
+- Network protocol is now rts-camera-158 for the group-flag editor, selection and synchronization packets; update clients and server together.
+- Source version and packaging references are 0.15.22-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.21-server.1
 Supported downhill movement and responsive melee facing
 

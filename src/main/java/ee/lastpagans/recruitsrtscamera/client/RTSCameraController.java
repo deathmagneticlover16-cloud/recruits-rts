@@ -685,6 +685,7 @@ public final class RTSCameraController {
         ClientManager.updateGroups();
         syncSelectionFromRecruits();
         clearGlow();
+        GroupFlagClientState.clear();
         active = true;
         RTSCameraNetwork.CHANNEL.sendToServer(new RTSModeStatePacket(true));
         commandCursor = true;
@@ -1751,7 +1752,11 @@ public final class RTSCameraController {
         LOCAL_RUNNING_GROUPS.addAll(SELECTED_GROUPS);
         rememberFrontageOrderPreview(start, end);
         for (UUID groupId : SELECTED_GROUPS) {
-            LOCAL_FORMATIONS.put(groupId, FormationKind.LINE);
+            // Server frontage logic only positions an active cavalry wedge; it does not
+            // replace its geometry. Mirror that persistent state client-side so closing
+            // and reopening Commander cannot make the wedge button lose its highlight.
+            LOCAL_FORMATIONS.compute(groupId, (id, current) ->
+                    current == FormationKind.CAVALRY_WEDGE ? FormationKind.CAVALRY_WEDGE : FormationKind.LINE);
             LOCAL_CUSTOM_GROUPS.remove(groupId);
         }
         setStatus("Run frontage order sent: " + String.format(java.util.Locale.ROOT, "%.1f", width)
@@ -2438,7 +2443,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.21-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.22-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

@@ -170,7 +170,10 @@ public final class TacticalWorldRenderer {
             Vec3 target = new Vec3(view.centerX(), view.anchorY() + 6.4D, view.centerZ());
             SmoothAnchor anchor = FLAG_ANCHORS.computeIfAbsent(view.groupId(), ignored -> new SmoothAnchor(target));
             anchor.approach(target, smoothing);
-            flags.add(new FlagView(view.groupId(), anchor.position, view.selected(), false));
+            GroupFlagClientState.FlagTexture custom = GroupFlagClientState.texture(view.groupId());
+            flags.add(new FlagView(view.groupId(), anchor.position, view.selected(), false,
+                    custom == null ? BETSY_ROSS : custom.location(),
+                    custom == null ? 1.5D : custom.aspectRatio()));
         }
         if (CommanderOverlay.worldEnemyBannersVisible()) {
             for (RTSCommandFacade.EnemyBannerView view : RTSCommandFacade.enemyBanners()) {
@@ -178,7 +181,10 @@ public final class TacticalWorldRenderer {
                 Vec3 target = new Vec3(view.centerX(), view.anchorY() + 6.4D, view.centerZ());
                 SmoothAnchor anchor = FLAG_ANCHORS.computeIfAbsent(view.groupId(), ignored -> new SmoothAnchor(target));
                 anchor.approach(target, smoothing);
-                flags.add(new FlagView(view.groupId(), anchor.position, false, true));
+                GroupFlagClientState.FlagTexture custom = GroupFlagClientState.texture(view.groupId());
+                flags.add(new FlagView(view.groupId(), anchor.position, false, true,
+                        custom == null ? BETSY_ROSS : custom.location(),
+                        custom == null ? 1.5D : custom.aspectRatio()));
             }
         }
         java.util.Set<UUID> visible = flags.stream().map(FlagView::id).collect(java.util.stream.Collectors.toSet());
@@ -186,11 +192,15 @@ public final class TacticalWorldRenderer {
         if (flags.isEmpty()) return;
 
         RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, BETSY_ROSS);
-        BufferBuilder buffer = Tesselator.getInstance().getBuilder();
-        buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        for (FlagView flag : flags) drawFlag(buffer, matrix, flag, cameraPos);
-        Tesselator.getInstance().end();
+        Map<ResourceLocation, List<FlagView>> textured = new java.util.LinkedHashMap<>();
+        for (FlagView flag : flags) textured.computeIfAbsent(flag.texture, ignored -> new ArrayList<>()).add(flag);
+        for (Map.Entry<ResourceLocation, List<FlagView>> entry : textured.entrySet()) {
+            RenderSystem.setShaderTexture(0, entry.getKey());
+            BufferBuilder buffer = Tesselator.getInstance().getBuilder();
+            buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+            for (FlagView flag : entry.getValue()) drawFlag(buffer, matrix, flag, cameraPos);
+            Tesselator.getInstance().end();
+        }
     }
 
     private static void drawFlag(BufferBuilder buffer, Matrix4f matrix, FlagView flag, Vec3 cameraPos) {
@@ -202,8 +212,8 @@ public final class TacticalWorldRenderer {
                 : new Vec3(toCamera.x / horizontal, 0.0D, toCamera.z / horizontal);
         double distance = cameraPos.distanceTo(flag.position);
         double scale = Mth.clamp(0.82D + distance / 90.0D, 0.82D, 1.55D);
-        double width = 2.7D * scale;
         double height = 1.8D * scale;
+        double width = height * flag.aspectRatio;
         Vec3 clothCenter = flag.position;
         int color = flag.enemy ? 0xE8FFB8B8 : flag.selected ? 0xFFFFFFFF : 0xE8E8E8E8;
         double time = (MC.level.getGameTime() + MC.getFrameTime()) * 0.12D;
@@ -254,5 +264,12 @@ public final class TacticalWorldRenderer {
         void approach(Vec3 target, double amount) { position = position.lerp(target, Mth.clamp(amount, 0.0D, 1.0D)); }
     }
 
-    private record FlagView(UUID id, Vec3 position, boolean selected, boolean enemy) { }
+    private record FlagView(
+            UUID id,
+            Vec3 position,
+            boolean selected,
+            boolean enemy,
+            ResourceLocation texture,
+            double aspectRatio
+    ) { }
 }

@@ -26,6 +26,10 @@ public record RTSModeStatePacket(boolean active) {
                         PacketDistributor.PLAYER.with(() -> sender),
                         FormationStateSyncPacket.forPlayer(sender)
                 );
+                RTSCameraNetwork.CHANNEL.send(
+                        PacketDistributor.PLAYER.with(() -> sender),
+                        GroupFlagStateSyncPacket.all(sender)
+                );
             }
         });
         context.setPacketHandled(true);

@@ -44,6 +44,10 @@ minecraft {
 repositories {
     mavenCentral()
     maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+    maven {
+        url = 'https://www.cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
     flatDir { dirs 'libs' }
 }
 
@@ -51,6 +55,7 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     implementation fg.deobf(files('libs/recruits.jar'))
     implementation fg.deobf(files('libs/freecam.jar'))
+    compileOnly fg.deobf('curse.maven:immersive-paintings-639584:7809908')
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 

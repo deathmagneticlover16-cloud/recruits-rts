@@ -67,3 +67,10 @@ mandatory=false
 versionRange="[0.8.1,)"
 ordering="AFTER"
 side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="immersive_paintings"
+mandatory=false
+versionRange="[0.6.11,)"
+ordering="AFTER"
+side="CLIENT"

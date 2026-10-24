@@ -41,6 +41,7 @@ public final class CavalryCombatManager {
     private static final UUID SPEED_ID = UUID.fromString("fe74a3c8-728f-4d41-bb90-3014d6a5db0b");
     private static final UUID MOUNT_HEALTH_ID = UUID.fromString("a7d39069-9e55-4ae3-a511-d36715156c92");
     private static final double MOUNT_HEALTH_BONUS = 0.75D;
+    private static final double MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D;
     private static final Map<UUID, RiderState> RIDERS = new HashMap<>();
     private static final Map<UUID, ShockWindow> LAST_SHOCK = new HashMap<>();
     private static final Map<UUID, Long> LAST_PRESSURE = new HashMap<>();
@@ -49,6 +50,7 @@ public final class CavalryCombatManager {
 
     public static boolean isMounted(AbstractRecruitEntity recruit) {
         return recruit != null && recruit.getVehicle() instanceof Mob mount && mount.isAlive()
+                && mount.getFirstPassenger() == recruit
                 && !SmallShipsCompat.isShipRecruit(recruit);
     }
 
@@ -76,8 +78,8 @@ public final class CavalryCombatManager {
                 // multiply it a second time. Outside formations this affects native horse AI.
                 double speed = rider.getShouldMovePos() || rider.getShouldHoldPos()
                         || RTSMovementBoostManager.isSlowMarchActive(rider.getGroup())
-                        ? 1.0D : Math.max(2.10D, RTSServerConfig.CAVALRY_COMBAT_SPEED_MULTIPLIER.get())
-                        * (1.0D + 0.30D * state.momentum.runupProgress(RTSServerConfig.CAVALRY_CHARGE_RUNUP.get()));
+                        ? 1.0D : Math.min(MAX_MOUNTED_SPEED_MULTIPLIER,
+                        Math.max(1.0D, RTSServerConfig.CAVALRY_COMBAT_SPEED_MULTIPLIER.get()));
                 setSpeed(mount, speed - 1.0D);
                 sample(rider, state);
             }

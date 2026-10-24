@@ -47,11 +47,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class RTSMovementBoostManager {
     private static final double REGULAR_INFANTRY_NAV_SPEED = 1.17D;
     private static final double REGULAR_CAVALRY_NAV_SPEED = 1.50D;
-    private static final double REGULAR_CAVALRY_MOUNT_MULTIPLIER = 1.10D;
+    private static final double REGULAR_CAVALRY_MOUNT_MULTIPLIER = 0.25D;
     private static final double HASTY_INFANTRY_SPEED = 1.62D;
     private static final double HASTY_INFANTRY_ATTRIBUTE_MULTIPLIER = 0.08D;
     private static final double HASTY_CAVALRY_NAV_SPEED = 1.62D;
-    private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 1.10D;
+    private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 0.25D;
+    private static final double MAX_CAVALRY_MOUNT_ATTRIBUTE_BONUS = 0.25D;
 
     private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.15D;   // ~0.36 total
 
@@ -361,7 +362,8 @@ public final class RTSMovementBoostManager {
                 if (isCavalry(recruit)) {
                     double chargeAcceleration = TacticalCombatManager.chargeAcceleration(recruit);
                     navigationSpeed *= chargeAcceleration;
-                    mountAttributeAmount = (1.0D + mountAttributeAmount) * chargeAcceleration - 1.0D;
+                    mountAttributeAmount = Math.min(MAX_CAVALRY_MOUNT_ATTRIBUTE_BONUS,
+                            (1.0D + mountAttributeAmount) * chargeAcceleration - 1.0D);
                 }
                 applySpeed(state, navigationSpeed, selfAttributeAmount, mountAttributeAmount);
                 if (state.mode == Mode.FORMATION_CAVALRY || state.mode == Mode.HASTY_CAVALRY
@@ -705,7 +707,8 @@ public final class RTSMovementBoostManager {
         recruit.getNavigation().setSpeedModifier(speed);
         applyAttributeModifier(recruit, state.modifierId, selfAttributeAmount);
 
-        LivingEntity currentVehicle = recruit.getVehicle() instanceof LivingEntity living ? living : null;
+        LivingEntity currentVehicle = recruit.getVehicle() instanceof LivingEntity living
+                && living.getFirstPassenger() == recruit ? living : null;
         if (state.boostedVehicle != null && state.boostedVehicle != currentVehicle) {
             removeMountModifier(state.boostedVehicle, state.modifierId);
             state.boostedVehicle = null;

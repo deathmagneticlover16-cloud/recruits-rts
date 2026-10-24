@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.21 behavior."""
+"""Targeted source contracts for Commander 0.15.22 behavior."""
 
 from pathlib import Path
 
@@ -52,6 +52,12 @@ rumble = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryRum
 triumph = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/MountedTriumphManager.java")
 spa = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/SeriousAnimationsCompat.java")
 rumble_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CavalryRumbleClient.java")
+group_flag_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/GroupFlagClientState.java")
+group_flag_screen = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/ImmersivePaintingsFlagScreen.java")
+group_flag_data = source("src/main/java/ee/lastpagans/recruitsrtscamera/persistence/RTSGroupFlagSavedData.java")
+group_flag_command = source("src/main/java/ee/lastpagans/recruitsrtscamera/server/GroupFlagCommand.java")
+group_flag_set = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/SetGroupFlagPacket.java")
+group_flag_sync = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/GroupFlagStateSyncPacket.java")
 mounted_facing_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/MountedFacingClient.java")
 icy_horse_sounds = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/IcyHorseSoundsCompat.java")
 mount_push = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/RTSMountEntityPushMixin.java")
@@ -217,8 +223,12 @@ require(formation, "FOOT_NAV_SPEED = 1.17D", "foot slot movement and rotation mu
 require(movement, "REGULAR_INFANTRY_NAV_SPEED = 1.17D", "regular foot navigation must be 1.5x faster")
 require(movement, "HASTY_INFANTRY_SPEED = 1.62D", "running foot navigation must be 1.5x faster")
 require(movement, "SLOW_MARCH_CAVALRY_NAV_SPEED = 0.68D", "cavalry slow pace must remain unchanged")
-require(movement, "REGULAR_CAVALRY_MOUNT_MULTIPLIER = 1.10D",
-        "ordinary formation cavalry must receive the requested 2.10x mount speed")
+require(movement, "REGULAR_CAVALRY_MOUNT_MULTIPLIER = 0.25D",
+        "ordinary formation cavalry must cap its temporary attribute boost at 1.25x")
+require(movement, "MAX_CAVALRY_MOUNT_ATTRIBUTE_BONUS = 0.25D",
+        "run and charge composition must not turn a recruited horse into a permanent super-horse")
+require(movement, "living.getFirstPassenger() == recruit",
+        "formation cavalry speed modifiers must require the recruit to be the active mounted rider")
 require(movement, "GROUP_ACCELERATION_PER_TICK = 0.015D",
         "formation pace changes need a bounded shared acceleration")
 require(movement, "replacement.currentStep = previous.currentStep",
@@ -257,6 +267,10 @@ require(formation_service, "if (active == FormationKind.CAVALRY_WEDGE)",
         "frontage dragging must recognize an active cavalry wedge")
 require(formation_service, "destination, FormationKind.CAVALRY_WEDGE",
         "frontage dragging must position a wedge without replacing its geometry")
+require(controller, "current == FormationKind.CAVALRY_WEDGE ? FormationKind.CAVALRY_WEDGE : FormationKind.LINE",
+        "frontage positioning must retain the wedge highlight after Commander menus close")
+require(overlay, "RTSCommandFacade.commonSelectedFormationKind() == FormationKind.CAVALRY_WEDGE",
+        "the wedge button must derive its highlight from persistent selected-formation state")
 require(formation_service, "FormationSlotMath.bestRanksForWidth(",
         "server frontage must fit ranks using production mounted spacing")
 require(controller, "FormationSlotMath.create(",
@@ -400,7 +414,28 @@ require(controller, "ORDER_RADIUS = 288.0D", "temporary client order reach must 
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroupsPacket.java"),
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
-require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.21-server.1", "semantic version must be updated")
+require(group_flag_command, 'Commands.literal("setflag")', "group flags need the requested setflag command")
+require(group_flag_command, "player.getUUID().equals(group.getPlayerUUID())",
+        "setflag must only open for a group owned by the command sender")
+require(group_flag_screen, "ClientPaintingManager.getPaintings()",
+        "the group flag browser must use Immersive Paintings' synchronized library")
+require(group_flag_screen, "new SetGroupFlagPacket(",
+        "choosing a painting must send the group selection to server authority")
+require(group_flag_data, 'DATA_NAME = "recruits_rts_camera_group_flags"',
+        "group painting selections must persist across world reloads")
+require(group_flag_sync, "RTSGroupFlagSavedData.get(player.serverLevel()).snapshot()",
+        "clients must receive persisted group flags when RTS mode starts")
+require(group_flag_set, "sender.getUUID().equals(group.getPlayerUUID())",
+        "the server must reject painting changes for foreign groups")
+require(world_renderer, "GroupFlagClientState.texture(view.groupId())",
+        "the waving group flag must resolve its selected painting texture")
+require(group_flag_client, '!ModList.get().isLoaded("immersive_paintings")',
+        "Immersive Paintings must remain an optional integration")
+require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
+        "native cavalry combat must cap the horse speed modifier at 1.25x")
+require(cavalry_combat, "mount.getFirstPassenger() == recruit",
+        "mount bonuses must only exist while the recruit actually occupies the horse")
+require(network, 'PROTOCOL = "rts-camera-158"', "group flag packets require protocol 158")
+require(source("gradle.properties"), "mod_version=0.15.22-server.1", "semantic version must be updated")
 
-print("0.15.21 source contracts passed")
+print("0.15.22 source contracts passed")

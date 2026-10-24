@@ -6,7 +6,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class RTSCameraNetwork {
-    private static final String PROTOCOL = "rts-camera-157";
+    private static final String PROTOCOL = "rts-camera-158";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(RecruitsRTSCameraMod.MOD_ID, "main"),
@@ -51,8 +51,19 @@ public final class RTSCameraNetwork {
                 java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
         CHANNEL.registerMessage(id++, TacticsStateSyncPacket.class, TacticsStateSyncPacket::encode, TacticsStateSyncPacket::decode, TacticsStateSyncPacket::handle,
                 java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
-        CHANNEL.registerMessage(id, CavalryRumblePacket.class, CavalryRumblePacket::encode,
+        CHANNEL.registerMessage(id++, CavalryRumblePacket.class, CavalryRumblePacket::encode,
                 CavalryRumblePacket::decode, CavalryRumblePacket::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, OpenGroupFlagEditorPacket.class,
+                OpenGroupFlagEditorPacket::encode, OpenGroupFlagEditorPacket::decode,
+                OpenGroupFlagEditorPacket::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, SetGroupFlagPacket.class,
+                SetGroupFlagPacket::encode, SetGroupFlagPacket::decode, SetGroupFlagPacket::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id, GroupFlagStateSyncPacket.class,
+                GroupFlagStateSyncPacket::encode, GroupFlagStateSyncPacket::decode,
+                GroupFlagStateSyncPacket::handle,
                 java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
     }
 }
