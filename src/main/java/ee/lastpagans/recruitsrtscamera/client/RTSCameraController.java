@@ -90,10 +90,10 @@ public final class RTSCameraController {
     private static final long HASTY_DOUBLE_CLICK_MS = 340L;
     private static final int HASTY_TARGET_TOLERANCE = 2;
     private static final double ROTATE_MIN_RADIUS = 1.5D;
-    private static final int TACTICAL_ROUTE_COLOR = 0xD84ECFFF;
-    private static final int TACTICAL_SLOT_COLOR = 0xC889E8FF;
-    private static final int TACTICAL_ACCENT_COLOR = 0xE8C8F5FF;
-    private static final int TACTICAL_CUSTOM_COLOR = 0xE866D9C2;
+    private static final int TACTICAL_ROUTE_COLOR = 0xD8BA9225;
+    private static final int TACTICAL_SLOT_COLOR = 0xC8BA9225;
+    private static final int TACTICAL_ACCENT_COLOR = 0xE8BA9225;
+    private static final int TACTICAL_CUSTOM_COLOR = 0xE8BA9225;
 
     private static final Set<UUID> SELECTED_GROUPS = new LinkedHashSet<>();
     private static final Map<UUID, GlowState> MODIFIED_GLOW = new HashMap<>();
@@ -2437,7 +2437,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.18-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.19-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

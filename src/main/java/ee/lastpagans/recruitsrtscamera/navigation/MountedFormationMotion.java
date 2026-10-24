@@ -18,7 +18,10 @@ public final class MountedFormationMotion {
         // with a many-block-per-second horizontal impulse. Do not blend that exceptional
         // velocity into slot correction and fling the horse through the formation.
         double currentSpeed = Math.hypot(currentX, currentZ);
-        double retainedLimit = Math.max(0.32D, formationSpeed + 0.16D) * 1.10D;
+        // Keep this well above every intentional walk/run/charge speed. The previous
+        // low clamp treated healthy gallop momentum as an error, made riders lag, then
+        // caused cohesion recovery to fight them around ledges.
+        double retainedLimit = Math.max(1.25D, formationSpeed + 0.75D);
         if (currentSpeed > retainedLimit) {
             currentX *= retainedLimit / currentSpeed;
             currentZ *= retainedLimit / currentSpeed;

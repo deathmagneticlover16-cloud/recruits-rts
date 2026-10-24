@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.18 behavior."""
+"""Targeted source contracts for Commander 0.15.19 behavior."""
 
 from pathlib import Path
 
@@ -355,12 +355,21 @@ require(render_scene, "List<RouteRibbon> routes", "the unified scene must own ro
 forbid(render_scene, "FormationFootprint", "transparent formation polygon estimation must remain removed")
 forbid(controller, "scene.footprint", "formation previews must render slots without a transparent polygon")
 forbid(controller, "scene.route(List.of(start, end)", "frontage planning must not render the long centre bar")
-require(controller, "TACTICAL_ROUTE_COLOR = 0xD84ECFFF", "tactical previews must use the new cool-blue palette")
+require(controller, "TACTICAL_ROUTE_COLOR = 0xD8BA9225", "tactical previews must use #ba9225")
 require(world_renderer, "view.majorityMounted() ? 5.4D : 3.6D",
         "flag anchors must lower the pole into foot and mounted formations")
 require(world_renderer, "Vec3 bottom = flag.position", "group standards need a full pole from their base")
+require(world_renderer, "11.0D + 4.35D * scale", "the current flag must be raised eleven blocks")
+require(world_renderer, "verticalBox(buffer, matrix, bottom, top",
+        "the standard pole must be a solid world-space prism")
 require(mounted_motion, "currentSpeed > retainedLimit",
         "mounted damping must reject exceptional incoming fling impulses")
+require(mounted_motion, "Math.max(1.25D, formationSpeed + 0.75D)",
+        "impulse protection must not clamp legitimate gallop momentum")
+require(steering, "Math.min(distanceToSlot, Math.max(0.35D, requested.length() * 5.0D))",
+        "mounted ledge probes must never overshoot the final slot")
+require(steering, "position.y + (desired.y - position.y) * slotFraction",
+        "mounted ledge probes must retain the grounded slot elevation")
 forbid(controller, "drawWorldPathSegment(", "battlefield routes must not fall back to pixel-stamped HUD lines")
 forbid(controller, "drawYellowWorldPoint(", "formation slots must not fall back to fixed HUD squares")
 require(controller, "ORDER_RADIUS = 288.0D", "temporary client order reach must be tripled")
@@ -368,6 +377,6 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoveGroups
         "MAX_TARGET_DISTANCE = 336.0D", "server move-order reach must be tripled")
 
 require(network, 'PROTOCOL = "rts-camera-157"', "rumble state packet requires protocol 157")
-require(source("gradle.properties"), "mod_version=0.15.18-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.15.19-server.1", "semantic version must be updated")
 
-print("0.15.18 source contracts passed")
+print("0.15.19 source contracts passed")

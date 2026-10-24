@@ -66,7 +66,7 @@ public final class MountedFormationMotionSelfTest {
     private static void rejectsExceptionalIncomingImpulse() {
         MountedFormationMotion.Vector next = MountedFormationMotion.velocity(
                 3.0D, -2.0D, 0.4D, 0.0D, 0.20D, 0.0D, 1.0D);
-        check(Math.hypot(next.x(), next.z()) < 0.45D,
+        check(Math.hypot(next.x(), next.z()) < 0.65D,
                 "exceptional incoming impulse cannot fling one horse across the formation");
     }
 

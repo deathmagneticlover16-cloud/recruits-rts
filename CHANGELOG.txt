@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.15.19-server.1
+Crunchier cavalry rumble and corrected mounted ledge control
+
+- Replaced both cavalry rumble layers from the supplied crunchier recording. The stereo source is converted to mono for Minecraft positional audio; the distant layer is regenerated with the existing 250 Hz low-pass treatment.
+- Removed the regression-causing low mounted-velocity clamp. Only genuinely exceptional impulses above normal gallop speed are bounded now.
+- Mounted local steering no longer probes beyond a nearby final slot and now carries the grounded slot elevation into that probe, preventing the last supported ledge step from being misread as a pit and handed repeatedly between controllers.
+- Raised the current Betsy Ross cloth eleven blocks while keeping its current dimensions. Its pole now extends from the formation to the raised flag as a capped six-face world-space prism rather than crossed flat stake quads.
+- Restored command routes, slots, facing arrows and custom strokes to RGB `#ba9225` with purpose-specific opacity.
+- Network protocol remains rts-camera-157 because no packet or wire format changed.
+- Source version and packaging references are 0.15.19-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.18-server.1
 Final-step terrain safety and cleaner tactical previews
 

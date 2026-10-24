@@ -89,9 +89,24 @@ public final class LocalFormationSteering {
                 formationVelocity.x, formationVelocity.z, safeScale
         );
         Vec3 requested = new Vec3(motion.x(), 0.0D, motion.z());
-        double probeDistance = Math.max(1.25D, requested.length() * 5.0D);
-        Vec3 probe = requested.length() > 1.0E-5D
-                ? position.add(requested.normalize().scale(probeDistance)) : position;
+        double distanceToSlot = Math.hypot(error.x, error.z);
+        // Never probe beyond a nearby final slot. At a ledge the old mandatory 1.25-block
+        // look-ahead sampled the terrain past the order, rejected an otherwise supported
+        // last step, and bounced the horse between manual steering and navigation.
+        double probeDistance = Math.min(distanceToSlot, Math.max(0.35D, requested.length() * 5.0D));
+        Vec3 probe;
+        if (requested.length() > 1.0E-5D && probeDistance > 1.0E-5D) {
+            Vec3 horizontalProbe = position.add(requested.normalize().scale(probeDistance));
+            double slotFraction = distanceToSlot <= 1.0E-5D ? 0.0D
+                    : Math.min(1.0D, probeDistance / distanceToSlot);
+            // Carry the grounded slot elevation into the probe. Keeping current Y here
+            // made a commanded one-block descent look like a level path dipping into a
+            // pit, so the inner safety check undid the outer supported-descent decision.
+            probe = new Vec3(horizontalProbe.x,
+                    position.y + (desired.y - position.y) * slotFraction, horizontalProbe.z);
+        } else {
+            probe = position;
+        }
         if (!TacticalPathfinder.canSteerDirect(level, mover, probe)) {
             mover.getNavigation().moveTo(desired.x, desired.y, desired.z, 0.86D * safeScale);
             return false;
