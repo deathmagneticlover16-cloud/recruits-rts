@@ -1,6 +1,6 @@
 package ee.lastpagans.recruitsrtscamera.client;
 
-import ee.lastpagans.recruitsrtscamera.mixin.ImmersivePaintingScreenBridge;
+import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.network.SetGroupFlagPacket;
 import immersive_paintings.Entities;
@@ -11,6 +11,7 @@ import immersive_paintings.resources.Painting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 
+import java.lang.reflect.Field;
 import java.util.UUID;
 
 /**
@@ -19,6 +20,7 @@ import java.util.UUID;
  * Immersive Paintings; only the final motive selection is redirected to our server packet.
  */
 public final class ImmersivePaintingsFlagScreen extends ImmersivePaintingScreen {
+    private static final Field ENTITY_FIELD = resolveEntityField();
     private final UUID groupId;
     private boolean ready;
 
@@ -30,10 +32,31 @@ public final class ImmersivePaintingsFlagScreen extends ImmersivePaintingScreen 
         if (minecraft.level != null) {
             ImmersivePaintingEntity proxy = new ImmersivePaintingEntity(
                     Entities.PAINTING.get(), minecraft.level);
-            // Mixin adds the bridge to the third-party superclass at runtime. Route through
-            // Object so javac accepts the cast for this final subclass before transformation.
-            ((ImmersivePaintingScreenBridge) (Object) this).recruitsRts$setEntity(proxy);
-            ready = true;
+            ready = installProxy(proxy);
+        }
+    }
+
+    private static Field resolveEntityField() {
+        try {
+            Field field = ImmersivePaintingScreen.class.getDeclaredField("entity");
+            field.setAccessible(true);
+            return field;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            RecruitsRTSCameraMod.LOGGER.error(
+                    "Immersive Paintings 0.6.13 editor entity field is unavailable", exception);
+            return null;
+        }
+    }
+
+    private boolean installProxy(ImmersivePaintingEntity proxy) {
+        if (ENTITY_FIELD == null || proxy == null) return false;
+        try {
+            ENTITY_FIELD.set(this, proxy);
+            return entity == proxy;
+        } catch (IllegalAccessException | RuntimeException exception) {
+            RecruitsRTSCameraMod.LOGGER.error(
+                    "Could not attach the private group-flag proxy to Immersive Paintings", exception);
+            return false;
         }
     }
 

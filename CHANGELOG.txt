@@ -1,3 +1,11 @@
+Recruits: RTS Camera 0.16.0-server.3
+Immersive Paintings startup correction
+
+- Removed the optional cross-mod screen mixin responsible for the render-thread Mixin transformation crash during Immersive Paintings startup.
+- The real Immersive Paintings 0.6.13 browser now receives its temporary client painting through a guarded reflective assignment to the verified `entity` field. If a later incompatible version changes that field, the editor remains unavailable and logs the cause instead of crashing startup.
+- Network protocol remains rts-camera-158 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.16.0-server.3. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.16.0-server.2
 Immersive Paintings compile correction
 
