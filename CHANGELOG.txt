@@ -1,3 +1,10 @@
+Recruits: RTS Camera 0.16.0-server.2
+Immersive Paintings compile correction
+
+- Routed the optional Immersive Paintings screen bridge cast through `Object`, allowing javac to compile the final RTS screen subclass while the runtime mixin still supplies the bridge interface and proxy-entity setter.
+- Network protocol remains rts-camera-158 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.16.0-server.2. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.16.0-server.1
 Stage-one runtime optimization and hovered unit statistics
 

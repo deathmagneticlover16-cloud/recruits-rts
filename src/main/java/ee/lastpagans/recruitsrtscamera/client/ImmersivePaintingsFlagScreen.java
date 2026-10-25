@@ -30,7 +30,9 @@ public final class ImmersivePaintingsFlagScreen extends ImmersivePaintingScreen 
         if (minecraft.level != null) {
             ImmersivePaintingEntity proxy = new ImmersivePaintingEntity(
                     Entities.PAINTING.get(), minecraft.level);
-            ((ImmersivePaintingScreenBridge) this).recruitsRts$setEntity(proxy);
+            // Mixin adds the bridge to the third-party superclass at runtime. Route through
+            // Object so javac accepts the cast for this final subclass before transformation.
+            ((ImmersivePaintingScreenBridge) (Object) this).recruitsRts$setEntity(proxy);
             ready = true;
         }
     }

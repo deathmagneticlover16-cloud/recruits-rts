@@ -470,6 +470,8 @@ require(group_flag_screen, "new SetGroupFlagPacket(",
         "choosing a painting must send the group selection to server authority")
 require(group_flag_screen, "extends ImmersivePaintingScreen",
         "group flags must use Immersive Paintings' real editor rather than a substitute grid")
+require(group_flag_screen, "(ImmersivePaintingScreenBridge) (Object) this",
+        "the runtime mixin bridge cast must remain legal for the final screen subclass at compile time")
 forbid(group_flag_screen, "COLUMNS", "the removed homemade painting grid must not return")
 require(group_flag_data, 'DATA_NAME = "recruits_rts_camera_group_flags"',
         "group painting selections must persist across world reloads")
@@ -486,6 +488,6 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
 require(network, 'PROTOCOL = "rts-camera-158"', "group flag packets require protocol 158")
-require(source("gradle.properties"), "mod_version=0.16.0-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.16.0-server.2", "semantic version must be updated")
 
-print("0.16.0 source contracts passed")
+print("0.16.0-server.2 source contracts passed")
