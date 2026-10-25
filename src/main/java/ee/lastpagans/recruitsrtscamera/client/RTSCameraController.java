@@ -96,6 +96,7 @@ public final class RTSCameraController {
     private static final int TACTICAL_CUSTOM_COLOR = 0xE8FFB84D;
 
     private static final Set<UUID> SELECTED_GROUPS = new LinkedHashSet<>();
+    private static UUID mostRecentSelectedGroup;
     private static final Map<UUID, GlowState> MODIFIED_GLOW = new HashMap<>();
     private static final Map<UUID, FormationKind> LOCAL_FORMATIONS = new HashMap<>();
     private static final Set<UUID> LOCAL_CUSTOM_GROUPS = new LinkedHashSet<>();
@@ -226,6 +227,11 @@ public final class RTSCameraController {
         return hoveredFriendlyGroupId;
     }
 
+    static UUID commanderMostRecentSelectedGroup() {
+        repairMostRecentSelection(null);
+        return mostRecentSelectedGroup;
+    }
+
     static List<AbstractRecruitEntity> commanderLoadedOwnedRecruits() {
         return loadedOwnedRecruits();
     }
@@ -234,6 +240,7 @@ public final class RTSCameraController {
         if (routedGroups == null || routedGroups.isEmpty() || SELECTED_GROUPS.isEmpty()) return;
         boolean changed = SELECTED_GROUPS.removeIf(routedGroups::contains);
         if (!changed) return;
+        repairMostRecentSelection(null);
         applySelectionToRecruits();
         updateGlow();
         clearCurrentOrderPreviews(routedGroups);
@@ -276,9 +283,11 @@ public final class RTSCameraController {
         }
         if (additive && SELECTED_GROUPS.contains(groupId)) {
             SELECTED_GROUPS.remove(groupId);
+            repairMostRecentSelection(null);
             setStatus("Group removed from selection.");
         } else {
             SELECTED_GROUPS.add(groupId);
+            repairMostRecentSelection(groupId);
             RecruitsGroup group = findOwnedClientGroup(groupId);
             setStatus(group == null ? "Group selected." : "Selected " + group.getName() + ".");
         }
@@ -289,9 +298,14 @@ public final class RTSCameraController {
     static void commanderSelectGroups(Collection<UUID> groupIds) {
         if (!active || groupIds == null) return;
         SELECTED_GROUPS.clear();
+        UUID newest = null;
         for (UUID id : groupIds) {
-            if (id != null && findOwnedClientGroup(id) != null) SELECTED_GROUPS.add(id);
+            if (id != null && findOwnedClientGroup(id) != null) {
+                SELECTED_GROUPS.add(id);
+                newest = id;
+            }
         }
+        repairMostRecentSelection(newest);
         applySelectionToRecruits();
         updateGlow();
         RTSCommandFacade.invalidateCards();
@@ -299,6 +313,10 @@ public final class RTSCameraController {
 
     static void commanderStatus(String text) {
         setStatus(text);
+    }
+
+    static void commanderPreferSelectedGroup(UUID groupId) {
+        repairMostRecentSelection(groupId);
     }
 
     static void commanderCycleFormation() {
@@ -1466,6 +1484,7 @@ public final class RTSCameraController {
             return;
         }
         SELECTED_GROUPS.clear();
+        mostRecentSelectedGroup = null;
         applySelectionToRecruits();
         updateGlow();
         setStatus("Selection cleared.");
@@ -1483,6 +1502,7 @@ public final class RTSCameraController {
         if (groupId == null) {
             if (!additive) {
                 SELECTED_GROUPS.clear();
+                mostRecentSelectedGroup = null;
                 applySelectionToRecruits();
                 updateGlow();
             }
@@ -1495,9 +1515,11 @@ public final class RTSCameraController {
         }
         if (additive && SELECTED_GROUPS.contains(groupId)) {
             SELECTED_GROUPS.remove(groupId);
+            repairMostRecentSelection(null);
             setStatus("Group removed from selection.");
         } else {
             SELECTED_GROUPS.add(groupId);
+            repairMostRecentSelection(groupId);
             setStatus("Selected " + SELECTED_GROUPS.size() + " group(s). ");
         }
         applySelectionToRecruits();
@@ -1511,6 +1533,13 @@ public final class RTSCameraController {
             SELECTED_GROUPS.clear();
         }
         SELECTED_GROUPS.addAll(inside);
+        if (!inside.isEmpty()) {
+            UUID newest = null;
+            for (UUID id : inside) newest = id;
+            repairMostRecentSelection(newest);
+        } else {
+            repairMostRecentSelection(null);
+        }
         applySelectionToRecruits();
         updateGlow();
         if (inside.isEmpty()) {
@@ -2188,6 +2217,7 @@ public final class RTSCameraController {
     private static void syncSelectionFromRecruits() {
         SELECTED_GROUPS.clear();
         if (ClientManager.groups == null || MC.player == null) {
+            mostRecentSelectedGroup = null;
             return;
         }
         for (RecruitsGroup group : ClientManager.groups) {
@@ -2198,6 +2228,7 @@ public final class RTSCameraController {
                 SELECTED_GROUPS.add(group.getUUID());
             }
         }
+        repairMostRecentSelection(null);
     }
 
     private static void applySelectionToRecruits() {
@@ -2216,6 +2247,17 @@ public final class RTSCameraController {
             group.setDisabled(!SELECTED_GROUPS.contains(group.getUUID()));
         }
         SELECTED_GROUPS.retainAll(existing);
+        repairMostRecentSelection(null);
+    }
+
+    private static void repairMostRecentSelection(UUID preferred) {
+        if (preferred != null && SELECTED_GROUPS.contains(preferred)) {
+            mostRecentSelectedGroup = preferred;
+            return;
+        }
+        if (mostRecentSelectedGroup != null && SELECTED_GROUPS.contains(mostRecentSelectedGroup)) return;
+        mostRecentSelectedGroup = null;
+        for (UUID groupId : SELECTED_GROUPS) mostRecentSelectedGroup = groupId;
     }
 
     private static void updateGlow() {
@@ -2443,7 +2485,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.15.23-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.16.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

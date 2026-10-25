@@ -365,6 +365,7 @@ public final class NativeFormationController {
             state.agents.remove(id);
             state.locked.remove(id);
             state.order.remove(id);
+            state.orderedMemberIds.remove(id);
         }
     }
 
@@ -858,23 +859,21 @@ public final class NativeFormationController {
     }
 
     private static void rememberTrail(State state, Vec3 point) {
-        if (!state.trail.isEmpty() && state.trail.get(state.trail.size() - 1).distanceToSqr(point) < 0.025D) return;
+        if (!state.trail.isEmpty() && state.trail.last().distanceToSqr(point) < 0.025D) return;
         state.trail.add(point);
-        int maximum = Math.max(32, state.offsets.size() * 6);
-        while (state.trail.size() > maximum) state.trail.remove(0);
     }
 
     private static List<AbstractRecruitEntity> resolveMembers(MinecraftServer server, State state) {
-        List<AbstractRecruitEntity> result = new ArrayList<>();
+        List<AbstractRecruitEntity> result = state.resolvedMembers;
+        result.clear();
         ServerLevel level = server.getLevel(state.levelKey);
         if (level == null) return result;
-        for (UUID id : state.offsets.keySet()) {
+        for (UUID id : state.orderedMemberIds) {
             Entity entity = level.getEntity(id);
             if (entity instanceof AbstractRecruitEntity recruit && recruit.isAlive() && !recruit.isRemoved()) {
                 result.add(recruit);
             }
         }
-        result.sort(Comparator.comparingInt(unit -> state.order.getOrDefault(unit.getUUID(), Integer.MAX_VALUE)));
         return result;
     }
 
@@ -1111,7 +1110,9 @@ public final class NativeFormationController {
         final Map<UUID, Agent> agents = new HashMap<>();
         final Map<UUID, MountControl> mountControls = new HashMap<>();
         final Set<UUID> locked = new HashSet<>();
-        final List<Vec3> trail = new ArrayList<>();
+        final List<UUID> orderedMemberIds = new ArrayList<>();
+        final List<AbstractRecruitEntity> resolvedMembers = new ArrayList<>();
+        final Vec3RingBuffer trail;
         final boolean hold;
         final float heading;
         Vec3 center;
@@ -1149,7 +1150,49 @@ public final class NativeFormationController {
             this.facings = new HashMap<>(facings);
             this.hold = hold;
             rebuildTransitOrder(this);
+            this.orderedMemberIds.addAll(this.offsets.keySet());
+            this.orderedMemberIds.sort(Comparator.comparingInt(id -> this.order.getOrDefault(id, Integer.MAX_VALUE)));
+            this.trail = new Vec3RingBuffer(Math.max(32, this.offsets.size() * 6));
             rememberTrail(this, center);
+        }
+    }
+
+    /** Fixed-capacity trail with constant-time eviction; preserves the former indexed semantics. */
+    private static final class Vec3RingBuffer {
+        private final Vec3[] values;
+        private int head;
+        private int size;
+
+        Vec3RingBuffer(int capacity) {
+            values = new Vec3[Math.max(1, capacity)];
+        }
+
+        void add(Vec3 value) {
+            if (size < values.length) {
+                values[(head + size++) % values.length] = value;
+            } else {
+                values[head] = value;
+                head = (head + 1) % values.length;
+            }
+        }
+
+        Vec3 get(int index) {
+            if (index < 0 || index >= size) throw new IndexOutOfBoundsException(index);
+            return values[(head + index) % values.length];
+        }
+
+        Vec3 last() {
+            return get(size - 1);
+        }
+
+        int size() { return size; }
+
+        boolean isEmpty() { return size == 0; }
+
+        void clear() {
+            java.util.Arrays.fill(values, null);
+            head = 0;
+            size = 0;
         }
     }
 

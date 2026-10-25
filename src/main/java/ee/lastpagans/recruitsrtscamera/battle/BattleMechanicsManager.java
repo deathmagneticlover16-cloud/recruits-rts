@@ -31,8 +31,10 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.PacketDistributor;
@@ -220,7 +222,11 @@ public final class BattleMechanicsManager {
         recruit.getPersistentData().putDouble(FATIGUE_KEY, fatigue);
         int stage = fatigueStage(fatigue);
         int oldStage = recruit.getPersistentData().getInt(FATIGUE_STAGE_KEY);
-        if (stage != oldStage) recruit.getPersistentData().putInt(FATIGUE_STAGE_KEY, stage);
+        if (stage != oldStage) {
+            recruit.getPersistentData().putInt(FATIGUE_STAGE_KEY, stage);
+        }
+        // ensure() inside applyModifier is idempotent, so a freshly loaded entity receives
+        // its persisted stage while unchanged live entities incur no attribute churn.
         applyFatigueModifiers(recruit, stage);
         if (isMoraleBearer(recruit)) {
             CommanderAnimationHints.offer(recruit, CommanderAnimationHints.Hint.STANDARD_BEARER, SAMPLE_INTERVAL + 4);
@@ -261,7 +267,13 @@ public final class BattleMechanicsManager {
 
     private static void applyModifier(AttributeInstance attribute, UUID id, String name, double amount) {
         if (attribute == null) return;
-        attribute.removeModifier(id);
+        AttributeModifier existing = attribute.getModifier(id);
+        if (existing != null
+                && Math.abs(existing.getAmount() - amount) <= 1.0E-6D
+                && existing.getOperation() == AttributeModifier.Operation.MULTIPLY_TOTAL) {
+            return;
+        }
+        if (existing != null) attribute.removeModifier(id);
         if (Math.abs(amount) > 1.0E-6D) {
             attribute.addTransientModifier(new AttributeModifier(
                     id, name, amount, AttributeModifier.Operation.MULTIPLY_TOTAL
@@ -620,6 +632,21 @@ public final class BattleMechanicsManager {
     public static void clearPlayer(UUID playerId) {
         if (playerId == null) return;
         ADVISOR_COOLDOWNS.keySet().removeIf(key -> key.startsWith(playerId.toString() + ":"));
+    }
+
+    @SubscribeEvent
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (!event.getLevel().isClientSide && event.getEntity() instanceof AbstractRecruitEntity recruit) {
+            LAST_POSITIONS.remove(recruit.getUUID());
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        LAST_POSITIONS.clear();
+        COMBAT.clear();
+        ADVISOR_COOLDOWNS.clear();
+        tickCounter = 0;
     }
 
     private static final class GroupRuntime {

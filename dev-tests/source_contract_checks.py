@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.15.23 behavior."""
+"""Targeted source contracts for Commander 0.16.0 behavior."""
 
 from pathlib import Path
 
@@ -70,6 +70,8 @@ battle = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/BattleMech
 routing = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/RoutedGroupManager.java")
 world_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalWorldRenderer.java")
 render_scene = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalRenderScene.java")
+runtime_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitRuntimeRegistry.java")
+doctrine = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationDoctrineManager.java")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -214,6 +216,32 @@ require(facade, "Select the inclusive interval in the full ordered card list, ac
 require(ui_ids, 'MAIN_COMMAND_BAR = "main.command_bar"', "command bar needs a stable semantic ID")
 require(ui_ids, 'STAT_FATIGUE = "stat.fatigue"', "fatigue bar needs a stable semantic ID")
 require(ui_registry, "public static List<Element> snapshot()", "UI editor needs a public element snapshot")
+require(overlay, "renderHoveredUnitStats(graphics, groups)", "hovered units need the ten-stat inspector")
+require(overlay, "for (TroopStatistic statistic : TroopStatistic.values())",
+        "hover inspector must render every troop-wide statistic")
+require(overlay, "CommanderUiRegistry.record(statistic.id(), groupId",
+        "hover stat bars must expose their semantic stat IDs")
+require(overlay, "RTSCameraController.commanderMostRecentSelectedGroup()",
+        "the stat inspector must remain on the most recently selected group after hover ends")
+require(controller, "repairMostRecentSelection(groupId)",
+        "selection paths must remember the most recently selected group")
+require(facade, "commanderPreferSelectedGroup(clicked)",
+        "Shift range selection must give the clicked group inspector precedence")
+require(ui_ids, 'HOVER_STATS_PANEL = "hover.stats_panel"', "hover inspector needs a stable panel ID")
+require(runtime_registry, "record LoadedSnapshot", "runtime managers need a shared per-tick recruit snapshot")
+require(runtime_registry, "cached.gameTime == gameTime && cached.rosterRevision == rosterRevision",
+        "same-tick recruit scans must reuse their immutable snapshot")
+require(formation, "final Vec3RingBuffer trail", "formation trails need constant-time eviction")
+require(formation, "for (UUID id : state.orderedMemberIds)", "formation member order must be cached")
+resolve_members = formation[formation.index("private static List<AbstractRecruitEntity> resolveMembers"):
+                            formation.index("private static AbstractRecruitEntity resolve(")]
+forbid(resolve_members, ".sort(", "formation members must not be sorted every tick")
+require(battle, "Math.abs(existing.getAmount() - amount) <= 1.0E-6D",
+        "fatigue modifiers must remain untouched when their effective value is unchanged")
+require(doctrine, "existing.getOperation() == operation",
+        "doctrine modifiers must remain untouched when their effective value is unchanged")
+require(battle, "LAST_POSITIONS.clear();", "battle runtime positions must clear at server stop")
+require(rumble, "LAST_MOUNT_SAMPLE.keySet().removeIf", "stale mount samples must be pruned while running")
 require(selection_groups, "key == GLFW.GLFW_KEY_BACKSPACE", "Backspace must unbind a direct group hotkey")
 require(selection_groups, "BUNDLES.containsKey(bundleSlot)",
         "number hotkeys must only be blocked by an occupied bundle slot")
@@ -458,6 +486,6 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
 require(network, 'PROTOCOL = "rts-camera-158"', "group flag packets require protocol 158")
-require(source("gradle.properties"), "mod_version=0.15.23-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.16.0-server.1", "semantic version must be updated")
 
-print("0.15.23 source contracts passed")
+print("0.16.0 source contracts passed")

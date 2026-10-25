@@ -46,7 +46,11 @@ public final class CavalryRumbleManager {
 
         Map<UUID, AudibleGroup> current = new HashMap<>();
         Set<UUID> cavalryGroups = new HashSet<>();
-        for (ServerLevel level : event.getServer().getAllLevels()) sampleLevel(level, current, cavalryGroups);
+        Set<UUID> sampledMounts = new HashSet<>();
+        for (ServerLevel level : event.getServer().getAllLevels()) {
+            sampleLevel(level, current, cavalryGroups, sampledMounts);
+        }
+        LAST_MOUNT_SAMPLE.keySet().removeIf(id -> !sampledMounts.contains(id));
         IcyHorseSoundsCompat.retainGroups(current.keySet());
         MountedTriumphManager.retainGroups(cavalryGroups);
 
@@ -62,7 +66,8 @@ public final class CavalryRumbleManager {
     private static void sampleLevel(
             ServerLevel level,
             Map<UUID, AudibleGroup> current,
-            Set<UUID> cavalryGroups
+            Set<UUID> cavalryGroups,
+            Set<UUID> sampledMounts
     ) {
         Map<UUID, GroupSample> groups = new HashMap<>();
         long now = level.getGameTime();
@@ -73,6 +78,7 @@ public final class CavalryRumbleManager {
             sample.totalMembers++;
             Entity mount = recruit.getVehicle();
             if (mount == null || !RTSMovementBoostManager.isCavalry(recruit)) continue;
+            sampledMounts.add(mount.getUUID());
             Vec3 position = mount.position();
             MountSample previous = LAST_MOUNT_SAMPLE.put(mount.getUUID(), new MountSample(position, now));
             long elapsed = previous == null ? 0L : Math.max(1L, now - previous.tick());

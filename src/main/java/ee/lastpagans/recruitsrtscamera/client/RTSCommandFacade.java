@@ -304,6 +304,7 @@ public final class RTSCommandFacade {
                 : new LinkedHashSet<>();
         for (int i = from; i <= to; i++) selected.add(cards.get(i).groupId());
         RTSCameraController.commanderSelectGroups(selected);
+        RTSCameraController.commanderPreferSelectedGroup(clicked);
         RTSCameraController.commanderStatus("Selected card range: " + (to - from + 1) + " groups.");
         invalidateCards();
         return true;

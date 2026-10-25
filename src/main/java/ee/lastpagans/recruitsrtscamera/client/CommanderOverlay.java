@@ -5,6 +5,7 @@ import ee.lastpagans.recruitsrtscamera.formation.ArmyPreset;
 import ee.lastpagans.recruitsrtscamera.config.RTSClientConfig;
 import ee.lastpagans.recruitsrtscamera.advisor.AdvisorClient;
 import ee.lastpagans.recruitsrtscamera.math.ScreenProjection;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatistic;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -50,6 +51,10 @@ public final class CommanderOverlay {
     private static final int BANNER_SOURCE_WIDTH = 64;
     private static final int BANNER_SOURCE_HEIGHT = 128;
     private static final int UNIT_ICON_SHEET_HEIGHT = 256;
+    private static final int HOVER_STATS_WIDTH = 190;
+    private static final int HOVER_STAT_BAR_WIDTH = 84;
+    private static final int HOVER_STAT_BAR_HEIGHT = 10;
+    private static final int HOVER_STAT_ROW_GAP = 3;
 
     private static final int GOLD = 0xFFE1C46F;
     private static final int TEXT = 0xFFE8E2D4;
@@ -115,6 +120,7 @@ public final class CommanderOverlay {
             if (selectionMenuOpen) renderSelectionMenu(graphics, layout);
             renderSettingsButton(graphics);
             if (settingsMenuOpen) renderSettingsMenu(graphics);
+            renderHoveredUnitStats(graphics, groups);
         } finally {
             graphics.pose().popPose();
         }
@@ -446,6 +452,150 @@ public final class CommanderOverlay {
             int px = layout.nextButton().x2() - MC.font.width(pageText);
             graphics.drawString(MC.font, pageText, px, layout.panelY() + 7, MUTED, false);
         }
+    }
+
+    /** Middle-right group inspector. Eight values remain presentation placeholders for now. */
+    private static void renderHoveredUnitStats(
+            GuiGraphics graphics,
+            List<RTSCommandFacade.UnitCardView> groups
+    ) {
+        UUID hoveredGroup = hoveredFriendlyGroupId();
+        if (hoveredGroup == null) hoveredGroup = RTSCameraController.commanderHoveredFriendlyGroup();
+        if (hoveredGroup == null) hoveredGroup = RTSCameraController.commanderMostRecentSelectedGroup();
+        if (hoveredGroup == null) return;
+
+        RTSCommandFacade.UnitCardView hovered = null;
+        for (RTSCommandFacade.UnitCardView view : groups) {
+            if (hoveredGroup.equals(view.groupId())) {
+                hovered = view;
+                break;
+            }
+        }
+        if (hovered == null) return;
+
+        int rowsHeight = TroopStatistic.values().length * (HOVER_STAT_BAR_HEIGHT + HOVER_STAT_ROW_GAP)
+                - HOVER_STAT_ROW_GAP;
+        int panelHeight = 27 + rowsHeight + 8;
+        int x = Math.max(6, virtualGuiWidth() - HOVER_STATS_WIDTH - 8);
+        int preferredY = (virtualGuiHeight() - panelHeight) / 2;
+        int bottomLimit = virtualGuiHeight() - PANEL_HEIGHT - 8;
+        int y = Math.max(6, Math.min(preferredY, bottomLimit - panelHeight));
+        Bounds panel = new Bounds(x, y, x + HOVER_STATS_WIDTH, y + panelHeight);
+
+        CommanderUiRegistry.record(CommanderUiElementIds.HOVER_STATS_PANEL, hovered.groupId(),
+                panel.x1(), panel.y1(), panel.width(), panel.height(), Float.NaN);
+        graphics.fill(panel.x1(), panel.y1(), panel.x2(), panel.y2(), 0xE8161614);
+        drawBorder(graphics, panel, 0xFF6F6544);
+        graphics.fill(panel.x1() + 1, panel.y1() + 1, panel.x1() + 3, panel.y2() - 1, GOLD);
+
+        String groupName = hovered.name() == null || hovered.name().isBlank()
+                ? hovered.unitType().displayName() : hovered.name();
+        String title = groupName + " [" + hovered.troopCount() + "]";
+        CommanderUiRegistry.record(CommanderUiElementIds.HOVER_GROUP_TITLE, hovered.groupId(),
+                panel.x1() + 8, panel.y1() + 7, panel.width() - 16, 10, Float.NaN);
+        drawCenteredTrimmed(graphics, title, panel.x1() + 8, panel.y1() + 7,
+                panel.width() - 16, 0xFFFFE8AC);
+
+        int rowY = panel.y1() + 22;
+        for (TroopStatistic statistic : TroopStatistic.values()) {
+            float value = hoveredStatValue(hovered, statistic);
+            renderHoveredStatRow(graphics, hovered.groupId(), statistic, value,
+                    panel.x1() + 8, rowY);
+            rowY += HOVER_STAT_BAR_HEIGHT + HOVER_STAT_ROW_GAP;
+        }
+    }
+
+    private static void renderHoveredStatRow(
+            GuiGraphics graphics,
+            UUID groupId,
+            TroopStatistic statistic,
+            float value,
+            int x,
+            int y
+    ) {
+        float clamped = Math.max(0.0F, Math.min(100.0F, value));
+        int fill = Math.round((HOVER_STAT_BAR_WIDTH - 2) * clamped / 100.0F);
+        graphics.fill(x, y, x + HOVER_STAT_BAR_WIDTH, y + HOVER_STAT_BAR_HEIGHT, 0xFF292824);
+        graphics.fill(x + 1, y + 1, x + 1 + fill, y + HOVER_STAT_BAR_HEIGHT - 1,
+                hoveredStatColor(statistic, clamped));
+        drawBorder(graphics, new Bounds(x, y, x + HOVER_STAT_BAR_WIDTH, y + HOVER_STAT_BAR_HEIGHT),
+                0xFF786D49);
+
+        String number = Integer.toString(Math.round(clamped));
+        int numberX = x + (HOVER_STAT_BAR_WIDTH - MC.font.width(number)) / 2;
+        graphics.drawString(MC.font, number, numberX, y + 1, 0xFFFFFFFF, true);
+        graphics.drawString(MC.font, hoveredStatLabel(statistic),
+                x + HOVER_STAT_BAR_WIDTH + 7, y + 1, TEXT, false);
+        CommanderUiRegistry.record(statistic.id(), groupId, x, y,
+                HOVER_STATS_WIDTH - 16, HOVER_STAT_BAR_HEIGHT, clamped);
+    }
+
+    private static float hoveredStatValue(RTSCommandFacade.UnitCardView view, TroopStatistic statistic) {
+        float level = view.averageLevel() < 0.0F ? 2.0F : view.averageLevel();
+        // These eight display-only defaults deliberately live in one method so real synchronized
+        // troop statistics can replace them without touching layout or semantic UI bindings.
+        return switch (statistic) {
+            case DAMAGE -> 42.0F + level * 4.0F;
+            case MELEE_SKILL -> switch (view.unitType()) {
+                case CAVALRY, SHIELDMAN, SWORD, SPEAR -> 58.0F + level * 2.0F;
+                default -> 38.0F + level * 2.0F;
+            };
+            case MELEE_DEFENCE -> switch (view.unitType()) {
+                case SHIELDMAN -> 72.0F;
+                case SPEAR, SWORD, CAVALRY -> 56.0F;
+                default -> 34.0F;
+            };
+            case CHARGE_BONUS -> switch (view.unitType()) {
+                case CAVALRY -> 78.0F;
+                case NOMAD -> 65.0F;
+                case SPEAR -> 45.0F;
+                default -> 30.0F;
+            };
+            case SPEED -> switch (view.unitType()) {
+                case NOMAD -> 86.0F;
+                case CAVALRY -> 80.0F;
+                case ARTILLERY -> 25.0F;
+                case SHIP -> 50.0F;
+                default -> 48.0F;
+            };
+            case MORALE -> view.averageMorale() < 0.0F ? 50.0F : view.averageMorale();
+            case FATIGUE -> view.averageFatigue() < 0.0F ? 0.0F : view.averageFatigue();
+            case ACCURACY -> switch (view.unitType()) {
+                case BOW, CROSSBOW, NOMAD -> 68.0F + level * 2.0F;
+                default -> 25.0F;
+            };
+            case AMMUNITION -> view.rangedCapable() ? 75.0F : 0.0F;
+            case RATE_OF_FIRE -> switch (view.unitType()) {
+                case BOW, NOMAD -> 68.0F;
+                case CROSSBOW -> 44.0F;
+                default -> 20.0F;
+            };
+        };
+    }
+
+    private static String hoveredStatLabel(TroopStatistic statistic) {
+        return switch (statistic) {
+            case DAMAGE -> "Damage";
+            case MELEE_SKILL -> "Melee Skill";
+            case MELEE_DEFENCE -> "Melee Defence";
+            case CHARGE_BONUS -> "Charge Bonus";
+            case SPEED -> "Speed";
+            case MORALE -> "Morale";
+            case FATIGUE -> "Fatigue";
+            case ACCURACY -> "Accuracy";
+            case AMMUNITION -> "Ammunition";
+            case RATE_OF_FIRE -> "Rate of Fire";
+        };
+    }
+
+    private static int hoveredStatColor(TroopStatistic statistic, float value) {
+        if (statistic == TroopStatistic.FATIGUE) {
+            return value >= 75.0F ? 0xFFD35B42 : value >= 45.0F ? 0xFFD7A84C : 0xFF6EA86A;
+        }
+        if (statistic == TroopStatistic.MORALE) {
+            return value < 25.0F ? 0xFFD35B42 : value < 50.0F ? 0xFFD7A84C : 0xFF6EA86A;
+        }
+        return 0xFFB8943D;
     }
 
     private static void renderSelectionBundleFrames(GuiGraphics graphics, List<CardHitbox> hitboxes) {

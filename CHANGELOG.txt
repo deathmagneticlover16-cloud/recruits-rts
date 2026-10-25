@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.16.0-server.1
+Stage-one runtime optimization and hovered unit statistics
+
+- Added a middle-right inspector while hovering a friendly unit, group marker or Commander card. It stays visible for a selected group after hover ends; when several groups are selected, the most recently selected group takes precedence. It shows the group name and troop count above ten stacked numeric progress bars for Damage, Melee Skill, Melee Defence, Charge Bonus, Speed, Morale, Fatigue, Accuracy, Ammunition and Rate of Fire.
+- Morale and Fatigue use live group values. The other eight values are centralized display placeholders, ready to be replaced by synchronized troop-stat inputs without changing the panel layout or semantic bindings.
+- Registered the inspector as `hover.stats_panel`, its title as `hover.group_title`, and every stat row under the existing `stat.*` IDs for the planned UI editor.
+- Runtime managers now share one immutable loaded-recruit snapshot per level/tick instead of independently rebuilding the army list.
+- Formation controllers cache stable member order and reuse their resolved-member buffer. Formation trails now use fixed-capacity ring buffers with constant-time eviction instead of shifting an ArrayList.
+- Fatigue and doctrine attributes remain untouched when their effective modifier has not changed. Battle position/combat/advisor maps clear with entity/server lifecycle, and stale cavalry mount samples are pruned during runtime.
+- Network protocol remains rts-camera-158 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.16.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.15.23-server.1
 Stable routing UI, causal morale and the real painting editor
 

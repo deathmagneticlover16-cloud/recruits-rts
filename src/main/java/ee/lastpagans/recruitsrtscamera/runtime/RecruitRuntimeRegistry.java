@@ -25,16 +25,30 @@ import java.util.UUID;
 public final class RecruitRuntimeRegistry {
     private static final Map<UUID, RecruitRuntimeBrain> BRAINS = new HashMap<>();
     private static final Map<UUID, Set<UUID>> BY_GROUP = new HashMap<>();
+    /** One immutable army snapshot per level/tick, shared by every runtime manager. */
+    private static final Map<ServerLevel, LoadedSnapshot> LOADED_SNAPSHOTS = new HashMap<>();
+    private static long rosterRevision;
 
     private RecruitRuntimeRegistry() {
     }
 
     public static RecruitRuntimeBrain brain(AbstractRecruitEntity recruit) {
-        RecruitRuntimeBrain brain = BRAINS.computeIfAbsent(recruit.getUUID(), ignored -> new RecruitRuntimeBrain(recruit));
+        RecruitRuntimeBrain brain = BRAINS.get(recruit.getUUID());
+        if (brain == null) {
+            brain = new RecruitRuntimeBrain(recruit);
+            BRAINS.put(recruit.getUUID(), brain);
+            rosterChanged();
+        }
         UUID oldGroup = brain.groupId();
         brain.attach(recruit);
-        if (oldGroup != null && !oldGroup.equals(brain.groupId())) removeFromGroup(oldGroup, recruit.getUUID());
-        if (brain.groupId() != null) BY_GROUP.computeIfAbsent(brain.groupId(), ignored -> new HashSet<>()).add(recruit.getUUID());
+        if (oldGroup != null && !oldGroup.equals(brain.groupId())) {
+            removeFromGroup(oldGroup, recruit.getUUID());
+            rosterChanged();
+        }
+        if (brain.groupId() != null
+                && BY_GROUP.computeIfAbsent(brain.groupId(), ignored -> new HashSet<>()).add(recruit.getUUID())) {
+            rosterChanged();
+        }
         return brain;
     }
 
@@ -51,6 +65,11 @@ public final class RecruitRuntimeRegistry {
 
     public static List<AbstractRecruitEntity> loaded(ServerLevel level) {
         if (level == null) return List.of();
+        LoadedSnapshot cached = LOADED_SNAPSHOTS.get(level);
+        long gameTime = level.getGameTime();
+        if (cached != null && cached.gameTime == gameTime && cached.rosterRevision == rosterRevision) {
+            return cached.recruits;
+        }
         List<AbstractRecruitEntity> result = new ArrayList<>();
         for (RecruitRuntimeBrain brain : BRAINS.values()) {
             AbstractRecruitEntity recruit = brain.recruit();
@@ -58,7 +77,9 @@ public final class RecruitRuntimeRegistry {
                 result.add(recruit);
             }
         }
-        return List.copyOf(result);
+        List<AbstractRecruitEntity> snapshot = List.copyOf(result);
+        LOADED_SNAPSHOTS.put(level, new LoadedSnapshot(gameTime, rosterRevision, snapshot));
+        return snapshot;
     }
 
     public static int brainCount() {
@@ -110,6 +131,7 @@ public final class RecruitRuntimeRegistry {
     private static void remove(AbstractRecruitEntity recruit) {
         RecruitRuntimeBrain brain = BRAINS.remove(recruit.getUUID());
         if (brain != null && brain.groupId() != null) removeFromGroup(brain.groupId(), recruit.getUUID());
+        if (brain != null) rosterChanged();
     }
 
     private static void removeFromGroup(UUID groupId, UUID recruitId) {
@@ -123,5 +145,14 @@ public final class RecruitRuntimeRegistry {
     public static void onStop(ServerStoppedEvent event) {
         BRAINS.clear();
         BY_GROUP.clear();
+        LOADED_SNAPSHOTS.clear();
+        rosterRevision = 0L;
     }
+
+    private static void rosterChanged() {
+        rosterRevision++;
+        LOADED_SNAPSHOTS.clear();
+    }
+
+    private record LoadedSnapshot(long gameTime, long rosterRevision, List<AbstractRecruitEntity> recruits) { }
 }
