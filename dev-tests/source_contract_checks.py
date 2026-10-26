@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Targeted source contracts for Commander 0.16.0 behavior."""
+"""Targeted source contracts for Commander 0.17.0 behavior."""
 
 from pathlib import Path
 
@@ -72,6 +72,8 @@ world_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/Ta
 render_scene = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalRenderScene.java")
 runtime_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitRuntimeRegistry.java")
 doctrine = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationDoctrineManager.java")
+terrain_cache = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/TacticalTerrainCache.java")
+fog_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/FogOfWarWorldRenderer.java")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -162,8 +164,8 @@ require(mounted_facing_client, "float yaw = mount.getYRot();",
         "client render alignment must use the mount as the shared yaw source")
 require(mounted_facing_client, "recruit.yBodyRotO = previousYaw;",
         "rider render interpolation must exactly match its mount")
-require(formation, "QUICK_PATH_BUDGET_NANOS = 20_000_000L",
-        "difficult route planning must use the 20 ms staged-planning budget")
+require(formation, "RecruitAIScheduler.submitIncremental(",
+        "formation and member routes must continue through bounded scheduler slices")
 require(formation, "state.routeGoal = requestedDestination",
         "partial safe routes must retain their continuation goal")
 
@@ -181,11 +183,24 @@ require(mounted_motion, "slotDistance > 1.5D ? 0.065D : 0.032D",
 require(formation, "recruit.getVehicle() == mover && mover.onGround()",
         "mounted tactical waypoints must actively jump a safe rise")
 require(pathfinder, "if (!dryAt(level, mover, feet)) return null;", "fluid rejection must remain")
-require(pathfinder, "if (shape.isEmpty()) return null;", "unsupported terrain rejection must remain")
-require(pathfinder, "segmentSafe(level, mover", "safe open routes must be straightened")
+require(terrain_cache, "shape.isEmpty() ? List.of()", "unsupported terrain rejection must remain")
+require(pathfinder, "new SegmentProbe(", "safe open routes must be straightened incrementally")
 require(pathfinder, "requiredAnchors.contains", "route smoothing must preserve constrained terrain anchors")
 require(pathfinder, "SEARCH_TIME_BUDGET_NANOS = 20_000_000L",
         "each tactical search must yield a safe partial route before a multi-second tick spike")
+require(pathfinder, "RouteBuildSession", "route reconstruction and smoothing must also be resumable")
+require(pathfinder, "neighborBuffer", "A-star must reuse its expansion buffer")
+require(scheduler, "TASK_SLICE_NANOS = 1_500_000L", "individual AI jobs need a hard scheduler slice")
+require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 8_000_000L", "queued AI needs a global tick budget")
+require(terrain_cache, "cache.surfaces", "terrain collision shapes must be shared within a server tick")
+require(terrain_cache, "cache.fluids", "fluid safety samples must be shared within a server tick")
+require(pathfinder, "cancelForTerrainChange", "resumed searches must reject terrain edited between slices")
+require(controller, "ClientBattlefieldSnapshot", "hover, vision and card systems need one client snapshot")
+require(mounted_facing_client, "commanderLoadedLivingEntities()",
+        "mounted render alignment must reuse the client battlefield snapshot")
+require(controller, "retainedTacticalScene", "tactical scene data must be retained between render frames")
+require(world_renderer, "retainedRoutes", "route geometry must be retained until scene data changes")
+require(fog_renderer, "Cell membership and ordering remain valid", "fog cells must not sort every frame")
 
 require(keys, "GLFW.GLFW_KEY_E", "E must move the camera up")
 require(keys, "GLFW.GLFW_KEY_Q", "Q must move the camera down")
@@ -377,7 +392,7 @@ require(mount_control, "CLAIMS.merge(mount.getUUID(), 1, Integer::sum)",
         "formation-to-combat mount handoffs need reference-counted collision ownership")
 require(formation, "RTSMountControlRegistry.claim(mount)", "formation movement must claim mount collision control")
 require(cavalry, "RTSMountControlRegistry.claim(mount)", "combat passes must claim mount collision control")
-require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 15_000_000L",
+require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 8_000_000L",
         "recovery paths need an aggregate tick-time guard during initial cohesion")
 require(overlay, "COMMAND_CAVALRY_WEDGE", "cavalry wedge needs a stable command-bar element")
 require(overlay, "bodyguardFollow, cavalryWedge", "cavalry wedge must be the right-most command")
@@ -492,6 +507,6 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
 require(network, 'PROTOCOL = "rts-camera-158"', "group flag packets require protocol 158")
-require(source("gradle.properties"), "mod_version=0.16.0-server.3", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.17.0-server.1", "semantic version must be updated")
 
-print("0.16.0-server.3 source contracts passed")
+print("0.17.0-server.1 source contracts passed")

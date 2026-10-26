@@ -30,12 +30,26 @@ public final class TacticalWorldRenderer {
     private static final ResourceLocation BETSY_ROSS = new ResourceLocation(
             RecruitsRTSCameraMod.MOD_ID, "textures/misc/betsy_ross_group_marker.png");
     private static final Map<UUID, SmoothAnchor> FLAG_ANCHORS = new HashMap<>();
+    private static TacticalRenderScene retainedScene = TacticalRenderScene.EMPTY;
+    private static List<RouteMesh> previousRoutes = List.of();
+    private static List<RouteMesh> retainedRoutes = List.of();
+    private static List<ArrowMesh> previousArrows = List.of();
+    private static List<ArrowMesh> retainedArrows = List.of();
+    private static List<SlotMesh> previousSlots = List.of();
+    private static List<SlotMesh> retainedSlots = List.of();
     private static long lastFrameNanos = System.nanoTime();
 
     private TacticalWorldRenderer() { }
 
     public static void reset() {
         FLAG_ANCHORS.clear();
+        retainedScene = TacticalRenderScene.EMPTY;
+        previousRoutes = List.of();
+        retainedRoutes = List.of();
+        previousArrows = List.of();
+        retainedArrows = List.of();
+        previousSlots = List.of();
+        retainedSlots = List.of();
         lastFrameNanos = System.nanoTime();
     }
 
@@ -61,8 +75,10 @@ public final class TacticalWorldRenderer {
         RenderSystem.disableCull();
 
         TacticalRenderScene scene = RTSCameraController.tacticalRenderScene(event.getPartialTick());
-        renderColorGeometry(matrix, scene);
-        renderSlots(matrix, scene.slots());
+        retainGeometry(scene);
+        float interpolation = Mth.clamp(event.getPartialTick(), 0.0F, 1.0F);
+        renderColorGeometry(matrix, interpolation);
+        renderSlots(matrix, interpolation);
         renderFlags(matrix, cameraPos);
 
         RenderSystem.enableCull();
@@ -71,47 +87,48 @@ public final class TacticalWorldRenderer {
         poseStack.popPose();
     }
 
-    private static void renderColorGeometry(Matrix4f matrix, TacticalRenderScene scene) {
+    private static void renderColorGeometry(Matrix4f matrix, float interpolation) {
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
         BufferBuilder buffer = Tesselator.getInstance().getBuilder();
         buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-        for (TacticalRenderScene.RouteRibbon route : scene.routes()) drawRibbon(buffer, matrix, route);
-        for (TacticalRenderScene.FacingArrow arrow : scene.arrows()) drawArrow(buffer, matrix, arrow);
+        for (int index = 0; index < retainedRoutes.size(); index++) {
+            RouteMesh previous = index < previousRoutes.size() ? previousRoutes.get(index) : null;
+            if (!compatible(previous, retainedRoutes.get(index))) previous = null;
+            drawRibbon(buffer, matrix, previous, retainedRoutes.get(index), interpolation);
+        }
+        for (int index = 0; index < retainedArrows.size(); index++) {
+            ArrowMesh previous = index < previousArrows.size() ? previousArrows.get(index) : null;
+            if (!compatible(previous, retainedArrows.get(index))) previous = null;
+            drawArrow(buffer, matrix, previous, retainedArrows.get(index), interpolation);
+        }
         Tesselator.getInstance().end();
     }
 
-    private static void drawRibbon(BufferBuilder buffer, Matrix4f matrix, TacticalRenderScene.RouteRibbon route) {
-        List<Vec3> points = route.points();
+    private static void drawRibbon(
+            BufferBuilder buffer, Matrix4f matrix, RouteMesh previous, RouteMesh mesh, float interpolation
+    ) {
+        TacticalRenderScene.RouteRibbon route = mesh.route();
         double pulse = route.flowing() ? 0.82D + 0.18D * Math.sin(MC.level.getGameTime() * 0.15D) : 1.0D;
-        for (int i = 1; i < points.size(); i++) {
-            Vec3 a = points.get(i - 1);
-            Vec3 b = points.get(i);
-            double dx = b.x - a.x;
-            double dz = b.z - a.z;
-            double length = Math.hypot(dx, dz);
-            if (length < 1.0E-4D) continue;
-            double half = route.width() * 0.5D;
-            double sideX = -dz / length * half;
-            double sideZ = dx / length * half;
+        for (int index = 0; index < mesh.segments().size(); index++) {
+            RouteSegment segment = mesh.segments().get(index);
+            RouteSegment old = previous != null && index < previous.segments().size()
+                    ? previous.segments().get(index) : null;
             int color = scaledAlpha(route.color(), pulse);
-            quad(buffer, matrix,
-                    a.add(sideX, 0.045D, sideZ), a.add(-sideX, 0.045D, -sideZ),
-                    b.add(-sideX, 0.045D, -sideZ), b.add(sideX, 0.045D, sideZ), color);
-            // A narrow bright core gives the ribbon a clean antialiased-looking spine.
-            double coreX = sideX * 0.28D;
-            double coreZ = sideZ * 0.28D;
+            drawQuad(buffer, matrix, old == null ? null : old.band(), segment.band(), interpolation, color);
             int core = withAlpha(color, Math.min(220, alpha(color) + 55));
-            quad(buffer, matrix,
-                    a.add(coreX, 0.052D, coreZ), a.add(-coreX, 0.052D, -coreZ),
-                    b.add(-coreX, 0.052D, -coreZ), b.add(coreX, 0.052D, coreZ), core);
+            drawQuad(buffer, matrix, old == null ? null : old.core(), segment.core(), interpolation, core);
             if (route.flowing()) {
+                Vec3 start = old == null ? segment.start() : old.start().lerp(segment.start(), interpolation);
+                Vec3 forwardBlend = old == null ? segment.forward() : old.forward().lerp(segment.forward(), interpolation);
+                Vec3 sideBlend = old == null ? segment.side() : old.side().lerp(segment.side(), interpolation);
+                Vec3 forward = forwardBlend.lengthSqr() < 1.0E-6D ? segment.forward() : forwardBlend.normalize();
+                Vec3 side = sideBlend.lengthSqr() < 1.0E-6D ? segment.side() : sideBlend.normalize();
+                double length = old == null ? segment.length() : Mth.lerp(interpolation, old.length(), segment.length());
                 double spacing = 2.4D;
                 double phase = ((MC.level.getGameTime() + MC.getFrameTime())
                         * 0.075D * route.flowSpeed()) % spacing;
-                Vec3 forward = new Vec3(dx / length, 0.0D, dz / length);
-                Vec3 side = new Vec3(-forward.z, 0.0D, forward.x);
                 for (double distance = phase; distance < length; distance += spacing) {
-                    Vec3 center = a.add(forward.scale(distance)).add(0.0D, 0.062D, 0.0D);
+                    Vec3 center = start.add(forward.scale(distance)).add(0.0D, 0.062D, 0.0D);
                     Vec3 tip = center.add(forward.scale(0.48D));
                     Vec3 rear = center.add(forward.scale(-0.30D));
                     int chevron = withAlpha(core, Math.min(245, alpha(core) + 25));
@@ -122,41 +139,124 @@ public final class TacticalWorldRenderer {
         }
     }
 
-    private static void drawArrow(BufferBuilder buffer, Matrix4f matrix, TacticalRenderScene.FacingArrow arrow) {
+    private static void drawArrow(
+            BufferBuilder buffer, Matrix4f matrix, ArrowMesh previous, ArrowMesh arrow, float interpolation
+    ) {
+        for (int index = 0; index < arrow.quads().size(); index++) {
+            Quad old = previous != null && index < previous.quads().size() ? previous.quads().get(index) : null;
+            drawQuad(buffer, matrix, old, arrow.quads().get(index), interpolation, arrow.color());
+        }
+    }
+
+    private static void renderSlots(Matrix4f matrix, float interpolation) {
+        if (retainedSlots.isEmpty()) return;
+        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
+        RenderSystem.setShaderTexture(0, SLOT_TEXTURE);
+        BufferBuilder buffer = Tesselator.getInstance().getBuilder();
+        buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+        for (int index = 0; index < retainedSlots.size(); index++) {
+            SlotMesh slot = retainedSlots.get(index);
+            SlotMesh old = index < previousSlots.size() ? previousSlots.get(index) : null;
+            if (old != null && old.a().distanceToSqr(slot.a()) > 16.0D) old = null;
+            texVertex(buffer, matrix, old == null ? null : old.a(), slot.a(), interpolation, 0.0F, 0.0F, slot.color());
+            texVertex(buffer, matrix, old == null ? null : old.b(), slot.b(), interpolation, 0.0F, 0.5F, slot.color());
+            texVertex(buffer, matrix, old == null ? null : old.c(), slot.c(), interpolation, 1.0F, 0.5F, slot.color());
+            texVertex(buffer, matrix, old == null ? null : old.d(), slot.d(), interpolation, 1.0F, 0.0F, slot.color());
+        }
+        Tesselator.getInstance().end();
+    }
+
+    private static void retainGeometry(TacticalRenderScene scene) {
+        if (scene == retainedScene) return;
+        retainedScene = scene;
+        previousRoutes = retainedRoutes;
+        List<RouteMesh> routes = new ArrayList<>(scene.routes().size());
+        for (TacticalRenderScene.RouteRibbon route : scene.routes()) routes.add(buildRouteMesh(route));
+        retainedRoutes = List.copyOf(routes);
+        previousArrows = retainedArrows;
+        List<ArrowMesh> arrows = new ArrayList<>(scene.arrows().size());
+        for (TacticalRenderScene.FacingArrow arrow : scene.arrows()) arrows.add(buildArrowMesh(arrow));
+        retainedArrows = List.copyOf(arrows);
+        previousSlots = retainedSlots;
+        List<SlotMesh> slots = new ArrayList<>(scene.slots().size());
+        for (TacticalRenderScene.SlotDecal slot : scene.slots()) slots.add(buildSlotMesh(slot));
+        retainedSlots = List.copyOf(slots);
+    }
+
+    private static boolean compatible(RouteMesh previous, RouteMesh current) {
+        if (previous == null || previous.segments().size() != current.segments().size()) return false;
+        return current.segments().isEmpty() || previous.segments().get(0).start()
+                .distanceToSqr(current.segments().get(0).start()) <= 16.0D;
+    }
+
+    private static boolean compatible(ArrowMesh previous, ArrowMesh current) {
+        return previous != null && previous.quads().size() == current.quads().size()
+                && (current.quads().isEmpty() || previous.quads().get(0).a()
+                .distanceToSqr(current.quads().get(0).a()) <= 16.0D);
+    }
+
+    private static RouteMesh buildRouteMesh(TacticalRenderScene.RouteRibbon route) {
+        List<RouteSegment> segments = new ArrayList<>();
+        List<Vec3> points = route.points();
+        for (int i = 1; i < points.size(); i++) {
+            Vec3 a = points.get(i - 1);
+            Vec3 b = points.get(i);
+            double dx = b.x - a.x;
+            double dz = b.z - a.z;
+            double length = Math.hypot(dx, dz);
+            if (length < 1.0E-4D) continue;
+            Vec3 forward = new Vec3(dx / length, 0.0D, dz / length);
+            Vec3 side = new Vec3(-forward.z, 0.0D, forward.x);
+            double half = route.width() * 0.5D;
+            Vec3 bandSide = side.scale(half);
+            Vec3 coreSide = bandSide.scale(0.28D);
+            Quad band = new Quad(a.add(bandSide).add(0.0D, 0.045D, 0.0D),
+                    a.subtract(bandSide).add(0.0D, 0.045D, 0.0D),
+                    b.subtract(bandSide).add(0.0D, 0.045D, 0.0D),
+                    b.add(bandSide).add(0.0D, 0.045D, 0.0D));
+            Quad core = new Quad(a.add(coreSide).add(0.0D, 0.052D, 0.0D),
+                    a.subtract(coreSide).add(0.0D, 0.052D, 0.0D),
+                    b.subtract(coreSide).add(0.0D, 0.052D, 0.0D),
+                    b.add(coreSide).add(0.0D, 0.052D, 0.0D));
+            segments.add(new RouteSegment(a, forward, side, length, band, core));
+        }
+        return new RouteMesh(route, List.copyOf(segments));
+    }
+
+    private static ArrowMesh buildArrowMesh(TacticalRenderScene.FacingArrow arrow) {
         double radians = Math.toRadians(arrow.yaw());
         Vec3 forward = new Vec3(-Math.sin(radians), 0.0D, Math.cos(radians));
         Vec3 side = new Vec3(forward.z, 0.0D, -forward.x);
         Vec3 origin = arrow.origin().add(0.0D, 0.065D, 0.0D);
         Vec3 neck = origin.add(forward.scale(5.2D));
         Vec3 tip = origin.add(forward.scale(8.0D));
-        int color = arrow.color();
-        quad(buffer, matrix, origin.add(side.scale(0.28D)), origin.add(side.scale(-0.28D)),
-                neck.add(side.scale(-0.28D)), neck.add(side.scale(0.28D)), color);
-        quad(buffer, matrix, neck.add(side.scale(1.25D)), neck.add(side.scale(-1.25D)), tip, tip, color);
+        return new ArrowMesh(arrow.color(), List.of(
+                new Quad(origin.add(side.scale(0.28D)), origin.add(side.scale(-0.28D)),
+                        neck.add(side.scale(-0.28D)), neck.add(side.scale(0.28D))),
+                new Quad(neck.add(side.scale(1.25D)), neck.add(side.scale(-1.25D)), tip, tip)));
     }
 
-    private static void renderSlots(Matrix4f matrix, List<TacticalRenderScene.SlotDecal> slots) {
-        if (slots.isEmpty()) return;
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, SLOT_TEXTURE);
-        BufferBuilder buffer = Tesselator.getInstance().getBuilder();
-        buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        for (TacticalRenderScene.SlotDecal slot : slots) {
-            double radians = Math.toRadians(slot.yaw());
-            double rightX = Math.cos(radians);
-            double rightZ = Math.sin(radians);
-            double forwardX = -Math.sin(radians);
-            double forwardZ = Math.cos(radians);
-            double half = slot.heavy() ? 0.68D : 0.42D;
-            Vec3 c = slot.position().add(0.0D, 0.055D, 0.0D);
-            Vec3 right = new Vec3(rightX * half, 0.0D, rightZ * half);
-            Vec3 forward = new Vec3(forwardX * half, 0.0D, forwardZ * half);
-            texVertex(buffer, matrix, c.subtract(right).subtract(forward), 0.0F, 0.0F, slot.color());
-            texVertex(buffer, matrix, c.subtract(right).add(forward), 0.0F, 0.5F, slot.color());
-            texVertex(buffer, matrix, c.add(right).add(forward), 1.0F, 0.5F, slot.color());
-            texVertex(buffer, matrix, c.add(right).subtract(forward), 1.0F, 0.0F, slot.color());
-        }
-        Tesselator.getInstance().end();
+    private static SlotMesh buildSlotMesh(TacticalRenderScene.SlotDecal slot) {
+        double radians = Math.toRadians(slot.yaw());
+        double half = slot.heavy() ? 0.68D : 0.42D;
+        Vec3 center = slot.position().add(0.0D, 0.055D, 0.0D);
+        Vec3 right = new Vec3(Math.cos(radians) * half, 0.0D, Math.sin(radians) * half);
+        Vec3 forward = new Vec3(-Math.sin(radians) * half, 0.0D, Math.cos(radians) * half);
+        return new SlotMesh(center.subtract(right).subtract(forward), center.subtract(right).add(forward),
+                center.add(right).add(forward), center.add(right).subtract(forward), slot.color());
+    }
+
+    private static void drawQuad(BufferBuilder buffer, Matrix4f matrix, Quad quad, int color) {
+        quad(buffer, matrix, quad.a(), quad.b(), quad.c(), quad.d(), color);
+    }
+
+    private static void drawQuad(
+            BufferBuilder buffer, Matrix4f matrix, Quad previous, Quad current, float amount, int color
+    ) {
+        colorVertex(buffer, matrix, previous == null ? null : previous.a(), current.a(), amount, color);
+        colorVertex(buffer, matrix, previous == null ? null : previous.b(), current.b(), amount, color);
+        colorVertex(buffer, matrix, previous == null ? null : previous.c(), current.c(), amount, color);
+        colorVertex(buffer, matrix, previous == null ? null : previous.d(), current.d(), amount, color);
     }
 
     private static void renderFlags(Matrix4f matrix, Vec3 cameraPos) {
@@ -246,8 +346,30 @@ public final class TacticalWorldRenderer {
                 .color(red(color), green(color), blue(color), alpha(color)).endVertex();
     }
 
+    private static void colorVertex(
+            BufferBuilder buffer, Matrix4f matrix, Vec3 previous, Vec3 current, float amount, int color
+    ) {
+        double x = previous == null ? current.x : Mth.lerp(amount, previous.x, current.x);
+        double y = previous == null ? current.y : Mth.lerp(amount, previous.y, current.y);
+        double z = previous == null ? current.z : Mth.lerp(amount, previous.z, current.z);
+        buffer.vertex(matrix, (float) x, (float) y, (float) z)
+                .color(red(color), green(color), blue(color), alpha(color)).endVertex();
+    }
+
     private static void texVertex(BufferBuilder buffer, Matrix4f matrix, Vec3 point, float u, float v, int color) {
         buffer.vertex(matrix, (float) point.x, (float) point.y, (float) point.z).uv(u, v)
+                .color(red(color), green(color), blue(color), alpha(color)).endVertex();
+    }
+
+
+    private static void texVertex(
+            BufferBuilder buffer, Matrix4f matrix, Vec3 previous, Vec3 current, float amount,
+            float u, float v, int color
+    ) {
+        double x = previous == null ? current.x : Mth.lerp(amount, previous.x, current.x);
+        double y = previous == null ? current.y : Mth.lerp(amount, previous.y, current.y);
+        double z = previous == null ? current.z : Mth.lerp(amount, previous.z, current.z);
+        buffer.vertex(matrix, (float) x, (float) y, (float) z).uv(u, v)
                 .color(red(color), green(color), blue(color), alpha(color)).endVertex();
     }
 
@@ -263,6 +385,12 @@ public final class TacticalWorldRenderer {
         SmoothAnchor(Vec3 position) { this.position = position; }
         void approach(Vec3 target, double amount) { position = position.lerp(target, Mth.clamp(amount, 0.0D, 1.0D)); }
     }
+
+    private record Quad(Vec3 a, Vec3 b, Vec3 c, Vec3 d) { }
+    private record RouteSegment(Vec3 start, Vec3 forward, Vec3 side, double length, Quad band, Quad core) { }
+    private record RouteMesh(TacticalRenderScene.RouteRibbon route, List<RouteSegment> segments) { }
+    private record ArrowMesh(int color, List<Quad> quads) { }
+    private record SlotMesh(Vec3 a, Vec3 b, Vec3 c, Vec3 d, int color) { }
 
     private record FlagView(
             UUID id,

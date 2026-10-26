@@ -60,8 +60,6 @@ import java.util.EnumSet;
 public final class NativeFormationController {
     private static final Map<UUID, State> STATES = new LinkedHashMap<>();
     private static final int MAX_FORMATION_SEARCH = 18_000;
-    private static final int QUICK_FORMATION_SEARCH = 2_500;
-    private static final long QUICK_PATH_BUDGET_NANOS = 20_000_000L;
     private static final int MAX_AGENT_SEARCH = 3_500;
     private static final double CENTER_SPEED = 0.21D;
     private static final double SLOT_LOCK_DISTANCE_SQ = 0.30D * 0.30D;
@@ -403,27 +401,25 @@ public final class NativeFormationController {
                 && !state.routePending && level.getGameTime() >= state.nextRouteAt) {
             Vec3 requestedDestination = state.destination;
             long routeGeneration = state.routeGeneration;
-            state.routePending = RecruitAIScheduler.submit(
+            TacticalPathfinder.SearchSession search = TacticalPathfinder.begin(
+                    level, representative, state.center, requestedDestination, MAX_FORMATION_SEARCH);
+            state.routePending = RecruitAIScheduler.submitIncremental(
                     RecruitAIScheduler.Priority.HIGH,
                     RecruitAIScheduler.WorkType.FORMATION_PATH,
                     state.groupId,
-                    () -> {
+                    deadlineNanos -> {
                         try {
                             if (STATES.get(state.groupId) != state || !representative.isAlive()
-                                    || state.routeGeneration != routeGeneration) return;
-                            long started = System.nanoTime();
-                            TacticalPathfinder.Route planned = TacticalPathfinder.find(
-                                    level, representative, state.center, requestedDestination, QUICK_FORMATION_SEARCH);
-                            long quickElapsed = System.nanoTime() - started;
-                            // Easy routes are usually complete inside the quick pass. If a
-                            // partial pass stayed under 20 ms, finish the difficult route
-                            // before movement. A pass that already consumed the budget is
-                            // published as a safe partial route and continued on the run.
-                            if (!planned.complete() && quickElapsed < QUICK_PATH_BUDGET_NANOS) {
-                                planned = TacticalPathfinder.find(
-                                        level, representative, state.center, requestedDestination, MAX_FORMATION_SEARCH);
+                                    || state.routeGeneration != routeGeneration) {
+                                state.routePending = false;
+                                return true;
                             }
-                            if (state.routeGeneration != routeGeneration) return;
+                            if (!search.advance(deadlineNanos)) return false;
+                            TacticalPathfinder.Route planned = search.result();
+                            if (state.routeGeneration != routeGeneration) {
+                                state.routePending = false;
+                                return true;
+                            }
                             state.route = planned;
                             state.routeGoal = requestedDestination;
                             RecruitRuntimeMetrics.FORMATION_PATHS.increment();
@@ -437,8 +433,11 @@ public final class NativeFormationController {
                             state.trail.clear();
                             rememberTrail(state, state.center);
                             state.nextRouteAt = level.getGameTime() + (state.route.points().isEmpty() ? 20L : 5L);
-                        } finally {
                             state.routePending = false;
+                            return true;
+                        } catch (RuntimeException exception) {
+                            state.routePending = false;
+                            throw exception;
                         }
                     }
             );
@@ -726,19 +725,27 @@ public final class NativeFormationController {
             long pathGeneration = agent.pathGeneration;
             RecruitAIScheduler.Priority priority = catchUpScale > 1.0D
                     ? RecruitAIScheduler.Priority.HIGH : RecruitAIScheduler.Priority.MEDIUM;
-            agent.pathPending = RecruitAIScheduler.submit(
+            TacticalPathfinder.SearchSession search = TacticalPathfinder.begin(
+                    level, mover, mover.position(), pathGoal, MAX_AGENT_SEARCH);
+            agent.pathPending = RecruitAIScheduler.submitIncremental(
                     priority,
                     RecruitAIScheduler.WorkType.AGENT_PATH,
                     recruit.getUUID(),
-                    () -> {
+                    deadlineNanos -> {
                         try {
                             if (!recruit.isAlive() || recruit.isRemoved() || mover.isRemoved()
                                     || RecruitRuntimeRegistry.brain(recruit).authority()
                                     != RecruitRuntimeBrain.MovementAuthority.RTS_FORMATION
-                                    || agent.pathGeneration != pathGeneration) return;
-                            TacticalPathfinder.Route planned = TacticalPathfinder.find(
-                                    level, mover, pathGoal, MAX_AGENT_SEARCH);
-                            if (agent.pathGeneration != pathGeneration) return;
+                                    || agent.pathGeneration != pathGeneration) {
+                                agent.pathPending = false;
+                                return true;
+                            }
+                            if (!search.advance(deadlineNanos)) return false;
+                            TacticalPathfinder.Route planned = search.result();
+                            if (agent.pathGeneration != pathGeneration) {
+                                agent.pathPending = false;
+                                return true;
+                            }
                             agent.path = planned;
                             RecruitRuntimeMetrics.AGENT_PATHS.increment();
                             RecruitRuntimeMetrics.RECOVERY_PATHS.increment();
@@ -748,8 +755,11 @@ public final class NativeFormationController {
                             agent.plannedAt = level.getGameTime();
                             agent.resetProgress(mover.position(), pathGoal, level.getGameTime());
                             agent.nextPlanAt = level.getGameTime() + (agent.path.points().isEmpty() ? 20L : 8L);
-                        } finally {
                             agent.pathPending = false;
+                            return true;
+                        } catch (RuntimeException exception) {
+                            agent.pathPending = false;
+                            throw exception;
                         }
                     }
             );

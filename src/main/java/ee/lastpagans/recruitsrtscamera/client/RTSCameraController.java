@@ -36,6 +36,7 @@ import ee.lastpagans.recruitsrtscamera.network.RTSModeStatePacket;
 import ee.lastpagans.recruitsrtscamera.network.RotateFormationPacket;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -62,6 +63,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -169,6 +171,9 @@ public final class RTSCameraController {
     private static BlockPos lastTerrainOrderTarget;
     private static long lastEnemyOrderMillis;
     private static UUID lastEnemyOrderTarget;
+    private static ClientBattlefieldSnapshot battlefieldSnapshot = ClientBattlefieldSnapshot.EMPTY;
+    private static TacticalRenderScene retainedTacticalScene = TacticalRenderScene.EMPTY;
+    private static boolean tacticalSceneDirty = true;
 
     private static boolean oldAllowInteract;
     private static boolean oldFreezePlayer;
@@ -234,6 +239,10 @@ public final class RTSCameraController {
 
     static List<AbstractRecruitEntity> commanderLoadedOwnedRecruits() {
         return loadedOwnedRecruits();
+    }
+
+    static List<LivingEntity> commanderLoadedLivingEntities() {
+        return clientBattlefieldSnapshot().livingEntities();
     }
 
     static void commanderDropRoutedGroups(Set<UUID> routedGroups) {
@@ -514,6 +523,7 @@ public final class RTSCameraController {
     }
 
     public static void clientTick() {
+        tacticalSceneDirty = true;
         processCapturedCommands();
         while (RTSCameraKeyMappings.TOGGLE.consumeClick()) {
             if (active) {
@@ -622,6 +632,7 @@ public final class RTSCameraController {
         }
 
         updateCursorPosition();
+        refreshClientBattlefieldSnapshot();
 
         boolean rotateDown = capturedRotateDown || RTSCameraKeyMappings.ROTATE.isDown();
         if (commandCursor && !routeMode && !draggingSelection && !draggingTranslation
@@ -773,6 +784,9 @@ public final class RTSCameraController {
         hoveredFriendlyGroupId = null;
         hoveredTarget = null;
         hoveredGround = null;
+        battlefieldSnapshot = ClientBattlefieldSnapshot.EMPTY;
+        retainedTacticalScene = TacticalRenderScene.EMPTY;
+        tacticalSceneDirty = true;
         lastTerrainOrderMillis = 0L;
         lastTerrainOrderTarget = null;
         clearGlow();
@@ -1851,10 +1865,8 @@ public final class RTSCameraController {
         double closestDistance = blockLimitDistance(ray);
         AbstractRecruitEntity closest = null;
         AABB search = new AABB(ray.start(), ray.end()).inflate(2.0D);
-        for (AbstractRecruitEntity recruit : MC.level.getEntitiesOfClass(AbstractRecruitEntity.class, search)) {
-            if (validOwnedGroupId(recruit) == null) {
-                continue;
-            }
+        for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
+            if (!search.intersects(recruit.getBoundingBox())) continue;
             Optional<Vec3> hit = recruit.getBoundingBox().inflate(0.35D).clip(ray.start(), ray.end());
             if (hit.isEmpty()) {
                 continue;
@@ -1893,7 +1905,9 @@ public final class RTSCameraController {
         // Pass one is intentionally strict. This prevents the old "ghost sword" where
         // vertical camera movement made a huge inflated world AABB catch an enemy that
         // was nowhere near the visible cursor.
-        for (LivingEntity living : MC.level.getEntitiesOfClass(LivingEntity.class, search)) {
+        List<LivingEntity> candidates = clientBattlefieldSnapshot().livingEntities();
+        for (LivingEntity living : candidates) {
+            if (!search.intersects(living.getBoundingBox())) continue;
             if (!isAttackableTarget(living) || !isClientVisible(living.position())) {
                 continue;
             }
@@ -1915,7 +1929,8 @@ public final class RTSCameraController {
         // actual projected body of the entity is also within a small screen-space pad
         // around the cursor. This keeps targeting forgiving without creating phantom
         // attack icons while moving the camera.
-        for (LivingEntity living : MC.level.getEntitiesOfClass(LivingEntity.class, search)) {
+        for (LivingEntity living : candidates) {
+            if (!search.intersects(living.getBoundingBox())) continue;
             if (!isAttackableTarget(living) || !isClientVisible(living.position())) {
                 continue;
             }
@@ -1965,24 +1980,7 @@ public final class RTSCameraController {
         if (!ClientPermissionState.fogEnabled() || MC.player == null) {
             return List.of();
         }
-        List<FogVisionSource> sources = new ArrayList<>();
-        sources.add(new FogVisionSource(MC.player.position(), ClientPermissionState.playerVisionRadius()));
-        for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
-            Vec3 source = recruit.position();
-            double radius;
-            if (ClientPermissionState.smallShipsAvailable()
-                    && recruit instanceof CaptainEntity captain
-                    && SmallShipsCompat.isCaptainAboard(captain)) {
-                source = SmallShipsCompat.shipPosition(captain);
-                radius = ClientPermissionState.shipVisionRadius();
-            } else if (recruit.isPassenger()) {
-                radius = ClientPermissionState.cavalryVisionRadius();
-            } else {
-                radius = ClientPermissionState.recruitVisionRadius();
-            }
-            sources.add(new FogVisionSource(source, radius));
-        }
-        return sources;
+        return clientBattlefieldSnapshot().visionSources();
     }
 
     /**
@@ -2023,7 +2021,7 @@ public final class RTSCameraController {
     }
 
     private static boolean isClientVisible(Vec3 target) {
-        return fogHiddenFactor(target) <= 0.0F;
+        return fogHiddenFactor(target, clientBattlefieldSnapshot().visionSources()) <= 0.0F;
     }
 
     private static double horizontalDistanceSqr(Vec3 a, Vec3 b) {
@@ -2157,25 +2155,67 @@ public final class RTSCameraController {
     }
 
     private static List<AbstractRecruitEntity> loadedOwnedRecruits() {
+        return clientBattlefieldSnapshot().ownedRecruits();
+    }
+
+    private static ClientBattlefieldSnapshot clientBattlefieldSnapshot() {
+        refreshClientBattlefieldSnapshot();
+        return battlefieldSnapshot;
+    }
+
+    private static void refreshClientBattlefieldSnapshot() {
         if (MC.level == null || MC.player == null) {
-            return List.of();
+            battlefieldSnapshot = ClientBattlefieldSnapshot.EMPTY;
+            return;
         }
+        long gameTime = MC.level.getGameTime();
         Vec3 center = MC.gameRenderer.getMainCamera().getPosition();
-        AABB area = new AABB(
-                center.x - SELECTION_RANGE,
-                center.y - SELECTION_RANGE,
-                center.z - SELECTION_RANGE,
-                center.x + SELECTION_RANGE,
-                center.y + SELECTION_RANGE,
-                center.z + SELECTION_RANGE
-        );
+        if (battlefieldSnapshot.level() == MC.level && battlefieldSnapshot.gameTime() == gameTime
+                && battlefieldSnapshot.cameraCenter().distanceToSqr(center) < 0.25D * 0.25D) return;
+
+        Set<UUID> ownedGroups = new HashSet<>();
+        if (ClientManager.groups != null) {
+            for (RecruitsGroup group : ClientManager.groups) {
+                if (isCommandableClientGroup(group) && MC.player.getUUID().equals(group.getPlayerUUID())) {
+                    ownedGroups.add(group.getUUID());
+                }
+            }
+        }
         List<AbstractRecruitEntity> result = new ArrayList<>();
-        for (AbstractRecruitEntity recruit : MC.level.getEntitiesOfClass(AbstractRecruitEntity.class, area)) {
-            if (validOwnedGroupId(recruit) != null) {
+        List<LivingEntity> living = new ArrayList<>();
+        for (Entity entity : MC.level.entitiesForRendering()) {
+            if (!(entity instanceof LivingEntity candidate) || !candidate.isAlive() || candidate.isRemoved()) continue;
+            living.add(candidate);
+            if (candidate instanceof AbstractRecruitEntity recruit
+                    && MC.player.getUUID().equals(recruit.getOwnerUUID())
+                    && ownedGroups.contains(recruit.getGroup())) {
                 result.add(recruit);
             }
         }
-        return result;
+        List<AbstractRecruitEntity> owned = List.copyOf(result);
+
+        List<FogVisionSource> vision = new ArrayList<>(owned.size() + 1);
+        if (ClientPermissionState.fogEnabled()) {
+            vision.add(new FogVisionSource(MC.player.position(), ClientPermissionState.playerVisionRadius()));
+            for (AbstractRecruitEntity recruit : owned) {
+                Vec3 source = recruit.position();
+                double radius;
+                if (ClientPermissionState.smallShipsAvailable()
+                        && recruit instanceof CaptainEntity captain
+                        && SmallShipsCompat.isCaptainAboard(captain)) {
+                    source = SmallShipsCompat.shipPosition(captain);
+                    radius = ClientPermissionState.shipVisionRadius();
+                } else if (recruit.isPassenger()) {
+                    radius = ClientPermissionState.cavalryVisionRadius();
+                } else {
+                    radius = ClientPermissionState.recruitVisionRadius();
+                }
+                vision.add(new FogVisionSource(source, radius));
+            }
+        }
+
+        battlefieldSnapshot = new ClientBattlefieldSnapshot(
+                MC.level, gameTime, center, owned, List.copyOf(vision), List.copyOf(living));
     }
 
     private static UUID validOwnedGroupId(AbstractRecruitEntity recruit) {
@@ -2400,22 +2440,28 @@ public final class RTSCameraController {
     /** Snapshot all battlefield-preview state for the batched world-space renderer. */
     static TacticalRenderScene tacticalRenderScene(float partialTick) {
         if (!active || !commandCursor || MC.level == null) return TacticalRenderScene.EMPTY;
+        if (!tacticalSceneDirty) return retainedTacticalScene;
         TacticalRenderScene.Builder scene = new TacticalRenderScene.Builder();
+        // Retain tick endpoints; TacticalWorldRenderer interpolates the retained meshes
+        // with partialTick so caching never reduces overlay motion to 20 FPS.
+        float sceneTick = 1.0F;
         if (!routeMode && !draggingTranslation && !draggingFrontage && !draggingCustom && !rotatingFormation) {
-            appendCurrentOrders(scene, partialTick);
+            appendCurrentOrders(scene, sceneTick);
         }
-        if (routeMode) appendRouteScene(scene, partialTick);
-        if (draggingTranslation) appendTranslationScene(scene, partialTick);
+        if (routeMode) appendRouteScene(scene, sceneTick);
+        if (draggingTranslation) appendTranslationScene(scene, sceneTick);
         if (draggingFrontage) {
             if (isFrontageGesture()) appendFrontageScene(scene);
-            else appendMoveScene(scene, partialTick);
+            else appendMoveScene(scene, sceneTick);
         }
         if (draggingCustom && CUSTOM_STROKE.size() >= 2) {
             scene.route(CUSTOM_STROKE.stream().map(CustomStrokePoint::world).toList(),
                     TACTICAL_CUSTOM_COLOR, 0.28F, true);
         }
         if (rotatingFormation) appendRotationScene(scene);
-        return scene.build();
+        retainedTacticalScene = scene.build();
+        tacticalSceneDirty = false;
+        return retainedTacticalScene;
     }
 
     private static void renderReleaseCommandPanel(
@@ -2485,7 +2531,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.16.0-server.3 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.17.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2922,6 +2968,7 @@ public final class RTSCameraController {
     public static void applyFormationRouteSync(UUID groupId, Vec3 serverCenter, Vec3 destination,
                                                List<Vec3> waypoints, boolean moving) {
         if (groupId == null) return;
+        tacticalSceneDirty = true;
         if (!moving) {
             LOCAL_RUNNING_GROUPS.remove(groupId);
             CURRENT_ORDER_PREVIEWS.remove(groupId);
@@ -3423,5 +3470,17 @@ public final class RTSCameraController {
     }
 
     public record FogVisionSource(Vec3 position, double radius) {
+    }
+
+    private record ClientBattlefieldSnapshot(
+            ClientLevel level,
+            long gameTime,
+            Vec3 cameraCenter,
+            List<AbstractRecruitEntity> ownedRecruits,
+            List<FogVisionSource> visionSources,
+            List<LivingEntity> livingEntities
+    ) {
+        private static final ClientBattlefieldSnapshot EMPTY = new ClientBattlefieldSnapshot(
+                null, Long.MIN_VALUE, Vec3.ZERO, List.of(), List.of(), List.of());
     }
 }

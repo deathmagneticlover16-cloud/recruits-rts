@@ -21,6 +21,7 @@ import java.util.Map;
 public final class TacticalTerrainRevisions {
     private static final int REGION_SHIFT = 4;
     private static final Map<ResourceKey<Level>, Map<Long, Long>> REVISIONS = new HashMap<>();
+    private static final Map<ResourceKey<Level>, Long> EPOCHS = new HashMap<>();
 
     private TacticalTerrainRevisions() {
     }
@@ -47,8 +48,28 @@ public final class TacticalTerrainRevisions {
 
     public static long revisionAt(ServerLevel level, Vec3 position) {
         if (level == null || position == null) return 0L;
-        long region = region(BlockPos.containing(position));
+        BlockPos block = BlockPos.containing(position);
+        return revisionAt(level, block.getX(), block.getZ());
+    }
+
+    public static long revisionAt(ServerLevel level, int blockX, int blockZ) {
+        if (level == null) return 0L;
+        long region = region(blockX >> REGION_SHIFT, blockZ >> REGION_SHIFT);
         return REVISIONS.getOrDefault(level.dimension(), Map.of()).getOrDefault(region, 0L);
+    }
+
+    static long regionKey(Vec3 position) {
+        return region(BlockPos.containing(position));
+    }
+
+    static long revisionForRegion(ServerLevel level, long region) {
+        return level == null ? 0L
+                : REVISIONS.getOrDefault(level.dimension(), Map.of()).getOrDefault(region, 0L);
+    }
+
+    /** Dimension-wide change stamp used to discard a path search spanning a terrain edit. */
+    public static long epoch(ServerLevel level) {
+        return level == null ? 0L : EPOCHS.getOrDefault(level.dimension(), 0L);
     }
 
     @SubscribeEvent
@@ -67,6 +88,7 @@ public final class TacticalTerrainRevisions {
     }
 
     private static void bump(ServerLevel level, BlockPos position) {
+        EPOCHS.put(level.dimension(), EPOCHS.getOrDefault(level.dimension(), 0L) + 1L);
         Map<Long, Long> revisions = REVISIONS.computeIfAbsent(level.dimension(), ignored -> new HashMap<>());
         int rx = position.getX() >> REGION_SHIFT;
         int rz = position.getZ() >> REGION_SHIFT;
@@ -89,5 +111,6 @@ public final class TacticalTerrainRevisions {
     @SubscribeEvent
     public static void onStop(ServerStoppedEvent event) {
         REVISIONS.clear();
+        EPOCHS.clear();
     }
 }

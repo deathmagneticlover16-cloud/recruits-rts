@@ -17,7 +17,8 @@ import java.util.Set;
 /** Main-thread budget scheduler with key-based request deduplication. */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RecruitAIScheduler {
-    private static final long SERVER_TICK_WORK_BUDGET_NANOS = 15_000_000L;
+    private static final long SERVER_TICK_WORK_BUDGET_NANOS = 8_000_000L;
+    private static final long TASK_SLICE_NANOS = 1_500_000L;
     public enum Priority { CRITICAL, HIGH, MEDIUM, LOW }
     public enum WorkType { FORMATION_PATH, AGENT_PATH, PERCEPTION, MAINTENANCE }
 
@@ -32,6 +33,20 @@ public final class RecruitAIScheduler {
     }
 
     public static boolean submit(Priority priority, WorkType type, Object identity, Runnable task) {
+        if (task == null) return false;
+        return submitIncremental(priority, type, identity, deadlineNanos -> {
+            task.run();
+            return true;
+        });
+    }
+
+    /** Submit resumable main-thread work. Return true only when the job is complete. */
+    public static boolean submitIncremental(
+            Priority priority,
+            WorkType type,
+            Object identity,
+            IncrementalTask task
+    ) {
         if (priority == null || type == null || identity == null || task == null) return false;
         Key key = new Key(type, identity);
         if (!PENDING.add(key)) return false;
@@ -47,6 +62,7 @@ public final class RecruitAIScheduler {
     public static void onTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         long workStarted = System.nanoTime();
+        long globalDeadline = workStarted + SERVER_TICK_WORK_BUDGET_NANOS;
         EnumMap<WorkType, Integer> budgets = new EnumMap<>(WorkType.class);
         boolean budgeted = RTSServerConfig.AI_SCHEDULER.get();
         budgets.put(WorkType.FORMATION_PATH, budgeted ? RTSServerConfig.FORMATION_PATHS_PER_TICK.get() : Integer.MAX_VALUE);
@@ -69,16 +85,23 @@ public final class RecruitAIScheduler {
                     queue.addFirst(work);
                     break;
                 }
-                if (priority != Priority.CRITICAL
-                        && System.nanoTime() - workStarted >= SERVER_TICK_WORK_BUDGET_NANOS) {
+                if (budgeted && System.nanoTime() >= globalDeadline) {
                     queue.addFirst(work);
                     break priorityLoop;
                 }
                 if (priority != Priority.CRITICAL) budgets.put(work.key.type, remaining - 1);
-                PENDING.remove(work.key);
                 try {
-                    work.task.run();
+                    long now = System.nanoTime();
+                    long sliceDeadline = budgeted
+                            ? Math.min(globalDeadline, now + TASK_SLICE_NANOS)
+                            : now + 20_000_000L;
+                    if (work.task.runSlice(sliceDeadline)) {
+                        PENDING.remove(work.key);
+                    } else {
+                        queue.addLast(work);
+                    }
                 } catch (RuntimeException exception) {
+                    PENDING.remove(work.key);
                     RecruitsRTSCameraMod.LOGGER.error("Scheduled recruit work {} failed", work.key, exception);
                 }
             }
@@ -95,5 +118,10 @@ public final class RecruitAIScheduler {
     }
 
     private record Key(WorkType type, Object identity) {}
-    private record Work(Key key, Runnable task) {}
+    @FunctionalInterface
+    public interface IncrementalTask {
+        boolean runSlice(long deadlineNanos);
+    }
+
+    private record Work(Key key, IncrementalTask task) {}
 }

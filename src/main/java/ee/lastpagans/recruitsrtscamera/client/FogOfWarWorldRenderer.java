@@ -101,10 +101,6 @@ public final class FogOfWarWorldRenderer {
         double fogHeight = RTSClientConfig.FOG_HEIGHT.get();
         int emittedQuads = 0;
 
-        // Back-to-front makes overlapping translucent puffs substantially cleaner.
-        CELLS.sort(Comparator.comparingDouble((FogCell cell) ->
-                -horizontalDistanceSqr(cameraPos.x, cameraPos.z, cell.x(), cell.z())));
-
         for (FogCell cell : CELLS) {
             double horizontalDistance = Math.sqrt(horizontalDistanceSqr(
                     cameraPos.x, cameraPos.z, cell.x(), cell.z()
@@ -220,6 +216,11 @@ public final class FogOfWarWorldRenderer {
                 CELLS.add(new FogCell(worldX + 0.5D, groundY, worldZ + 0.5D, hidden, seed));
             }
         }
+
+        // Cell membership and ordering remain valid until the camera enters another
+        // sampling cell, avoiding a full translucent-depth sort on every render frame.
+        CELLS.sort(Comparator.comparingDouble((FogCell cell) ->
+                -horizontalDistanceSqr(cameraPos.x, cameraPos.z, cell.x(), cell.z())));
 
         lastSampleMillis = now;
         lastCameraCellX = cameraCellX;

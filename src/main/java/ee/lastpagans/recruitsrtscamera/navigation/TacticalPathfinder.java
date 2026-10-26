@@ -5,11 +5,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.horse.AbstractHorse;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraft.world.phys.shapes.CollisionContext;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeMetrics;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,54 +43,18 @@ public final class TacticalPathfinder {
     }
 
     public static Route find(ServerLevel level, Mob mover, Vec3 startPosition, Vec3 destination, int maxVisited) {
-        if (level == null || mover == null || startPosition == null || destination == null
-                || !finite(startPosition) || !finite(destination)) {
-            return Route.EMPTY;
+        SearchSession session = begin(level, mover, startPosition, destination, maxVisited);
+        while (!session.advance(System.nanoTime() + SEARCH_TIME_BUDGET_NANOS)) {
+            // Compatibility entry point. Runtime formation code uses the resumable session
+            // directly; this loop remains for isolated callers and tests.
         }
-        Cell start = nearestCell(level, mover, startPosition, 1, 2);
-        Cell goal = nearestCell(level, mover, destination, 2, 5);
-        if (start == null || goal == null) return Route.EMPTY;
+        return session.result();
+    }
 
-        PriorityQueue<SearchNode> open = new PriorityQueue<>(Comparator.comparingDouble(SearchNode::score));
-        Map<BlockPos, Double> cost = new HashMap<>();
-        Map<BlockPos, BlockPos> parent = new HashMap<>();
-        Map<BlockPos, Cell> cells = new HashMap<>();
-        Set<BlockPos> closed = new HashSet<>();
-        cost.put(start.key, 0.0D);
-        cells.put(start.key, start);
-        open.add(new SearchNode(start, heuristic(start, goal)));
-        Cell closest = start;
-        double closestDistance = heuristic(start, goal);
-        int visited = 0;
-        long deadline = System.nanoTime() + SEARCH_TIME_BUDGET_NANOS;
-
-        while (!open.isEmpty() && visited++ < Math.max(128, maxVisited)) {
-            // A bounded expansion count is insufficient on complex modded collision
-            // shapes. Yield a safe partial route rather than spending seconds in one tick.
-            if ((visited & 7) == 0 && System.nanoTime() >= deadline) break;
-            SearchNode search = open.poll();
-            Cell current = search.cell;
-            if (!closed.add(current.key)) continue;
-            double remaining = heuristic(current, goal);
-            if (remaining < closestDistance) {
-                closestDistance = remaining;
-                closest = current;
-            }
-            if (reached(current, goal)) {
-                return build(level, mover, current, start, parent, cells, true);
-            }
-            for (Cell neighbor : neighbors(level, mover, current)) {
-                if (closed.contains(neighbor.key)) continue;
-                double next = cost.get(current.key) + movementCost(level, mover, current, neighbor);
-                if (next + 1.0E-6D >= cost.getOrDefault(neighbor.key, Double.POSITIVE_INFINITY)) continue;
-                cost.put(neighbor.key, next);
-                parent.put(neighbor.key, current.key);
-                cells.put(neighbor.key, neighbor);
-                open.add(new SearchNode(neighbor, next + heuristic(neighbor, goal)));
-            }
-        }
-        Route partial = build(level, mover, closest, start, parent, cells, false);
-        return partial.points.size() > 1 ? partial : Route.EMPTY;
+    public static SearchSession begin(
+            ServerLevel level, Mob mover, Vec3 startPosition, Vec3 destination, int maxVisited
+    ) {
+        return new SearchSession(level, mover, startPosition, destination, maxVisited);
     }
 
     /** Resolve a safe standing point near a desired slot without consulting a heightmap. */
@@ -208,8 +170,8 @@ public final class TacticalPathfinder {
         return cell != null && (cell.climbable || openSides(level, mover, cell) <= 2);
     }
 
-    private static List<Cell> neighbors(ServerLevel level, Mob mover, Cell current) {
-        List<Cell> result = new ArrayList<>(12);
+    private static void neighbors(ServerLevel level, Mob mover, Cell current, List<Cell> result) {
+        result.clear();
         for (int[] direction : CARDINALS) {
             addHorizontal(level, mover, current, direction[0], direction[1], false, result);
         }
@@ -220,7 +182,6 @@ public final class TacticalPathfinder {
             addClimb(level, mover, current, 1, result);
             addClimb(level, mover, current, -1, result);
         }
-        return result;
     }
 
     private static void addHorizontal(
@@ -340,13 +301,12 @@ public final class TacticalPathfinder {
     ) {
         if (!level.hasChunkAt(floor) || floor.getY() <= level.getMinBuildHeight()
                 || floor.getY() >= level.getMaxBuildHeight() - 2) return null;
-        BlockState state = level.getBlockState(floor);
-        VoxelShape shape = state.getCollisionShape(level, floor, CollisionContext.of(mover));
-        if (shape.isEmpty()) return null;
+        List<AABB> collisionBoxes = TacticalTerrainCache.collisionBoxes(level, mover, floor);
+        if (collisionBoxes.isEmpty()) return null;
 
         AABB chosen = null;
         double chosenDistance = Double.POSITIVE_INFINITY;
-        for (AABB box : shape.toAabbs()) {
+        for (AABB box : collisionBoxes) {
             double width = box.maxX - box.minX;
             double depth = box.maxZ - box.minZ;
             double required = Math.min(0.95D, mover.getBbWidth() * 0.70D);
@@ -392,7 +352,7 @@ public final class TacticalPathfinder {
         for (int x = minX; x <= maxX; x++) {
             for (int y = minY; y <= maxY; y++) {
                 for (int z = minZ; z <= maxZ; z++) {
-                    if (!level.getFluidState(new BlockPos(x, y, z)).isEmpty()) return false;
+                    if (!TacticalTerrainCache.fluidEmpty(level, new BlockPos(x, y, z))) return false;
                 }
             }
         }
@@ -402,99 +362,6 @@ public final class TacticalPathfinder {
     private static AABB destinationBox(Mob mover, Vec3 feet) {
         AABB current = mover.getBoundingBox();
         return current.move(feet.x - mover.getX(), feet.y - mover.getY(), feet.z - mover.getZ());
-    }
-
-    private static Route build(
-            ServerLevel level,
-            Mob mover,
-            Cell end,
-            Cell start,
-            Map<BlockPos, BlockPos> parent,
-            Map<BlockPos, Cell> cells,
-            boolean complete
-    ) {
-        List<Cell> reversed = new ArrayList<>();
-        Cell cursor = end;
-        reversed.add(cursor);
-        while (!cursor.key.equals(start.key)) {
-            BlockPos previous = parent.get(cursor.key);
-            if (previous == null) break;
-            cursor = cells.get(previous);
-            if (cursor == null) break;
-            reversed.add(cursor);
-        }
-        Collections.reverse(reversed);
-        boolean constrained = false;
-        List<Vec3> points = new ArrayList<>(reversed.size());
-        Set<BlockPos> requiredAnchors = new HashSet<>();
-        Cell previous = null;
-        for (int i = 0; i < reversed.size(); i++) {
-            Cell cell = reversed.get(i);
-            int clearance = openSides(level, mover, cell);
-            boolean narrow = cell.climbable;
-            // A broad stair or gentle height change can carry formation slots. Column mode is
-            // reserved for a genuinely pinched route where the full frontage cannot pass.
-            boolean changingLevel = previous != null
-                    && Math.abs(cell.position.y - previous.position.y) > 0.40D;
-            if (!changingLevel && i > 0 && i + 1 < reversed.size() && clearance <= 2) narrow = true;
-            if (narrow) {
-                constrained = true;
-                requiredAnchors.add(cell.key);
-            }
-            previous = cell;
-        }
-        for (Cell cell : simplify(level, mover, reversed, requiredAnchors)) points.add(cell.position);
-        List<Vec3> immutable = List.copyOf(points);
-        return new Route(immutable, complete, constrained,
-                TacticalTerrainRevisions.snapshot(level, immutable));
-    }
-
-    /** Remove grid stair-stepping when a longer straight segment is equally safe. */
-    private static List<Cell> simplify(
-            ServerLevel level, Mob mover, List<Cell> cells, Set<BlockPos> requiredAnchors
-    ) {
-        if (cells.size() < 3) return cells;
-        List<Cell> result = new ArrayList<>();
-        int from = 0;
-        result.add(cells.get(0));
-        while (from < cells.size() - 1) {
-            int best = from + 1;
-            // Bound smoothing work on very long or complex routes. Repeated 48-cell
-            // windows still collapse an open route without turning build() quadratic.
-            int furthest = Math.min(cells.size() - 1, from + 48);
-            for (int candidate = furthest; candidate > from + 1; candidate--) {
-                boolean containsRequiredAnchor = false;
-                for (int i = from + 1; i < candidate; i++) {
-                    if (requiredAnchors.contains(cells.get(i).key)) {
-                        containsRequiredAnchor = true;
-                        break;
-                    }
-                }
-                if (!containsRequiredAnchor && segmentSafe(level, mover,
-                        cells.get(from).position, cells.get(candidate).position)) {
-                    best = candidate;
-                    break;
-                }
-            }
-            result.add(cells.get(best));
-            from = best;
-        }
-        return result;
-    }
-
-    private static boolean segmentSafe(ServerLevel level, Mob mover, Vec3 from, Vec3 to) {
-        double horizontal = Math.hypot(to.x - from.x, to.z - from.z);
-        int samples = Math.max(1, (int) Math.ceil(horizontal / 0.35D));
-        double previousY = from.y;
-        for (int i = 1; i <= samples; i++) {
-            Vec3 probe = from.lerp(to, i / (double) samples);
-            Cell cell = nearestCell(level, mover, probe, 0, 2);
-            if (cell == null || cell.climbable) return false;
-            double change = cell.position.y - previousY;
-            if (change > MAX_STEP_UP || change < -0.60D) return false;
-            previousY = cell.position.y;
-        }
-        return true;
     }
 
     private static int openSides(ServerLevel level, Mob mover, Cell cell) {
@@ -552,6 +419,334 @@ public final class TacticalPathfinder {
 
     private record Cell(BlockPos key, Vec3 position, boolean climbable) {}
     private record SearchNode(Cell cell, double score) {}
+
+    /** Route reconstruction and line-of-sight smoothing retained across scheduler slices. */
+    private static final class RouteBuildSession {
+        private final ServerLevel level;
+        private final Mob mover;
+        private final Cell start;
+        private final Map<BlockPos, BlockPos> parent;
+        private final Map<BlockPos, Cell> cells;
+        private final boolean complete;
+        private final List<Cell> routeCells = new ArrayList<>();
+        private final Set<BlockPos> requiredAnchors = new HashSet<>();
+        private final List<Cell> simplified = new ArrayList<>();
+        private final List<Vec3> points = new ArrayList<>();
+        private final Map<Long, Long> terrainRevisions = new HashMap<>();
+        private Cell cursor;
+        private Cell previous;
+        private int phase;
+        private int scanIndex;
+        private int from;
+        private int candidate = -1;
+        private int finalizeIndex;
+        private boolean constrained;
+        private SegmentProbe segmentProbe;
+        private Route result = Route.EMPTY;
+
+        private RouteBuildSession(
+                ServerLevel level,
+                Mob mover,
+                Cell end,
+                Cell start,
+                Map<BlockPos, BlockPos> parent,
+                Map<BlockPos, Cell> cells,
+                boolean complete
+        ) {
+            this.level = level;
+            this.mover = mover;
+            this.cursor = end;
+            this.start = start;
+            this.parent = parent;
+            this.cells = cells;
+            this.complete = complete;
+            routeCells.add(end);
+        }
+
+        private boolean advance(long deadlineNanos) {
+            if (phase == 0 && !reconstruct(deadlineNanos)) return false;
+            if (phase == 1 && !analyze(deadlineNanos)) return false;
+            if (phase == 2 && !smooth(deadlineNanos)) return false;
+            if (phase == 3 && !finalizeRoute(deadlineNanos)) return false;
+            return phase == 4;
+        }
+
+        private boolean reconstruct(long deadlineNanos) {
+            int work = 0;
+            while (!cursor.key.equals(start.key)) {
+                BlockPos previousKey = parent.get(cursor.key);
+                if (previousKey == null) break;
+                Cell next = cells.get(previousKey);
+                if (next == null) break;
+                cursor = next;
+                routeCells.add(cursor);
+                if ((++work & 31) == 0 && System.nanoTime() >= deadlineNanos) return false;
+            }
+            Collections.reverse(routeCells);
+            phase = 1;
+            return true;
+        }
+
+        private boolean analyze(long deadlineNanos) {
+            while (scanIndex < routeCells.size()) {
+                Cell cell = routeCells.get(scanIndex);
+                int clearance = openSides(level, mover, cell);
+                boolean narrow = cell.climbable;
+                boolean changingLevel = previous != null
+                        && Math.abs(cell.position.y - previous.position.y) > 0.40D;
+                if (!changingLevel && scanIndex > 0 && scanIndex + 1 < routeCells.size() && clearance <= 2) {
+                    narrow = true;
+                }
+                if (narrow) {
+                    constrained = true;
+                    requiredAnchors.add(cell.key);
+                }
+                previous = cell;
+                scanIndex++;
+                if ((scanIndex & 7) == 0 && System.nanoTime() >= deadlineNanos) return false;
+            }
+            if (!routeCells.isEmpty()) simplified.add(routeCells.get(0));
+            phase = 2;
+            return true;
+        }
+
+        private boolean smooth(long deadlineNanos) {
+            if (routeCells.size() < 3) {
+                simplified.clear();
+                simplified.addAll(routeCells);
+                phase = 3;
+                return true;
+            }
+            while (from < routeCells.size() - 1) {
+                if (candidate < 0) candidate = Math.min(routeCells.size() - 1, from + 48);
+                if (candidate <= from + 1) {
+                    accept(from + 1);
+                    continue;
+                }
+                boolean containsAnchor = false;
+                for (int index = from + 1; index < candidate; index++) {
+                    if (requiredAnchors.contains(routeCells.get(index).key)) {
+                        containsAnchor = true;
+                        break;
+                    }
+                }
+                if (containsAnchor) {
+                    candidate--;
+                    continue;
+                }
+                if (segmentProbe == null) {
+                    segmentProbe = new SegmentProbe(routeCells.get(from).position, routeCells.get(candidate).position);
+                }
+                Boolean safe = segmentProbe.advance(level, mover, deadlineNanos);
+                if (safe == null) return false;
+                segmentProbe = null;
+                if (safe) accept(candidate);
+                else candidate--;
+                if (System.nanoTime() >= deadlineNanos) return false;
+            }
+            phase = 3;
+            return true;
+        }
+
+        private void accept(int index) {
+            simplified.add(routeCells.get(index));
+            from = index;
+            candidate = -1;
+            segmentProbe = null;
+        }
+
+        private boolean finalizeRoute(long deadlineNanos) {
+            while (finalizeIndex < simplified.size()) {
+                Vec3 point = simplified.get(finalizeIndex++).position;
+                points.add(point);
+                long region = TacticalTerrainRevisions.regionKey(point);
+                terrainRevisions.putIfAbsent(region,
+                        TacticalTerrainRevisions.revisionForRegion(level, region));
+                if ((finalizeIndex & 31) == 0 && System.nanoTime() >= deadlineNanos) return false;
+            }
+            result = new Route(List.copyOf(points), complete, constrained, Map.copyOf(terrainRevisions));
+            phase = 4;
+            return true;
+        }
+
+        private Route result() {
+            return result;
+        }
+    }
+
+    /** Resumable safety probe used by route smoothing. Null means the current slice expired. */
+    private static final class SegmentProbe {
+        private final Vec3 from;
+        private final Vec3 to;
+        private final int samples;
+        private int index = 1;
+        private double previousY;
+
+        private SegmentProbe(Vec3 from, Vec3 to) {
+            this.from = from;
+            this.to = to;
+            this.samples = Math.max(1, (int) Math.ceil(Math.hypot(to.x - from.x, to.z - from.z) / 0.35D));
+            this.previousY = from.y;
+        }
+
+        private Boolean advance(ServerLevel level, Mob mover, long deadlineNanos) {
+            while (index <= samples) {
+                Vec3 probe = from.lerp(to, index / (double) samples);
+                Cell cell = nearestCell(level, mover, probe, 0, 2);
+                if (cell == null || cell.climbable) return false;
+                double change = cell.position.y - previousY;
+                if (change > MAX_STEP_UP || change < -0.60D) return false;
+                previousY = cell.position.y;
+                index++;
+                if ((index & 3) == 0 && System.nanoTime() >= deadlineNanos) return null;
+            }
+            return true;
+        }
+    }
+
+    /** A* state retained across scheduler ticks so difficult terrain never owns one long server tick. */
+    public static final class SearchSession {
+        private final ServerLevel level;
+        private final Mob mover;
+        private final Vec3 startPosition;
+        private final Vec3 destination;
+        private final int maxVisited;
+        private final PriorityQueue<SearchNode> open = new PriorityQueue<>(Comparator.comparingDouble(SearchNode::score));
+        private final Map<BlockPos, Double> cost = new HashMap<>();
+        private final Map<BlockPos, BlockPos> parent = new HashMap<>();
+        private final Map<BlockPos, Cell> cells = new HashMap<>();
+        private final Set<BlockPos> closed = new HashSet<>();
+        private final List<Cell> neighborBuffer = new ArrayList<>(12);
+        private Cell start;
+        private Cell goal;
+        private Cell closest;
+        private double closestDistance;
+        private int visited;
+        private long searchNanos;
+        private long terrainEpoch;
+        private boolean initialized;
+        private boolean finished;
+        private RouteBuildSession routeBuild;
+        private Route result = Route.EMPTY;
+
+        private SearchSession(ServerLevel level, Mob mover, Vec3 startPosition, Vec3 destination, int maxVisited) {
+            this.level = level;
+            this.mover = mover;
+            this.startPosition = startPosition;
+            this.destination = destination;
+            this.maxVisited = Math.max(128, maxVisited);
+        }
+
+        public boolean advance(long deadlineNanos) {
+            if (finished) return true;
+            RecruitRuntimeMetrics.PATH_SLICES.increment();
+            if (initialized && TacticalTerrainRevisions.epoch(level) != terrainEpoch) {
+                cancelForTerrainChange();
+                return true;
+            }
+            if (routeBuild != null) return advanceBuild(deadlineNanos);
+            long sliceStarted = System.nanoTime();
+            if (!initialized && !initialize()) return true;
+
+            while (!open.isEmpty() && visited < maxVisited) {
+                if ((visited & 3) == 0 && System.nanoTime() >= deadlineNanos) {
+                    searchNanos += System.nanoTime() - sliceStarted;
+                    if (searchNanos >= SEARCH_TIME_BUDGET_NANOS) beginBuild(closest, false);
+                    return finished;
+                }
+                visited++;
+                SearchNode search = open.poll();
+                Cell current = search.cell;
+                if (!closed.add(current.key)) continue;
+                double remaining = heuristic(current, goal);
+                if (remaining < closestDistance) {
+                    closestDistance = remaining;
+                    closest = current;
+                }
+                if (reached(current, goal)) {
+                    searchNanos += System.nanoTime() - sliceStarted;
+                    beginBuild(current, true);
+                    return advanceBuild(deadlineNanos);
+                }
+                neighbors(level, mover, current, neighborBuffer);
+                for (Cell neighbor : neighborBuffer) {
+                    if (closed.contains(neighbor.key)) continue;
+                    double next = cost.get(current.key) + movementCost(level, mover, current, neighbor);
+                    if (next + 1.0E-6D >= cost.getOrDefault(neighbor.key, Double.POSITIVE_INFINITY)) continue;
+                    cost.put(neighbor.key, next);
+                    parent.put(neighbor.key, current.key);
+                    cells.put(neighbor.key, neighbor);
+                    open.add(new SearchNode(neighbor, next + heuristic(neighbor, goal)));
+                }
+            }
+            searchNanos += System.nanoTime() - sliceStarted;
+            beginBuild(closest, false);
+            return advanceBuild(deadlineNanos);
+        }
+
+        private boolean initialize() {
+            initialized = true;
+            if (level == null || mover == null || startPosition == null || destination == null
+                    || !finite(startPosition) || !finite(destination)) {
+                finished = true;
+                return false;
+            }
+            start = nearestCell(level, mover, startPosition, 1, 2);
+            goal = nearestCell(level, mover, destination, 2, 5);
+            if (start == null || goal == null) {
+                finished = true;
+                return false;
+            }
+            cost.put(start.key, 0.0D);
+            cells.put(start.key, start);
+            open.add(new SearchNode(start, heuristic(start, goal)));
+            closest = start;
+            closestDistance = heuristic(start, goal);
+            terrainEpoch = TacticalTerrainRevisions.epoch(level);
+            return true;
+        }
+
+        private void cancelForTerrainChange() {
+            open.clear();
+            cost.clear();
+            parent.clear();
+            cells.clear();
+            closed.clear();
+            neighborBuffer.clear();
+            routeBuild = null;
+            result = Route.EMPTY;
+            finished = true;
+        }
+
+        private void beginBuild(Cell end, boolean complete) {
+            if (finished || routeBuild != null) return;
+            if (end == null || start == null) {
+                finished = true;
+                return;
+            }
+            routeBuild = new RouteBuildSession(level, mover, end, start, parent, cells, complete);
+            open.clear();
+            cost.clear();
+            closed.clear();
+        }
+
+        private boolean advanceBuild(long deadlineNanos) {
+            if (routeBuild == null) return finished;
+            if (!routeBuild.advance(deadlineNanos)) return false;
+            Route route = routeBuild.result();
+            result = route.points().size() > 1 || route.complete() ? route : Route.EMPTY;
+            routeBuild = null;
+            parent.clear();
+            cells.clear();
+            neighborBuffer.clear();
+            finished = true;
+            return true;
+        }
+
+        public boolean finished() { return finished; }
+        public Route result() { return finished ? result : Route.EMPTY; }
+        public int visited() { return visited; }
+    }
 
     public record Route(List<Vec3> points, boolean complete, boolean constrained,
                         Map<Long, Long> terrainRevisions) {

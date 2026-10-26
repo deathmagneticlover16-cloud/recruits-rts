@@ -27,6 +27,9 @@ public final class RecruitRuntimeMetrics {
     public static final LongAdder LOCAL_STEERING_UPDATES = new LongAdder();
     public static final LongAdder RECOVERY_PATHS = new LongAdder();
     public static final LongAdder TERRAIN_INVALIDATIONS = new LongAdder();
+    public static final LongAdder TERRAIN_CACHE_HITS = new LongAdder();
+    public static final LongAdder TERRAIN_CACHE_MISSES = new LongAdder();
+    public static final LongAdder PATH_SLICES = new LongAdder();
 
     private RecruitRuntimeMetrics() {
     }
@@ -91,7 +94,9 @@ public final class RecruitRuntimeMetrics {
                 + " · recoveries=" + RECOVERY_PATHS.sum()
                 + " · local steering=" + LOCAL_STEERING_UPDATES.sum()
                 + " · failures=" + PATH_FAILURES.sum()
-                + " · terrain invalidations=" + TERRAIN_INVALIDATIONS.sum();
+                + " · terrain invalidations=" + TERRAIN_INVALIDATIONS.sum()
+                + " · terrain cache=" + TERRAIN_CACHE_HITS.sum() + "/" + TERRAIN_CACHE_MISSES.sum()
+                + " · path slices=" + PATH_SLICES.sum();
     }
 
     public static void reset() {
@@ -107,6 +112,9 @@ public final class RecruitRuntimeMetrics {
         LOCAL_STEERING_UPDATES.reset();
         RECOVERY_PATHS.reset();
         TERRAIN_INVALIDATIONS.reset();
+        TERRAIN_CACHE_HITS.reset();
+        TERRAIN_CACHE_MISSES.reset();
+        PATH_SLICES.reset();
     }
 
     @SubscribeEvent

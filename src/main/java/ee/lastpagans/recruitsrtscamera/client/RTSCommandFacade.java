@@ -141,8 +141,9 @@ public final class RTSCommandFacade {
     private static Map<UUID, GroupSample> sampleLoadedGroups() {
         Map<UUID, MutableGroupSample> mutable = new HashMap<>();
         var area = MC.player.getBoundingBox().inflate(CARD_SCAN_RADIUS, CARD_SCAN_RADIUS, CARD_SCAN_RADIUS);
-        for (AbstractRecruitEntity recruit : MC.level.getEntitiesOfClass(AbstractRecruitEntity.class, area)) {
-            if (recruit == null || !recruit.isAlive() || !recruit.isOwnedBy(MC.player)) {
+        for (AbstractRecruitEntity recruit : RTSCameraController.commanderLoadedOwnedRecruits()) {
+            if (recruit == null || !recruit.isAlive() || !recruit.isOwnedBy(MC.player)
+                    || !area.intersects(recruit.getBoundingBox())) {
                 continue;
             }
             UUID groupId = recruit.getGroup();
@@ -162,7 +163,8 @@ public final class RTSCommandFacade {
         if (MC.player == null || MC.level == null) return List.of();
         Map<UUID, MutableEnemySample> groups = new HashMap<>();
         var area = MC.player.getBoundingBox().inflate(CARD_SCAN_RADIUS, CARD_SCAN_RADIUS, CARD_SCAN_RADIUS);
-        for (AbstractRecruitEntity recruit : MC.level.getEntitiesOfClass(AbstractRecruitEntity.class, area)) {
+        for (var entity : RTSCameraController.commanderLoadedLivingEntities()) {
+            if (!(entity instanceof AbstractRecruitEntity recruit) || !area.intersects(recruit.getBoundingBox())) continue;
             if (recruit == null || !recruit.isAlive() || recruit.getGroup() == null) continue;
             if (MC.player.getUUID().equals(recruit.getOwnerUUID()) || MC.player.isAlliedTo(recruit)) continue;
             groups.computeIfAbsent(recruit.getGroup(), ignored -> new MutableEnemySample()).add(recruit);

@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.17.0-server.1
+Stage-two rendering and stage-three navigation optimization
+
+- Added one immutable client battlefield snapshot per game tick. Friendly group sampling, cursor ray targets, fog vision, enemy banners and card data now share loaded-entity inputs instead of issuing overlapping world scans.
+- Tactical routes, facing arrows and slot decals now retain their scene and precomputed world geometry between updates. Fog cells retain their back-to-front order until the sampled camera cell changes instead of sorting every rendered frame.
+- Added resumable A* searches for formation and member routes. Search, route reconstruction and collision-safe smoothing run through 1.5 ms task slices under an 8 ms global server-tick work budget; difficult routes may safely continue on later ticks.
+- Added a one-tick terrain cache shared across route sessions and formation members for collision-shape and fluid samples. Dynamic entity collision remains a live final check, and block-region revisions still invalidate affected routes.
+- Reused A* neighbor storage and exposed terrain-cache/path-slice counters in runtime diagnostics. Hard routes keep the existing 20 ms cumulative search ceiling before producing a safe partial continuation.
+- Static performance review found the remaining largest scaling costs in group-local combat proximity scans, fog quad emission, and repeated cavalry victim/threat queries. These are isolated for the later group-spatial-index and fog-raster stage rather than mixed into this release.
+- Network protocol remains rts-camera-158 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.17.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.16.0-server.3
 Immersive Paintings startup correction
 
