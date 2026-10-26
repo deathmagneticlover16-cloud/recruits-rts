@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.17.1-server.1
+Troop-wide statistic definitions
+
+- Formalized Damage, Melee Skill, Melee Defence, Charge Bonus, Speed, Morale, Fatigue, Accuracy, Ammunition and Rate of Fire as a public troop-wide schema with stable `stat.*` IDs, names, descriptions, defaults, display ranges and higher-is-better metadata.
+- Added ID lookup and clamping helpers for the planned UI editor and future data-driven balance integrations. Neutral profiles now contain meaningful display-scale defaults instead of multiplier-shaped placeholder values.
+- Hovering any row in the middle-right unit inspector now displays its full description. Morale supports the declared 0–110 display range for future exceptional-leadership bonuses.
+- These definitions remain gameplay-inert as originally requested. Existing morale, fatigue, movement and combat behavior are unchanged until the statistic balance layer is implemented explicitly.
+- Added matching English translation keys for all statistic names and descriptions.
+- Network protocol remains rts-camera-158 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.17.1-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.17.0-server.1
 Stage-two rendering and stage-three navigation optimization
 

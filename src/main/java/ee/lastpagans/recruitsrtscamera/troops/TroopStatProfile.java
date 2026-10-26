@@ -17,7 +17,7 @@ public final class TroopStatProfile {
     }
 
     public double value(TroopStatistic statistic) {
-        return values.getOrDefault(statistic, 1.0D);
+        return statistic == null ? 0.0D : values.getOrDefault(statistic, statistic.defaultValue());
     }
 
     public Map<TroopStatistic, Double> values() {
@@ -30,12 +30,14 @@ public final class TroopStatProfile {
         private final EnumMap<TroopStatistic, Double> values = new EnumMap<>(TroopStatistic.class);
 
         private Builder() {
-            for (TroopStatistic statistic : TroopStatistic.values()) values.put(statistic, 1.0D);
+            for (TroopStatistic statistic : TroopStatistic.values()) {
+                values.put(statistic, statistic.defaultValue());
+            }
         }
 
         public Builder set(TroopStatistic statistic, double value) {
             if (statistic == null || !Double.isFinite(value)) throw new IllegalArgumentException("Invalid troop statistic");
-            values.put(statistic, value);
+            values.put(statistic, statistic.clamp(value));
             return this;
         }
 

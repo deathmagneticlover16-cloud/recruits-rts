@@ -74,6 +74,7 @@ runtime_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime
 doctrine = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationDoctrineManager.java")
 terrain_cache = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/TacticalTerrainCache.java")
 fog_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/FogOfWarWorldRenderer.java")
+language = source("src/main/resources/assets/recruits_rts_camera/lang/en_us.json")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -396,9 +397,20 @@ require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 8_000_000L",
         "recovery paths need an aggregate tick-time guard during initial cohesion")
 require(overlay, "COMMAND_CAVALRY_WEDGE", "cavalry wedge needs a stable command-bar element")
 require(overlay, "bodyguardFollow, cavalryWedge", "cavalry wedge must be the right-most command")
-for key in ("DAMAGE", "MELEE_SKILL", "MELEE_DEFENCE", "CHARGE_BONUS", "SPEED", "MORALE",
-            "FATIGUE", "ACCURACY", "AMMUNITION", "RATE_OF_FIRE"):
-    require(stats, key + "(\"stat.", "all ten troop-wide statistics must have stable IDs")
+for stat_id in ("stat.damage", "stat.melee_skill", "stat.melee_defence", "stat.charge_bonus", "stat.speed",
+                "stat.morale", "stat.fatigue", "stat.accuracy", "stat.ammunition", "stat.rate_of_fire"):
+    require(stats, '"' + stat_id + '"', "all ten troop-wide statistics must have stable IDs")
+require(stats, "public String description()", "troop statistics must expose their documented meaning")
+require(stats, "public static TroopStatistic fromId", "future editors need stable statistic lookup by semantic ID")
+require(stats, '50.0D, 110.0D, true', "morale metadata must expose its exceptional-leadership ceiling")
+require(stats, "they do not apply new combat modifiers by themselves",
+        "stat metadata must remain inert until gameplay balancing is explicitly implemented")
+require(overlay, "renderTroopStatisticTooltip", "the unit inspector must expose stat descriptions")
+require(overlay, "statistic.maximum()", "stat progress bars must respect per-stat display ranges")
+for stat_id in ("damage", "melee_skill", "melee_defence", "charge_bonus", "speed", "morale",
+                "fatigue", "accuracy", "ammunition", "rate_of_fire"):
+    require(language, '"recruits_rts_camera.stat.' + stat_id + '.description"',
+            "each troop statistic needs a localizable description")
 require(stat_registry, "Map<UUID, TroopStatProfile>", "statistics must be stored per troop group")
 require(battle, "FATIGUE_GAIN_SCALE = 1.0D / 2.3D", "battle fatigue growth must be 2.3x slower")
 require(battle, "ROUTING_MORALE = 4.0F", "ordinary rout susceptibility must be halved")
@@ -507,6 +519,6 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
 require(network, 'PROTOCOL = "rts-camera-158"', "group flag packets require protocol 158")
-require(source("gradle.properties"), "mod_version=0.17.0-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.17.1-server.1", "semantic version must be updated")
 
-print("0.17.0-server.1 source contracts passed")
+print("0.17.1-server.1 source contracts passed")

@@ -497,12 +497,19 @@ public final class CommanderOverlay {
                 panel.width() - 16, 0xFFFFE8AC);
 
         int rowY = panel.y1() + 22;
+        TroopStatistic hoveredStatistic = null;
+        int mouseX = guiMouseX();
+        int mouseY = guiMouseY();
         for (TroopStatistic statistic : TroopStatistic.values()) {
             float value = hoveredStatValue(hovered, statistic);
             renderHoveredStatRow(graphics, hovered.groupId(), statistic, value,
                     panel.x1() + 8, rowY);
+            Bounds row = new Bounds(panel.x1() + 8, rowY,
+                    panel.x2() - 8, rowY + HOVER_STAT_BAR_HEIGHT);
+            if (RTSCommandFacade.commandCursor() && row.contains(mouseX, mouseY)) hoveredStatistic = statistic;
             rowY += HOVER_STAT_BAR_HEIGHT + HOVER_STAT_ROW_GAP;
         }
+        if (hoveredStatistic != null) renderTroopStatisticTooltip(graphics, hoveredStatistic);
     }
 
     private static void renderHoveredStatRow(
@@ -513,8 +520,9 @@ public final class CommanderOverlay {
             int x,
             int y
     ) {
-        float clamped = Math.max(0.0F, Math.min(100.0F, value));
-        int fill = Math.round((HOVER_STAT_BAR_WIDTH - 2) * clamped / 100.0F);
+        float maximum = (float) statistic.maximum();
+        float clamped = (float) statistic.clamp(value);
+        int fill = Math.round((HOVER_STAT_BAR_WIDTH - 2) * clamped / maximum);
         graphics.fill(x, y, x + HOVER_STAT_BAR_WIDTH, y + HOVER_STAT_BAR_HEIGHT, 0xFF292824);
         graphics.fill(x + 1, y + 1, x + 1 + fill, y + HOVER_STAT_BAR_HEIGHT - 1,
                 hoveredStatColor(statistic, clamped));
@@ -574,18 +582,27 @@ public final class CommanderOverlay {
     }
 
     private static String hoveredStatLabel(TroopStatistic statistic) {
-        return switch (statistic) {
-            case DAMAGE -> "Damage";
-            case MELEE_SKILL -> "Melee Skill";
-            case MELEE_DEFENCE -> "Melee Defence";
-            case CHARGE_BONUS -> "Charge Bonus";
-            case SPEED -> "Speed";
-            case MORALE -> "Morale";
-            case FATIGUE -> "Fatigue";
-            case ACCURACY -> "Accuracy";
-            case AMMUNITION -> "Ammunition";
-            case RATE_OF_FIRE -> "Rate of Fire";
-        };
+        return statistic.displayName();
+    }
+
+    private static void renderTroopStatisticTooltip(GuiGraphics graphics, TroopStatistic statistic) {
+        int maximumWidth = 220;
+        List<net.minecraft.util.FormattedCharSequence> description = MC.font.split(
+                net.minecraft.network.chat.Component.literal(statistic.description()), maximumWidth);
+        int width = MC.font.width(statistic.displayName());
+        for (net.minecraft.util.FormattedCharSequence line : description) width = Math.max(width, MC.font.width(line));
+        width += 10;
+        int height = 16 + description.size() * 10;
+        int x = Math.max(4, Math.min(guiMouseX() + 8, virtualGuiWidth() - width - 4));
+        int y = Math.max(4, Math.min(guiMouseY() - height - 8, virtualGuiHeight() - height - 4));
+        graphics.fill(x, y, x + width, y + height, 0xF011110F);
+        drawBorder(graphics, new Bounds(x, y, x + width, y + height), 0xFF8F825C);
+        graphics.drawString(MC.font, statistic.displayName(), x + 5, y + 4, GOLD, false);
+        int lineY = y + 14;
+        for (net.minecraft.util.FormattedCharSequence line : description) {
+            graphics.drawString(MC.font, line, x + 5, lineY, TEXT, false);
+            lineY += 10;
+        }
     }
 
     private static int hoveredStatColor(TroopStatistic statistic, float value) {
