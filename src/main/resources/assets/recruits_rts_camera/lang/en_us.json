@@ -25,7 +25,7 @@
   "recruits_rts_camera.stat.charge_bonus": "Charge Bonus",
   "recruits_rts_camera.stat.charge_bonus.description": "Determines the additional damage and morale shock inflicted when charging into an enemy.",
   "recruits_rts_camera.stat.speed": "Speed",
-  "recruits_rts_camera.stat.speed.description": "Determines how quickly a soldier moves. Affected by fatigue, terrain, equipment and formations.",
+  "recruits_rts_camera.stat.speed.description": "Current movement capability after mount, armor, inventory load, fatigue, formation and other active speed modifiers.",
   "recruits_rts_camera.stat.morale": "Morale",
   "recruits_rts_camera.stat.morale.description": "Determines a soldier's willingness to continue fighting. Ranges from 0 to 100, potentially reaching 110 with exceptional leadership; at 0, the soldier routes.",
   "recruits_rts_camera.stat.fatigue": "Fatigue",

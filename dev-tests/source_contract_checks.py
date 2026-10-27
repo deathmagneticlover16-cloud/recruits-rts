@@ -67,6 +67,7 @@ scheduler = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/Recrui
 stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
 stat_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatService.java")
+equipment_compat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TroopEquipmentCompat.java")
 battle = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/BattleMechanicsManager.java")
 routing = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/RoutedGroupManager.java")
 world_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalWorldRenderer.java")
@@ -424,6 +425,20 @@ require(stat_service, "fatigueGainMultiplier", "carried load must increase fatig
 require(stat_service, "fatigueRecoveryMultiplier", "carried load must slow fatigue recovery")
 require(stat_service, "LivingAttackEvent", "melee skill and defence must resolve real melee hit chances")
 require(stat_service, "projectile.setDeltaMovement", "accuracy must affect real recruit projectiles")
+require(stat_service, "movement.getValue() * 200.0D",
+        "speed must use the controlled entity's effective current movement attribute")
+require(stat_service, "TroopEquipmentCompat.equippedCombatWeapon(recruit)",
+        "live stats must follow weapons parked in a recruit's offhand")
+require(equipment_compat, '"musketmod"', "Musket Mod must have direct optional integration")
+require(equipment_compat, '"magistuarmory", "slavicarmory", "darkagesarmory", "magistuarmoryaddon", "antiquelegacy"',
+        "all supplied Epic Knights modules must share direct equipment integration")
+for method in ("damage", "bulletStdDev", "getLoadingDuration", "getWeight"):
+    require(equipment_compat, '"' + method + '"', "equipment integration must read live " + method)
+require(equipment_compat, "isMusketGun(off)", "Musket Rest offhand parking must remain visible to stats")
+for mod_id in ("musketmod", "musketrestposition", "magistuarmory", "slavicarmory", "darkagesarmory",
+               "magistuarmoryaddon", "antiquelegacy"):
+    require(source("src/main/resources/META-INF/mods.toml"), 'modId="' + mod_id + '"',
+            "supplied equipment integration needs optional load ordering for " + mod_id)
 require(cavalry_combat, "TroopStatService.chargeMultiplier(rider)",
         "charge bonus must affect cavalry impact damage and morale shock")
 require(tactical, "TroopStatService.chargeMultiplier(attacker)",
@@ -541,6 +556,6 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
 require(network, 'PROTOCOL = "rts-camera-159"', "live troop-stat packet changes require protocol 159")
-require(source("gradle.properties"), "mod_version=0.18.0-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.18.1-server.1", "semantic version must be updated")
 
-print("0.18.0-server.1 source contracts passed")
+print("0.18.1-server.1 source contracts passed")

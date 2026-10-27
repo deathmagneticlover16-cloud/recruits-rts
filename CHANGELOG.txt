@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.18.1-server.1
+Live speed and supplied equipment integration
+
+- Speed now reads the controlled recruit or mount's effective movement-speed attribute after all current modifiers. This includes RTS pace, fatigue, formation doctrine, inventory encumbrance, equipment attributes and Armor Weight v1.1's exact -1.275 percent per armor-point modifier; mounted readings include its combined rider-and-mount penalty.
+- Added direct, optional integration for Epic Knights 10.15, Slavic Armory 2.1, Dark Ages 1.1, Epic Knights Addon 2.6 and Antique Legacy 1.13. Their standard armor attributes feed defence and Armor Weight, their weapon attributes feed live damage, and configured Epic Knights weapon/shield kilogram values feed inventory encumbrance.
+- Added direct Musket Mod 1.5.4 statistics. Damage reads the installed mod's configured `GunItem.damage()`, accuracy reads its configured bullet deviation, rate of fire reads its configured staged reload duration including Quick Charge, cartridges count as ammunition, and muskets receive appropriate carried weights.
+- Added Musket Rest Position 0.1.1 awareness. When that mod parks a crossbowman's long gun in the offhand, the inspector continues using the gun for Damage, Accuracy and Rate of Fire instead of reporting the empty main hand.
+- Expanded the Speed display ceiling to retain differences between fast cavalry and heavily boosted troops instead of flattening them at 100.
+- Network protocol remains rts-camera-159 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.18.1-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.18.0-server.1
 Live troop statistics and inventory encumbrance
 

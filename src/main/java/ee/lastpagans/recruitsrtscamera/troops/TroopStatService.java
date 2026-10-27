@@ -5,6 +5,7 @@ import com.talhanation.recruits.entities.BowmanEntity;
 import com.talhanation.recruits.entities.CrossBowmanEntity;
 import com.talhanation.recruits.entities.NomadEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
+import ee.lastpagans.recruitsrtscamera.compat.TroopEquipmentCompat;
 import ee.lastpagans.recruitsrtscamera.combat.RangedWeaponEligibility;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.formation.FormationKind;
@@ -115,10 +116,12 @@ public final class TroopStatService {
     private static TroopStatProfile liveProfile(
             AbstractRecruitEntity recruit, double fatigue, int ammunition, LivingEntity carrier
     ) {
-        ItemStack weapon = recruit.getMainHandItem();
+        ItemStack weapon = TroopEquipmentCompat.equippedCombatWeapon(recruit);
         double level = Math.max(0, recruit.getXpLevel());
         double damage = recruit.getAttackDamage();
-        if (weapon.getItem() instanceof BowItem) damage = 6.0D;
+        double integratedDamage = TroopEquipmentCompat.rangedDamage(weapon);
+        if (Double.isFinite(integratedDamage)) damage = integratedDamage;
+        else if (weapon.getItem() instanceof BowItem) damage = 6.0D;
         else if (weapon.getItem() instanceof CrossbowItem) damage = 9.0D;
         else if (weapon.getItem() instanceof TridentItem) damage = 8.0D;
 
@@ -132,6 +135,8 @@ public final class TroopStatService {
                 && FormationService.activeKind(levelServer, recruit.getGroup()) == FormationKind.CAVALRY_WEDGE) {
             charge += 17.0D;
         }
+        // getValue() includes every current modifier: RTS pace, formation doctrine, fatigue,
+        // inventory encumbrance, Epic Knights equipment attributes and Armor Weight v1.1.
         AttributeInstance movement = carrier.getAttribute(Attributes.MOVEMENT_SPEED);
         double speed = movement == null ? 0.0D : movement.getValue() * 200.0D;
         double accuracy = rangedAccuracy(recruit, weapon, fatigue, level);
@@ -152,13 +157,17 @@ public final class TroopStatService {
 
     private static double rangedAccuracy(AbstractRecruitEntity recruit, ItemStack weapon, double fatigue, double level) {
         if (!RangedWeaponEligibility.hasRangedWeapon(recruit)) return 0.0D;
-        double base = weapon.getItem() instanceof CrossbowItem ? 68.0D
+        double integrated = TroopEquipmentCompat.rangedAccuracy(weapon);
+        double base = Double.isFinite(integrated) ? integrated
+                : weapon.getItem() instanceof CrossbowItem ? 68.0D
                 : weapon.getItem() instanceof BowItem ? 62.0D
                 : weapon.getItem() instanceof TridentItem ? 55.0D : 48.0D;
         return base + Math.min(24.0D, level * 2.5D) - fatigue * 0.20D;
     }
 
     private static double rangedRate(ItemStack weapon) {
+        double integrated = TroopEquipmentCompat.rangedRateOfFire(weapon);
+        if (Double.isFinite(integrated)) return integrated;
         return weapon.getItem() instanceof BowItem ? 72.0D
                 : weapon.getItem() instanceof CrossbowItem ? 44.0D
                 : weapon.getItem() instanceof TridentItem ? 34.0D : 0.0D;
@@ -196,6 +205,8 @@ public final class TroopStatService {
         if (stack.is(RTSTags.ENCUMBRANCE_LIGHT)) return count * 0.05D;
         if (stack.is(RTSTags.ENCUMBRANCE_HEAVY)) return count * 1.0D;
         if (stack.is(RTSTags.ENCUMBRANCE_VERY_HEAVY)) return count * 2.5D;
+        double integratedWeight = TroopEquipmentCompat.explicitEquipmentWeight(stack);
+        if (Double.isFinite(integratedWeight)) return count * integratedWeight;
         Item item = stack.getItem();
         if (stack.is(ItemTags.ARROWS) || isNamedAmmunition(stack)) return count * 0.04D;
         if (item instanceof ArmorItem armor) return count * (1.5D + armor.getDefense() * 1.15D);
@@ -217,7 +228,7 @@ public final class TroopStatService {
 
     private static boolean isAmmunition(ItemStack stack) {
         return stack.is(ItemTags.ARROWS) || isNamedAmmunition(stack)
-                || stack.is(RTSTags.THROWABLE_WEAPONS);
+                || stack.is(RTSTags.THROWABLE_WEAPONS) || TroopEquipmentCompat.isMusketCartridge(stack);
     }
 
     private static boolean isNamedAmmunition(ItemStack stack) {

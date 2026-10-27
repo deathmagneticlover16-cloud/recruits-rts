@@ -25,8 +25,8 @@ public enum TroopStatistic {
             30.0D, 100.0D, true),
     SPEED(
             "stat.speed", "Speed",
-            "Determines how quickly a soldier moves. Affected by fatigue, terrain, equipment and formations.",
-            50.0D, 100.0D, true),
+            "Current movement capability after mount, armor, inventory load, fatigue, formation and other active speed modifiers.",
+            60.0D, 160.0D, true),
     MORALE(
             "stat.morale", "Morale",
             "Determines a soldier's willingness to continue fighting. Ranges from 0 to 100, potentially reaching 110 with exceptional leadership; at 0, the soldier routes.",

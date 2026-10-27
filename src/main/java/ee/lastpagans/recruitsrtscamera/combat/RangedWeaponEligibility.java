@@ -5,6 +5,7 @@ import com.talhanation.recruits.entities.BowmanEntity;
 import com.talhanation.recruits.entities.CrossBowmanEntity;
 import com.talhanation.recruits.entities.NomadEntity;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
+import ee.lastpagans.recruitsrtscamera.compat.TroopEquipmentCompat;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
@@ -31,6 +32,7 @@ public final class RangedWeaponEligibility {
 
     private static boolean isRangedWeapon(ItemStack stack) {
         return stack != null && !stack.isEmpty() && (stack.getItem() instanceof ProjectileWeaponItem
-                || stack.getItem() instanceof TridentItem || stack.is(RTSTags.THROWABLE_WEAPONS));
+                || stack.getItem() instanceof TridentItem || stack.is(RTSTags.THROWABLE_WEAPONS)
+                || TroopEquipmentCompat.isMusketGun(stack));
     }
 }
