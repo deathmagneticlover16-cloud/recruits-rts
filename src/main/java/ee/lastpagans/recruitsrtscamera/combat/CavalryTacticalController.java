@@ -108,6 +108,16 @@ public final class CavalryTacticalController {
         if (!eligible(s.rider)) return;
         s.rider.setFollowState(3); s.rider.reachedMovePos = false; s.mount.setTarget(null);
         Vec3 liveTarget = valid(s.rider, s.target) ? targetPosition(s) : null;
+        if (s.committedMelee) {
+            if (liveTarget == null) return;
+            CommanderAnimationHints.updateMovement(s.rider, true, false);
+            BlockPos ground = FormationUtils.getPositionOrSurface((ServerLevel) s.rider.level(),
+                    BlockPos.containing(liveTarget.x, s.mount.getY(), liveTarget.z));
+            s.mount.getNavigation().moveTo(liveTarget.x, ground.getY(), liveTarget.z, 0.92D);
+            matchRiderAndMountFacing(s, point(liveTarget));
+            attack(s);
+            return;
+        }
         if (liveTarget == null && s.maneuver.phase() == CavalryManeuver.Phase.REFORM) {
             s.mount.getNavigation().stop();
             return;
@@ -224,7 +234,10 @@ public final class CavalryTacticalController {
     private static void attack(State s) {
         if (valid(s.rider, s.target)) {
             double reach = AttackUtil.getAttackReachSqr(s.rider), distance = s.rider.distanceToSqr(s.target);
-            if (distance <= Math.max(reach, 12.25)) AttackUtil.checkAndPerformAttack(distance, reach, s.rider, s.target);
+            if (distance <= Math.max(reach, 12.25)) {
+                AttackUtil.checkAndPerformAttack(distance, reach, s.rider, s.target);
+                if (distance <= Math.max(reach, 6.25D)) s.committedMelee = true;
+            }
         }
     }
     private static final class State {
@@ -247,6 +260,7 @@ public final class CavalryTacticalController {
         boolean hasAppliedHeading;
         long refreshed;
         boolean active;
+        boolean committedMelee;
         State(AbstractRecruitEntity rider, AbstractHorse mount) {
             this.rider = rider; this.mount = mount; this.goal = new CavalryGoal(this);
             this.mountGoal = new MountControlGoal(this);

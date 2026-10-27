@@ -1,6 +1,7 @@
 package ee.lastpagans.recruitsrtscamera.network;
 
 import ee.lastpagans.recruitsrtscamera.server.BodyguardManager;
+import ee.lastpagans.recruitsrtscamera.server.BattlefieldVisibilityManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
@@ -20,6 +21,7 @@ public record RTSModeStatePacket(boolean active) {
         NetworkEvent.Context context = supplier.get();
         context.enqueueWork(() -> {
             var sender = context.getSender();
+            BattlefieldVisibilityManager.reset(sender);
             BodyguardManager.setRtsActive(sender, packet.active);
             if (packet.active && sender != null) {
                 RTSCameraNetwork.CHANNEL.send(

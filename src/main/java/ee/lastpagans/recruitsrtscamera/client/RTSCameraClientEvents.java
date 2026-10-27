@@ -1,5 +1,7 @@
 package ee.lastpagans.recruitsrtscamera.client;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.advisor.AdvisorClient;
 import net.minecraft.client.gui.components.EditBox;
@@ -11,6 +13,7 @@ import net.minecraftforge.client.event.CustomizeGuiOverlayEvent;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.client.event.RenderGuiOverlayEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
+import net.minecraftforge.client.event.RenderLivingEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
@@ -19,6 +22,7 @@ import net.minecraftforge.fml.common.Mod;
 
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class RTSCameraClientEvents {
+    private static boolean fadingRecruit;
     private RTSCameraClientEvents() {
     }
 
@@ -30,6 +34,7 @@ public final class RTSCameraClientEvents {
         if (event.phase == TickEvent.Phase.END) {
             RTSCameraController.clientTick();
             MountedFacingClient.tick();
+            ClientEnemyVisibilityState.tick();
             CavalryRumbleClient.tick();
             AdvisorClient.tick();
             InputGate.suppressDisallowedKeyMappings();
@@ -82,6 +87,7 @@ public final class RTSCameraClientEvents {
         ClientCommanderState.reset();
         ClientBattleState.reset();
         ClientTactics.reset();
+        ClientEnemyVisibilityState.clear();
         AdvisorClient.reset();
         CavalryRumbleClient.reset();
         FogOfWarWorldRenderer.reset();
@@ -116,6 +122,31 @@ public final class RTSCameraClientEvents {
     public static void onRenderLevel(RenderLevelStageEvent event) {
         TacticalWorldRenderer.render(event);
         FogOfWarWorldRenderer.render(event);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onRenderLivingPre(RenderLivingEvent.Pre<?, ?> event) {
+        fadingRecruit = false;
+        if (!RTSCameraController.isActive() || !(event.getEntity() instanceof AbstractRecruitEntity recruit)
+                || recruit.getGroup() == null || net.minecraft.client.Minecraft.getInstance().player == null) return;
+        var player = net.minecraft.client.Minecraft.getInstance().player;
+        if (player.getUUID().equals(recruit.getOwnerUUID()) || player.isAlliedTo(recruit)) return;
+        float alpha = ClientEnemyVisibilityState.alpha(recruit.getGroup());
+        if (alpha <= 0.001F) {
+            event.setCanceled(true);
+        } else if (alpha < 0.999F) {
+            RenderSystem.enableBlend();
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, alpha);
+            fadingRecruit = true;
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onRenderLivingPost(RenderLivingEvent.Post<?, ?> event) {
+        if (fadingRecruit) {
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+            fadingRecruit = false;
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)

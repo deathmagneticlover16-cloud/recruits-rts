@@ -284,8 +284,8 @@ require(movement, "replacement.currentStep = previous.currentStep",
         "Walk-to-Run must carry the current anchor speed across mode replacement")
 require(movement, "TacticalCombatManager.chargeAcceleration(recruit)",
         "mounted charges must progressively accelerate")
-require(tactical, "return 1.10D + 0.30D * progress;",
-        "melee charges must snowball to a bounded speed bonus")
+require(tactical, "return 1.10D + 0.30D * exponential;",
+        "melee charges must snowball to a bounded exponential speed bonus")
 require(tactical, "rearImpact(attacker, victim) ? 2.0D : 1.0D",
         "rear charge impacts must apply double morale shock")
 require(cavalry_combat, "TacticalCombatManager.rearImpact(rider, victim) ? 2.0D : 1.0D",
@@ -570,7 +570,20 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
         "native cavalry combat must cap the horse speed modifier at 1.25x")
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
-require(network, 'PROTOCOL = "rts-camera-159"', "live troop-stat packet changes require protocol 159")
-require(source("gradle.properties"), "mod_version=0.19.0-server.1", "semantic version must be updated")
+visibility = source("src/main/java/ee/lastpagans/recruitsrtscamera/server/RTSVision.java")
+visibility_sync = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/EnemyVisibilitySyncPacket.java")
+client_visibility = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/ClientEnemyVisibilityState.java")
+require(visibility, "ClipContext.Block.COLLIDER", "terrain must occlude hostile formation sight")
+require(visibility, "BlockTags.LEAVES", "dense brush must conceal hostile formations")
+require(visibility, "BRUSH_REVEAL_RADIUS", "brush concealment must break at close identification range")
+require(visibility_sync, "Map<UUID, Boolean>", "the server must synchronize per-formation visibility")
+require(client_visibility, "FADE_OUT_PER_TICK", "lost contacts must fade instead of popping out")
+require(overlay, "ClientEnemyVisibilityState.targetable", "hidden enemy banners must not remain targetable")
+require(cavalry_combat, "equippedMeleeDamage", "cavalry impact must include its equipped weapon")
+require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measured travel speed")
+require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
+require(stat_service, "movementPenalty /= 1.75D", "mounted carried weight impact must be 1.75x lower")
+require(network, 'PROTOCOL = "rts-camera-160"', "visibility synchronization requires protocol 160")
+require(source("gradle.properties"), "mod_version=0.20.0-server.1", "semantic version must be updated")
 
-print("0.19.0-server.1 source contracts passed")
+print("0.20.0-server.1 source contracts passed")

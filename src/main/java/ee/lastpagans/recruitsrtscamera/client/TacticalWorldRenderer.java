@@ -273,7 +273,7 @@ public final class TacticalWorldRenderer {
             GroupFlagClientState.FlagTexture custom = GroupFlagClientState.texture(view.groupId());
             flags.add(new FlagView(view.groupId(), anchor.position, view.selected(), false,
                     custom == null ? BETSY_ROSS : custom.location(),
-                    custom == null ? 1.5D : custom.aspectRatio()));
+                    custom == null ? 1.5D : custom.aspectRatio(), 1.0F));
         }
         if (CommanderOverlay.worldEnemyBannersVisible()) {
             for (RTSCommandFacade.EnemyBannerView view : RTSCommandFacade.enemyBanners()) {
@@ -284,7 +284,7 @@ public final class TacticalWorldRenderer {
                 GroupFlagClientState.FlagTexture custom = GroupFlagClientState.texture(view.groupId());
                 flags.add(new FlagView(view.groupId(), anchor.position, false, true,
                         custom == null ? BETSY_ROSS : custom.location(),
-                        custom == null ? 1.5D : custom.aspectRatio()));
+                        custom == null ? 1.5D : custom.aspectRatio(), view.visibilityAlpha()));
             }
         }
         java.util.Set<UUID> visible = flags.stream().map(FlagView::id).collect(java.util.stream.Collectors.toSet());
@@ -315,7 +315,8 @@ public final class TacticalWorldRenderer {
         double height = 1.8D * scale;
         double width = height * flag.aspectRatio;
         Vec3 clothCenter = flag.position;
-        int color = flag.enemy ? 0xE8FFB8B8 : flag.selected ? 0xFFFFFFFF : 0xE8E8E8E8;
+        int color = scaledAlpha(flag.enemy ? 0xE8FFB8B8 : flag.selected ? 0xFFFFFFFF : 0xE8E8E8E8,
+                flag.visibilityAlpha);
         double time = (MC.level.getGameTime() + MC.getFrameTime()) * 0.12D;
         int strips = 8;
         for (int i = 0; i < strips; i++) {
@@ -398,6 +399,7 @@ public final class TacticalWorldRenderer {
             boolean selected,
             boolean enemy,
             ResourceLocation texture,
-            double aspectRatio
+            double aspectRatio,
+            float visibilityAlpha
     ) { }
 }

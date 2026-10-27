@@ -124,7 +124,7 @@ public final class TacticalCombatManager {
         }
     }
 
-    /** A sustained charge grows from +10% to +40% over twelve seconds. */
+    /** Infantry and cavalry share a bounded exponential charge build-up over twelve seconds. */
     public static double chargeAcceleration(AbstractRecruitEntity recruit) {
         if (recruit == null || recruit.getGroup() == null || !(recruit.level() instanceof ServerLevel level)) return 1.0D;
         long now = level.getGameTime();
@@ -132,7 +132,8 @@ public final class TacticalCombatManager {
         if (until <= now) return 1.0D;
         long elapsed = Math.max(0L, CHARGE_ORDER_TICKS - (until - now));
         double progress = Math.min(1.0D, elapsed / (20.0D * 12.0D));
-        return 1.10D + 0.30D * progress;
+        double exponential = Math.expm1(3.0D * progress) / Math.expm1(3.0D);
+        return 1.10D + 0.30D * exponential;
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)

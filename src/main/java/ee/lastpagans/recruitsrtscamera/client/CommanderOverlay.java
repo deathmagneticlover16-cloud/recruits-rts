@@ -668,8 +668,10 @@ public final class CommanderOverlay {
             for (RTSCommandFacade.EnemyBannerView view : RTSCommandFacade.enemyBanners()) {
                 Bounds bounds = bannerBounds(view.centerX(), view.anchorY(), view.centerZ(), layout);
                 if (bounds == null) continue;
+                com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, view.visibilityAlpha());
                 drawStaticBanner(graphics, bounds.x1(), bounds.y1(), view.unitType(),
                         view.teamColorIndex(), legacyTrimRow(view.teamColorIndex()));
+                com.mojang.blaze3d.systems.RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
             }
         }
 
@@ -774,6 +776,7 @@ public final class CommanderOverlay {
         }
         if (enemyBannersVisible()) {
             for (RTSCommandFacade.EnemyBannerView view : RTSCommandFacade.enemyBanners()) {
+                if (!ClientEnemyVisibilityState.targetable(view.groupId())) continue;
                 Bounds bounds = bannerBounds(view.centerX(), view.anchorY(), view.centerZ(), layout);
                 if (bounds != null) result.add(new BannerHitbox(bounds, true, view.groupId(), view.representativeEntityId()));
             }

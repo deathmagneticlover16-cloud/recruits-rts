@@ -630,17 +630,15 @@ public final class RTSMovementBoostManager {
             }
             Entity controlled = controlledEntity(recruit);
             if (controlled != null) {
-                total += armorWeightScale(controlled);
+                total += armorWeightScale(recruit, controlled);
                 count++;
             }
         }
         return count <= 0 ? 1.0D : total / count;
     }
 
-    private static double armorWeightScale(Entity entity) {
-        if (!(entity instanceof LivingEntity living)) {
-            return 1.0D;
-        }
+    private static double armorWeightScale(AbstractRecruitEntity recruit, Entity controlled) {
+        LivingEntity living = recruit;
         AttributeInstance movement = living.getAttribute(Attributes.MOVEMENT_SPEED);
         if (movement == null) {
             return 1.0D;
@@ -652,7 +650,9 @@ public final class RTSMovementBoostManager {
         // Armor Weight v1.1 uses MULTIPLY_TOTAL with a negative value. Keep this generic
         // enough that a compatible datapack using the same modifier UUID still behaves.
         if (modifier.getOperation() == AttributeModifier.Operation.MULTIPLY_TOTAL) {
-            return Math.max(0.01D, Math.min(1.0D, 1.0D + modifier.getAmount()));
+            double penalty = Math.max(0.0D, -modifier.getAmount());
+            if (controlled != recruit) penalty /= 1.75D;
+            return Math.max(0.01D, Math.min(1.0D, 1.0D - penalty));
         }
         return 1.0D;
     }

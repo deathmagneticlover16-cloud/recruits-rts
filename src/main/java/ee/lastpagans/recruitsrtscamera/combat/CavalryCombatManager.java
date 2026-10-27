@@ -6,6 +6,7 @@ import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
+import ee.lastpagans.recruitsrtscamera.compat.TroopEquipmentCompat;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
@@ -104,6 +105,7 @@ public final class CavalryCombatManager {
         if (previous == null) return;
         Vec3 movement = horizontal(current.subtract(previous));
         double moved = movement.length();
+        state.lastSpeed = moved;
         Vec3 heading = moved > 0.001D ? movement.scale(1.0D / moved) : Vec3.ZERO;
         LivingEntity target = rider.getTarget();
         boolean attacking = target != null && target.isAlive() && !(rider instanceof IRangedRecruit && rider.getShouldRanged())
@@ -147,8 +149,7 @@ public final class CavalryCombatManager {
             double quality = takeImpact(state, victim);
             state.physicalImpact = true;
             try {
-                float amount = (float) (RTSServerConfig.CAVALRY_CHARGE_DAMAGE.get() * quality
-                        * TroopStatService.chargeMultiplier(rider));
+                float amount = (float) chargeImpactDamage(rider, state, quality);
                 if (victim.hurt(state.level.damageSources().mobAttack(rider), amount)) {
                     victim.knockback(0.5D + quality * 0.7D, -state.heading.x, -state.heading.z);
                 }
@@ -166,14 +167,36 @@ public final class CavalryCombatManager {
                 || event.getSource().getDirectEntity() != rider || !isMounted(rider)
                 || (rider instanceof IRangedRecruit && rider.getShouldRanged()) || RoutedGroupManager.isRouting(rider)
                 || !(event.getEntity() instanceof AbstractRecruitEntity victim) || !validFootEnemy(rider, victim)) return;
+        if (CavalryTacticalController.isActive(rider)) event.setAmount(event.getAmount() * 1.35F);
         RiderState state = RIDERS.get(rider.getUUID());
         if (state == null || state.physicalImpact || state.victims.contains(victim.getUUID())
                 || state.level.getGameTime() - state.sampleTick > 1 || !facingImpact(state, victim)
                 || !rider.hasLineOfSight(victim) || state.mount.position().distanceToSqr(state.position) > 6.25D
                 || !state.mount.onGround() || state.momentum.quality() <= 0.0D) return;
         double quality = takeImpact(state, victim);
-        event.setAmount(event.getAmount() + (float) (RTSServerConfig.CAVALRY_CHARGE_DAMAGE.get() * quality
+        double weapon = equippedMeleeDamage(rider);
+        double speedBonus = weapon * quality * Math.max(0.0D,
+                state.lastSpeed / Math.max(0.01D, RTSServerConfig.CAVALRY_FULL_CHARGE_SPEED.get()));
+        // The ordinary hit already contains weapon base damage. Committed horsemen get a
+        // deliberate melee edge; charge speed then adds another bounded weapon-scaled blow.
+        event.setAmount(event.getAmount() + (float) (speedBonus
                 * TroopStatService.chargeMultiplier(rider)));
+    }
+
+    private static double chargeImpactDamage(AbstractRecruitEntity rider, RiderState state, double quality) {
+        double weapon = equippedMeleeDamage(rider);
+        double speedRatio = Math.min(1.75D, Math.max(0.0D,
+                state.lastSpeed / Math.max(0.01D, RTSServerConfig.CAVALRY_FULL_CHARGE_SPEED.get())));
+        double chargeMultiplier = TroopStatService.chargeMultiplier(rider);
+        return RTSServerConfig.CAVALRY_CHARGE_DAMAGE.get() * quality * chargeMultiplier
+                + weapon
+                + weapon * speedRatio * quality * chargeMultiplier;
+    }
+
+    private static double equippedMeleeDamage(AbstractRecruitEntity rider) {
+        double fallback = Math.max(1.0D, rider.getAttributeValue(Attributes.ATTACK_DAMAGE));
+        return Math.max(1.0D, TroopEquipmentCompat.meleeDamage(
+                TroopEquipmentCompat.equippedCombatWeapon(rider), fallback));
     }
 
     private static double takeImpact(RiderState state, AbstractRecruitEntity victim) {
@@ -285,6 +308,7 @@ public final class CavalryCombatManager {
         UUID hitVictim;
         long hitTick;
         double hitQuality;
+        double lastSpeed;
 
         RiderState(Mob mount, ServerLevel level) { this.mount = mount; this.level = level; }
     }

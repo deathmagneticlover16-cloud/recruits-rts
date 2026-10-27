@@ -63,7 +63,7 @@ public final class TroopStatService {
         double movementPenalty = RTSServerConfig.ENCUMBRANCE_ENABLED.get()
                 ? Math.min(RTSServerConfig.ENCUMBRANCE_MAX_SPEED_PENALTY.get(), movementPenalty(ratio)) : 0.0D;
         LivingEntity carrier = recruit.getVehicle() instanceof LivingEntity living ? living : recruit;
-        if (carrier != recruit) movementPenalty *= 0.65D;
+        if (carrier != recruit) movementPenalty /= 1.75D;
         applyCarrier(recruit, carrier, -movementPenalty);
 
         recruit.getPersistentData().putDouble(WEIGHT_KEY, load.weight);
@@ -160,9 +160,10 @@ public final class TroopStatService {
             armor += carrier.getArmorValue();
         }
         double armorPenalty = armor * 2.5D; // 0 AP = 110; 4 AP = 100 for foot troops.
+        if (carrier != recruit) armorPenalty /= 1.75D;
         double cargoRate = RTSServerConfig.ENCUMBRANCE_ENABLED.get()
                 ? Math.min(RTSServerConfig.ENCUMBRANCE_MAX_SPEED_PENALTY.get(), movementPenalty(loadRatio)) : 0.0D;
-        double cargoPenalty = base * cargoRate * (carrier == recruit ? 1.0D : 0.65D);
+        double cargoPenalty = base * cargoRate * (carrier == recruit ? 1.0D : 1.0D / 1.75D);
         return Math.max(1.0D, base - armorPenalty - cargoPenalty);
     }
 

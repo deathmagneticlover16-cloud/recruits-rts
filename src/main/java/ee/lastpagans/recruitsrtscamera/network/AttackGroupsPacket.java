@@ -74,7 +74,7 @@ public record AttackGroupsPacket(List<UUID> groupIds, int targetEntityId, boolea
             sender.displayClientMessage(Component.literal("That target is outside tactical range."), true);
             return;
         }
-        if (RTSVision.hiddenTargetChecksEnabled() && !RTSVision.canSee(sender, clickedTarget.position())) {
+        if (RTSVision.hiddenTargetChecksEnabled() && !RTSVision.canSee(sender, clickedTarget)) {
             sender.displayClientMessage(Component.literal("That target is hidden by fog of war."), true);
             return;
         }
@@ -179,7 +179,7 @@ public record AttackGroupsPacket(List<UUID> groupIds, int targetEntityId, boolea
             if (living.distanceToSqr(sender) > MAX_TARGET_DISTANCE * MAX_TARGET_DISTANCE) {
                 continue;
             }
-            if (RTSVision.hiddenTargetChecksEnabled() && !RTSVision.canSee(sender, living.position())) {
+            if (RTSVision.hiddenTargetChecksEnabled() && !RTSVision.canSee(sender, living)) {
                 continue;
             }
             candidates.add(living);

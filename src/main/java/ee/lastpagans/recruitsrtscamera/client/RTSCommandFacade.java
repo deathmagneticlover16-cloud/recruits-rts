@@ -172,7 +172,7 @@ public final class RTSCommandFacade {
         List<EnemyBannerView> result = new ArrayList<>();
         groups.forEach((id, sample) -> {
             EnemyBannerView view = sample.finish(id);
-            if (view != null) result.add(view);
+            if (view != null && ClientEnemyVisibilityState.alpha(id) > 0.001F) result.add(view);
         });
         return List.copyOf(result);
     }
@@ -600,7 +600,7 @@ public final class RTSCommandFacade {
 
     public record EnemyBannerView(
             UUID groupId, CommanderUnitType unitType, double centerX, double anchorY, double centerZ,
-            int teamColorIndex, int representativeEntityId
+            int teamColorIndex, int representativeEntityId, float visibilityAlpha
     ) { }
 
     private record PresentationSnapshot(CommanderUnitType unitType, float averageLevel, int teamColorIndex) { }
@@ -660,7 +660,8 @@ public final class RTSCommandFacade {
                     .map(Map.Entry::getKey).orElse(CommanderUnitType.SWORD);
             int color = teamColorCounts.entrySet().stream().max(Map.Entry.comparingByValue())
                     .map(Map.Entry::getKey).orElse(15);
-            return new EnemyBannerView(groupId, dominant, totalX / count, maxY + 1.65D, totalZ / count, color, representativeEntityId);
+            return new EnemyBannerView(groupId, dominant, totalX / count, maxY + 1.65D, totalZ / count,
+                    color, representativeEntityId, ClientEnemyVisibilityState.alpha(groupId));
         }
     }
 

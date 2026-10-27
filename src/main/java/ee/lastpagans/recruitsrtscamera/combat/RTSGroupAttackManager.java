@@ -13,6 +13,7 @@ import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
+import ee.lastpagans.recruitsrtscamera.formation.FormationKind;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData;
 import ee.lastpagans.recruitsrtscamera.server.RTSVision;
@@ -306,6 +307,10 @@ public final class RTSGroupAttackManager {
                 cancel(List.of(sourceGroupId));
                 continue;
             }
+            if (RTSVision.hiddenTargetChecksEnabled() && !RTSVision.canSee(sender, target)) {
+                cancel(List.of(sourceGroupId));
+                continue;
+            }
             RecruitsGroup sourceGroup = findGroup(level, state.sourceGroupId);
             if (sourceGroup == null || sourceGroup.removed || sourceGroup.members == null
                     || sourceGroup.members.isEmpty()) {
@@ -417,6 +422,14 @@ public final class RTSGroupAttackManager {
             List<AbstractRecruitEntity> attackers,
             List<LivingEntity> candidates
     ) {
+        if (state.charge && state.approachKind == ApproachKind.CAVALRY
+                && FormationService.activeKind(state.sender.serverLevel(), state.sourceGroupId)
+                == FormationKind.CAVALRY_WEDGE) {
+            Vec3 enemyCenter = averagePosition(candidates);
+            if (enemyCenter != null) state.wedgeLeader = attackers.stream()
+                    .min(Comparator.comparingDouble(attacker -> attacker.position().distanceToSqr(enemyCenter)))
+                    .map(AbstractRecruitEntity::getUUID).orElse(null);
+        }
         if (state.charge && state.approachKind == ApproachKind.INFANTRY) {
             // Infantry charges keep their ranks through first contact. Target locks are
             // spread across the hostile frontage while the formation runtime owns both
@@ -589,6 +602,11 @@ public final class RTSGroupAttackManager {
         Map<Integer, Integer> assignments = new HashMap<>();
         Map<UUID, LivingEntity> frontageAssignments = formationAssignments(orderedAttackers, candidates);
         for (AbstractRecruitEntity attacker : orderedAttackers) {
+            if (attacker.getUUID().equals(state.wedgeLeader)) {
+                TacticalCombatManager.lock(attacker, state.sourceGroupId, null);
+                attacker.setTarget(null);
+                continue;
+            }
             LivingEntity assigned = frontageAssignments.get(attacker.getUUID());
             if (!validTarget(attacker, assigned)) {
                 assigned = chooseTarget(attacker, candidates, assignments);
@@ -756,7 +774,7 @@ public final class RTSGroupAttackManager {
                     || living == sender || living.distanceToSqr(sender) > maxSq) {
                 continue;
             }
-            if (RTSVision.hiddenTargetChecksEnabled() && !RTSVision.canSee(sender, living.position())) {
+            if (RTSVision.hiddenTargetChecksEnabled() && !RTSVision.canSee(sender, living)) {
                 continue;
             }
             result.add(living);
@@ -1017,6 +1035,7 @@ public final class RTSGroupAttackManager {
         private Phase phase = Phase.NEW;
         private ApproachKind approachKind = ApproachKind.DIRECT;
         private Vec3 lastApproachDestination;
+        private UUID wedgeLeader;
         private final Map<UUID, Integer> lockedTargets = new HashMap<>();
 
         private AttackState(

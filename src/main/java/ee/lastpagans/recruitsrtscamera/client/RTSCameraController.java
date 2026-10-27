@@ -715,6 +715,7 @@ public final class RTSCameraController {
         syncSelectionFromRecruits();
         clearGlow();
         GroupFlagClientState.clear();
+        ClientEnemyVisibilityState.clear();
         active = true;
         RTSCameraNetwork.CHANNEL.sendToServer(new RTSModeStatePacket(true));
         commandCursor = true;
@@ -787,6 +788,7 @@ public final class RTSCameraController {
         battlefieldSnapshot = ClientBattlefieldSnapshot.EMPTY;
         retainedTacticalScene = TacticalRenderScene.EMPTY;
         tacticalSceneDirty = true;
+        ClientEnemyVisibilityState.clear();
         lastTerrainOrderMillis = 0L;
         lastTerrainOrderTarget = null;
         clearGlow();
@@ -2375,6 +2377,8 @@ public final class RTSCameraController {
                 && MC.player.getUUID().equals(recruit.getOwnerUUID())) {
             return false;
         }
+        if (target instanceof AbstractRecruitEntity recruit && recruit.getGroup() != null
+                && !ClientEnemyVisibilityState.targetable(recruit.getGroup())) return false;
         return !MC.player.isAlliedTo(target);
     }
 
@@ -2531,7 +2535,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.19.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.20.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

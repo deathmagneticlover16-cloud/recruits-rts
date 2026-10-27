@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.20.0-server.1
+Battlefield concealment and committed cavalry charges
+
+- Enemy formation visibility is now server-authoritative and enabled by default for new server configs. Friendly player/recruit vision must have an unobstructed terrain ray; hills block sight, while dense leaf cover conceals a formation beyond close identification range without preventing that concealed formation from seeing outward.
+- Hostile soldiers, 2D enemy banners and animated world flags fade over roughly one second when contact is lost. Fully hidden formations are removed from cursor/banner targeting, and attack orders are rejected server-side against concealed entities.
+- Visibility work runs at four samples per second and caches entity LOS decisions for each sample window instead of raycasting every render frame.
+- Mounted troops now suffer 1.75x less armor and carried-load speed impact, including the compatible Armor Weight modifier used by formation pacing.
+- Infantry and cavalry charge speed now follows a bounded exponential build-up. Cavalry impact damage combines configured horse impact, equipped melee weapon damage and a weapon-scaled actual-speed bonus; existing horse trampling remains independent.
+- RTS cavalry commits to prolonged melee after impact with a 35% mounted melee advantage instead of resuming the orbit/pass loop. In a charging cavalry wedge, the tip leader holds back while the following ranks enter the clash; any new order still cancels combat control for regrouping.
+- Network protocol is now rts-camera-160 because enemy-formation visibility is synchronized to each commander; update clients and server together.
+- Source version and packaging references are 0.20.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.19.0-server.1
 Stable capability statistics and stage-four scaling
 

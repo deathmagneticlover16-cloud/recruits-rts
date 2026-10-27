@@ -100,7 +100,7 @@ public final class RTSServerConfig {
         BUILDER.push("fogOfWar");
         FOG_OF_WAR = BUILDER
                 .comment("Enable tactical Fog of War visibility logic and hidden-target checks for RTS orders. Client visual rendering can be disabled independently.")
-                .define("enabled", false);
+                .define("enabled", true);
         FOG_PLAYER_VISION_RADIUS = BUILDER
                 .comment("Vision radius around the commander's real player body. The free camera itself grants no vision.")
                 .defineInRange("playerVisionRadius", 48, 8, 160);
