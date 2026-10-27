@@ -5,8 +5,8 @@ import java.util.EnumMap;
 import java.util.Map;
 
 /**
- * Complete troop/group-wide stat block. Values are deliberately inert for now: this is the
- * stable interchange model that future balance data, UI editors and combat systems can share.
+ * Complete troop/group-wide stat block shared by live combat, synchronization and UI systems.
+ * Constructing a profile has no side effects; TroopStatService owns gameplay application.
  */
 public final class TroopStatProfile {
     public static final TroopStatProfile NEUTRAL = builder().build();

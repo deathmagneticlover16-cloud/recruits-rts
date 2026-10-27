@@ -3,15 +3,14 @@ package ee.lastpagans.recruitsrtscamera.troops;
 import java.util.Locale;
 
 /**
- * Stable, troop-wide statistic schema shared by the Commander UI, future editors,
- * data packs and gameplay integrations. These definitions describe intent and display;
- * they do not apply new combat modifiers by themselves.
+ * Stable, troop-wide statistic schema shared by combat, Commander UI, future editors
+ * and data packs. TroopStatService calculates and applies the live values.
  */
 public enum TroopStatistic {
     DAMAGE(
             "stat.damage", "Damage",
             "Determines the damage dealt by the soldier's currently equipped weapon, including melee and ranged weapons.",
-            50.0D, 100.0D, true),
+            6.0D, 40.0D, true),
     MELEE_SKILL(
             "stat.melee_skill", "Melee Skill",
             "Determines how effectively a soldier lands melee attacks. Higher skill increases the chance of successfully hitting an opponent.",
@@ -43,7 +42,7 @@ public enum TroopStatistic {
     AMMUNITION(
             "stat.ammunition", "Ammunition",
             "Determines how much ammunition a soldier carries and has available for ranged combat.",
-            0.0D, 100.0D, true),
+            0.0D, 192.0D, true),
     RATE_OF_FIRE(
             "stat.rate_of_fire", "Rate of Fire",
             "Determines how quickly a soldier can fire ranged weapons, affected by weapon type and potentially fatigue.",

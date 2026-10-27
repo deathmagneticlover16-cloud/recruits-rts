@@ -475,7 +475,7 @@ public final class CommanderOverlay {
 
         int rowsHeight = TroopStatistic.values().length * (HOVER_STAT_BAR_HEIGHT + HOVER_STAT_ROW_GAP)
                 - HOVER_STAT_ROW_GAP;
-        int panelHeight = 27 + rowsHeight + 8;
+        int panelHeight = 47 + rowsHeight + 8;
         int x = Math.max(6, virtualGuiWidth() - HOVER_STATS_WIDTH - 8);
         int preferredY = (virtualGuiHeight() - panelHeight) / 2;
         int bottomLimit = virtualGuiHeight() - PANEL_HEIGHT - 8;
@@ -496,7 +496,23 @@ public final class CommanderOverlay {
         drawCenteredTrimmed(graphics, title, panel.x1() + 8, panel.y1() + 7,
                 panel.width() - 16, 0xFFFFE8AC);
 
-        int rowY = panel.y1() + 22;
+        ee.lastpagans.recruitsrtscamera.battle.GroupBattleSnapshot battle = ClientBattleState.get(hovered.groupId());
+        String load = battle == null ? "Load —"
+                : "Load " + oneDecimal(battle.carriedWeight()) + " / " + oneDecimal(battle.carryCapacity());
+        float loadRatio = battle == null || battle.carryCapacity() <= 0.0F ? Float.NaN
+                : battle.carriedWeight() / battle.carryCapacity();
+        CommanderUiRegistry.record(CommanderUiElementIds.STAT_ENCUMBRANCE, hovered.groupId(),
+                panel.x1() + 8, panel.y1() + 18, panel.width() - 16, 9, loadRatio);
+        graphics.drawString(MC.font, load, panel.x1() + 8, panel.y1() + 18,
+                Float.isFinite(loadRatio) && loadRatio > 1.0F ? 0xFFE07A70 : MUTED, false);
+        String food = battle == null ? "Food / soldier —"
+                : "Food / soldier " + oneDecimal(battle.foodSupply());
+        CommanderUiRegistry.record(CommanderUiElementIds.STAT_FOOD_SUPPLY, hovered.groupId(),
+                panel.x1() + 8, panel.y1() + 28, panel.width() - 16, 9,
+                battle == null ? Float.NaN : battle.foodSupply());
+        graphics.drawString(MC.font, food, panel.x1() + 8, panel.y1() + 28, MUTED, false);
+
+        int rowY = panel.y1() + 42;
         TroopStatistic hoveredStatistic = null;
         int mouseX = guiMouseX();
         int mouseY = guiMouseY();
@@ -539,11 +555,13 @@ public final class CommanderOverlay {
     }
 
     private static float hoveredStatValue(RTSCommandFacade.UnitCardView view, TroopStatistic statistic) {
+        ee.lastpagans.recruitsrtscamera.battle.GroupBattleSnapshot battle = ClientBattleState.get(view.groupId());
+        if (battle != null) return (float) battle.statistics().value(statistic);
         float level = view.averageLevel() < 0.0F ? 2.0F : view.averageLevel();
-        // These eight display-only defaults deliberately live in one method so real synchronized
-        // troop statistics can replace them without touching layout or semantic UI bindings.
+        // Before the first authoritative server snapshot arrives, retain a useful short-lived
+        // fallback derived from the client card instead of flashing ten empty bars.
         return switch (statistic) {
-            case DAMAGE -> 42.0F + level * 4.0F;
+            case DAMAGE -> 4.2F + level * 0.4F;
             case MELEE_SKILL -> switch (view.unitType()) {
                 case CAVALRY, SHIELDMAN, SWORD, SPEAR -> 58.0F + level * 2.0F;
                 default -> 38.0F + level * 2.0F;
@@ -572,7 +590,7 @@ public final class CommanderOverlay {
                 case BOW, CROSSBOW, NOMAD -> 68.0F + level * 2.0F;
                 default -> 25.0F;
             };
-            case AMMUNITION -> view.rangedCapable() ? 75.0F : 0.0F;
+            case AMMUNITION -> view.rangedCapable() ? 32.0F : 0.0F;
             case RATE_OF_FIRE -> switch (view.unitType()) {
                 case BOW, NOMAD -> 68.0F;
                 case CROSSBOW -> 44.0F;

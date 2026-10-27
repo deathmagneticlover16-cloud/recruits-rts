@@ -2,6 +2,8 @@ package ee.lastpagans.recruitsrtscamera.network;
 
 import ee.lastpagans.recruitsrtscamera.battle.GroupBattleSnapshot;
 import ee.lastpagans.recruitsrtscamera.client.ClientBattleState;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatProfile;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatistic;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
 
@@ -25,6 +27,12 @@ public record BattleStateSyncPacket(Map<UUID, GroupBattleSnapshot> groups) {
             buffer.writeVarInt(Math.max(0, state.combatBaseline()));
             buffer.writeVarInt(Math.max(0, state.currentCount()));
             buffer.writeBoolean(state.routedThisBattle());
+            for (TroopStatistic statistic : TroopStatistic.values()) {
+                buffer.writeFloat((float) state.statistics().value(statistic));
+            }
+            buffer.writeFloat(state.carriedWeight());
+            buffer.writeFloat(state.carryCapacity());
+            buffer.writeFloat(state.foodSupply());
         });
     }
 
@@ -33,10 +41,19 @@ public record BattleStateSyncPacket(Map<UUID, GroupBattleSnapshot> groups) {
         Map<UUID, GroupBattleSnapshot> groups = new LinkedHashMap<>();
         for (int i = 0; i < size; i++) {
             UUID id = buffer.readUUID();
-            groups.put(id, new GroupBattleSnapshot(
-                    buffer.readFloat(), buffer.readFloat(), buffer.readByte(),
-                    buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean()
-            ));
+            float fatigue = buffer.readFloat();
+            float morale = buffer.readFloat();
+            int moraleState = buffer.readByte();
+            int baseline = buffer.readVarInt();
+            int current = buffer.readVarInt();
+            boolean routed = buffer.readBoolean();
+            TroopStatProfile.Builder statistics = TroopStatProfile.builder();
+            for (TroopStatistic statistic : TroopStatistic.values()) {
+                statistics.set(statistic, buffer.readFloat());
+            }
+            groups.put(id, new GroupBattleSnapshot(fatigue, morale, moraleState,
+                    baseline, current, routed, statistics.build(),
+                    buffer.readFloat(), buffer.readFloat(), buffer.readFloat()));
         }
         return new BattleStateSyncPacket(groups);
     }

@@ -9,6 +9,7 @@ import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatService;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -144,7 +145,8 @@ public final class CavalryCombatManager {
             double quality = takeImpact(state, victim);
             state.physicalImpact = true;
             try {
-                float amount = (float) (RTSServerConfig.CAVALRY_CHARGE_DAMAGE.get() * quality);
+                float amount = (float) (RTSServerConfig.CAVALRY_CHARGE_DAMAGE.get() * quality
+                        * TroopStatService.chargeMultiplier(rider));
                 if (victim.hurt(state.level.damageSources().mobAttack(rider), amount)) {
                     victim.knockback(0.5D + quality * 0.7D, -state.heading.x, -state.heading.z);
                 }
@@ -168,7 +170,8 @@ public final class CavalryCombatManager {
                 || !rider.hasLineOfSight(victim) || state.mount.position().distanceToSqr(state.position) > 6.25D
                 || !state.mount.onGround() || state.momentum.quality() <= 0.0D) return;
         double quality = takeImpact(state, victim);
-        event.setAmount(event.getAmount() + (float) (RTSServerConfig.CAVALRY_CHARGE_DAMAGE.get() * quality));
+        event.setAmount(event.getAmount() + (float) (RTSServerConfig.CAVALRY_CHARGE_DAMAGE.get() * quality
+                * TroopStatService.chargeMultiplier(rider)));
     }
 
     private static double takeImpact(RiderState state, AbstractRecruitEntity victim) {
@@ -208,6 +211,7 @@ public final class CavalryCombatManager {
             // rider cannot block a proper charge, and 100 simultaneous horses do not
             // multiply group morale damage by 100.
             double desired = shock * state.hitQuality
+                    * TroopStatService.chargeMultiplier(rider)
                     * (TacticalCombatManager.rearImpact(rider, victim) ? 2.0D : 1.0D);
             double extra = Math.max(0.0D, desired - window.applied);
             window.applied = Math.max(window.applied, desired);

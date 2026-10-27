@@ -8,6 +8,8 @@ public final class CommanderUiElementIds {
     public static final String UNIT_CARD = "unit.card";
     public static final String HOVER_STATS_PANEL = "hover.stats_panel";
     public static final String HOVER_GROUP_TITLE = "hover.group_title";
+    public static final String STAT_ENCUMBRANCE = "stat.encumbrance";
+    public static final String STAT_FOOD_SUPPLY = "stat.food_supply";
     public static final String STAT_DAMAGE = "stat.damage";
     public static final String STAT_MELEE_SKILL = "stat.melee_skill";
     public static final String STAT_MELEE_DEFENCE = "stat.melee_defence";

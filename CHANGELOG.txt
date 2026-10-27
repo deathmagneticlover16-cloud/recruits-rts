@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.18.0-server.1
+Live troop statistics and inventory encumbrance
+
+- Replaced the inspector's placeholder values with server-authoritative group averages for all ten troop statistics. Damage reads the equipped attack, Speed reads the controlled entity's live movement attribute, Morale and Fatigue use battle state, and Ammunition counts the recruit inventory that native ranged AI consumes.
+- Added full 15-slot recruit encumbrance, including worn armor, held and secondary weapons, ammunition, food and cargo. Ordinary arrows weigh 0.04 each and food weight scales with nutrition, so 32 arrows or eight bread remain light while campaign-sized stacks become a meaningful load.
+- Added carrying capacities of 36 for ordinary infantry and 30 for ranged troops, with a 14-point mounted allowance and a small level bonus. Load begins affecting movement above 65 percent capacity; overload also increases fatigue growth and slows recovery. Mounted penalties apply to the horse only while the recruit is riding it.
+- Made Melee Skill and Melee Defence resolve recruit melee hit chances, Accuracy correct or spreads recruit projectiles, and Charge Bonus scale both impact damage and morale shock. Cavalry Wedge contributes its existing charge specialization to the live bonus. Rate of Fire reports the cadence of the equipped native ranged weapon.
+- Added server configuration for enabling encumbrance, foot and ranged capacity, mounted allowance, maximum speed loss and fatigue scaling. Datapacks can override individual items through `encumbrance/weightless`, `light`, `heavy` and `very_heavy` item tags.
+- Extended the middle-right unit inspector with average carried load/capacity and food per soldier. The existing ten semantic `stat.*` rows now display synchronized live values; added `stat.encumbrance` and `stat.food_supply` bindings for the planned UI editor.
+- Network protocol is now rts-camera-159 because battle-state synchronization carries the ten live statistics and supply values; update clients and server together.
+- Source version and packaging references are 0.18.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.17.1-server.1
 Troop-wide statistic definitions
 

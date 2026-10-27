@@ -11,6 +11,7 @@ import ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeBrain;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatService;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -147,7 +148,10 @@ public final class TacticalCombatManager {
             LAST_CHARGE_SHOCK.values().removeIf(window -> now - window.started > 200L);
         }
         double progress = Math.max(0.0D, Math.min(1.0D, (chargeAcceleration(attacker) - 1.10D) / 0.30D));
-        double desired = 8.0D * (0.35D + 0.65D * progress) * (rearImpact(attacker, victim) ? 2.0D : 1.0D);
+        double chargeMultiplier = TroopStatService.chargeMultiplier(attacker);
+        event.setAmount(event.getAmount() * (float) chargeMultiplier);
+        double desired = 8.0D * (0.35D + 0.65D * progress) * chargeMultiplier
+                * (rearImpact(attacker, victim) ? 2.0D : 1.0D);
         ShockWindow window = LAST_CHARGE_SHOCK.computeIfAbsent(victim.getGroup(), ignored -> new ShockWindow(now));
         if (now - window.started >= 40L) {
             window.started = now;

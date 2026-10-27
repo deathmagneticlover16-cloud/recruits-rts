@@ -18,6 +18,10 @@ import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import ee.lastpagans.recruitsrtscamera.server.BodyguardManager;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatProfile;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatRegistry;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatService;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatistic;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -42,6 +46,7 @@ import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -180,11 +185,11 @@ public final class BattleMechanicsManager {
                         || recruit.getGroup() == null || recruit.getOwnerUUID() == null || RoutedGroupManager.isRouting(recruit)) {
                     continue;
                 }
-                updateFatigue(recruit);
+                TroopStatService.SoldierStats statistics = updateFatigue(recruit);
                 GroupRuntime group = groups.computeIfAbsent(recruit.getGroup(), id -> new GroupRuntime(
                         id, recruit.getOwnerUUID(), level
                 ));
-                group.add(recruit);
+                group.add(recruit, statistics);
             }
         }
         for (GroupRuntime group : groups.values()) {
@@ -193,7 +198,7 @@ public final class BattleMechanicsManager {
         return groups;
     }
 
-    private static void updateFatigue(AbstractRecruitEntity recruit) {
+    private static TroopStatService.SoldierStats updateFatigue(AbstractRecruitEntity recruit) {
         Vec3 current = recruit.position();
         Vec3 previous = LAST_POSITIONS.put(recruit.getUUID(), current);
         double moved = previous == null ? 0.0D : Math.hypot(current.x - previous.x, current.z - previous.z);
@@ -203,17 +208,18 @@ public final class BattleMechanicsManager {
         boolean inMelee = recruit.getTarget() != null && recruit.distanceTo(recruit.getTarget()) < 4.5F;
 
         double oldFatigue = recruit.getPersistentData().getDouble(FATIGUE_KEY);
+        TroopStatService.SoldierStats load = TroopStatService.sample(recruit, oldFatigue);
         double fatigue = oldFatigue;
         if (hasty && moved > 0.035D) {
-            fatigue += 0.12D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE;
+            fatigue += 0.12D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE * load.fatigueGainMultiplier();
         } else if (inMelee) {
-            fatigue += 0.07D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE;
+            fatigue += 0.07D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE * load.fatigueGainMultiplier();
         } else if (moved > 0.075D && !slow) {
-            fatigue += 0.020D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE;
+            fatigue += 0.020D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE * load.fatigueGainMultiplier();
         } else if (moved > 0.035D) {
-            fatigue += 0.004D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE;
+            fatigue += 0.004D * SAMPLE_INTERVAL * FATIGUE_GAIN_SCALE * load.fatigueGainMultiplier();
         } else {
-            fatigue -= 0.100D * SAMPLE_INTERVAL;
+            fatigue -= 0.100D * SAMPLE_INTERVAL * load.fatigueRecoveryMultiplier();
         }
         if (recruit instanceof HorsemanEntity) {
             fatigue = oldFatigue + (fatigue - oldFatigue) * 0.70D;
@@ -244,6 +250,7 @@ public final class BattleMechanicsManager {
         if (stage >= 3 && inMelee) {
             recruit.setMoral(Math.max(0.0F, recruit.getMorale() - 0.05F * SAMPLE_INTERVAL));
         }
+        return TroopStatService.updateFatigue(recruit, fatigue);
     }
 
     private static void applyFatigueModifiers(AbstractRecruitEntity recruit, int stage) {
@@ -437,6 +444,7 @@ public final class BattleMechanicsManager {
 
     private static void syncPlayers(MinecraftServer server, Map<UUID, GroupRuntime> runtime) {
         Map<UUID, Map<UUID, GroupBattleSnapshot>> byOwner = new HashMap<>();
+        Map<UUID, TroopStatProfile> liveStatistics = new HashMap<>();
         for (GroupRuntime group : runtime.values()) {
             CombatState combat = COMBAT.get(group.groupId);
             int persistentCount = persistentGroupSize(group.level, group.groupId, group.members.size());
@@ -444,13 +452,17 @@ public final class BattleMechanicsManager {
             float fatigue = averageFatigue(group.members);
             int moraleState = combat != null ? combat.moraleState
                     : (morale < ROUTING_MORALE ? 2 : morale < WAVERING_MORALE ? 1 : 0);
+            TroopStatProfile statistics = group.averageStatistics();
+            liveStatistics.put(group.groupId, statistics);
             byOwner.computeIfAbsent(group.ownerId, ignored -> new HashMap<>()).put(
                     group.groupId,
                     new GroupBattleSnapshot(fatigue, morale, moraleState,
                             combat == null ? 0 : combat.baseline, persistentCount,
-                            combat != null && combat.routedThisBattle)
+                            combat != null && combat.routedThisBattle,
+                            statistics, group.averageWeight(), group.averageCapacity(), group.averageFood())
             );
         }
+        TroopStatRegistry.replace(liveStatistics);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             RTSCameraNetwork.CHANNEL.send(
                     PacketDistributor.PLAYER.with(() -> player),
@@ -564,11 +576,14 @@ public final class BattleMechanicsManager {
 
     public static void recoverFatigue(AbstractRecruitEntity recruit, double amount) {
         if (recruit == null || RoutedGroupManager.isRouting(recruit)) return;
-        double value = Math.max(0, recruit.getPersistentData().getDouble(FATIGUE_KEY) - Math.max(0, amount));
+        double recovery = TroopStatService.current(recruit).fatigueRecoveryMultiplier();
+        double value = Math.max(0, recruit.getPersistentData().getDouble(FATIGUE_KEY)
+                - Math.max(0, amount) * recovery);
         recruit.getPersistentData().putDouble(FATIGUE_KEY, value);
         int stage = fatigueStage(value);
         recruit.getPersistentData().putInt(FATIGUE_STAGE_KEY, stage);
         applyFatigueModifiers(recruit, stage);
+        TroopStatService.updateFatigue(recruit, value);
     }
 
     private static boolean groupHasMoraleItem(ServerLevel level, UUID groupId) {
@@ -646,6 +661,7 @@ public final class BattleMechanicsManager {
         LAST_POSITIONS.clear();
         COMBAT.clear();
         ADVISOR_COOLDOWNS.clear();
+        TroopStatRegistry.clear();
         tickCounter = 0;
     }
 
@@ -654,6 +670,10 @@ public final class BattleMechanicsManager {
         final UUID ownerId;
         final ServerLevel level;
         final List<AbstractRecruitEntity> members = new ArrayList<>();
+        final EnumMap<TroopStatistic, Double> statisticTotals = new EnumMap<>(TroopStatistic.class);
+        double totalWeight;
+        double totalCapacity;
+        double totalFood;
 
         GroupRuntime(UUID groupId, UUID ownerId, ServerLevel level) {
             this.groupId = groupId;
@@ -661,9 +681,29 @@ public final class BattleMechanicsManager {
             this.level = level;
         }
 
-        void add(AbstractRecruitEntity recruit) {
+        void add(AbstractRecruitEntity recruit, TroopStatService.SoldierStats statistics) {
             members.add(recruit);
+            if (statistics == null) return;
+            for (TroopStatistic statistic : TroopStatistic.values()) {
+                statisticTotals.merge(statistic, statistics.profile().value(statistic), Double::sum);
+            }
+            totalWeight += statistics.carriedWeight();
+            totalCapacity += statistics.capacity();
+            totalFood += statistics.food();
         }
+
+        TroopStatProfile averageStatistics() {
+            if (members.isEmpty()) return TroopStatProfile.NEUTRAL;
+            TroopStatProfile.Builder builder = TroopStatProfile.builder();
+            for (TroopStatistic statistic : TroopStatistic.values()) {
+                builder.set(statistic, statisticTotals.getOrDefault(statistic, 0.0D) / members.size());
+            }
+            return builder.build();
+        }
+
+        float averageWeight() { return members.isEmpty() ? 0.0F : (float) (totalWeight / members.size()); }
+        float averageCapacity() { return members.isEmpty() ? 0.0F : (float) (totalCapacity / members.size()); }
+        float averageFood() { return members.isEmpty() ? 0.0F : (float) (totalFood / members.size()); }
     }
 
     private static final class CombatState {

@@ -66,6 +66,7 @@ mount_control = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/R
 scheduler = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitAIScheduler.java")
 stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
+stat_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatService.java")
 battle = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/BattleMechanicsManager.java")
 routing = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/RoutedGroupManager.java")
 world_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalWorldRenderer.java")
@@ -403,8 +404,6 @@ for stat_id in ("stat.damage", "stat.melee_skill", "stat.melee_defence", "stat.c
 require(stats, "public String description()", "troop statistics must expose their documented meaning")
 require(stats, "public static TroopStatistic fromId", "future editors need stable statistic lookup by semantic ID")
 require(stats, '50.0D, 110.0D, true', "morale metadata must expose its exceptional-leadership ceiling")
-require(stats, "they do not apply new combat modifiers by themselves",
-        "stat metadata must remain inert until gameplay balancing is explicitly implemented")
 require(overlay, "renderTroopStatisticTooltip", "the unit inspector must expose stat descriptions")
 require(overlay, "statistic.maximum()", "stat progress bars must respect per-stat display ranges")
 for stat_id in ("damage", "melee_skill", "melee_defence", "charge_bonus", "speed", "morale",
@@ -412,6 +411,29 @@ for stat_id in ("damage", "melee_skill", "melee_defence", "charge_bonus", "speed
     require(language, '"recruits_rts_camera.stat.' + stat_id + '.description"',
             "each troop statistic needs a localizable description")
 require(stat_registry, "Map<UUID, TroopStatProfile>", "statistics must be stored per troop group")
+require(stat_registry, "replace(Map<UUID, TroopStatProfile>",
+        "the registry must expose the authoritative live group-stat snapshot")
+require(stat_service, "for (int slot = 0; slot < inventory.getContainerSize(); slot++)",
+        "encumbrance must include equipped items and every recruit cargo slot")
+require(stat_service, "count * 0.04D", "ordinary ammunition must remain light per projectile")
+require(stat_service, "item.getFoodProperties().getNutrition() * 0.015D",
+        "large food stores must contribute nutrition-scaled weight")
+require(stat_service, "ENCUMBRANCE_RANGED_CAPACITY", "ranged troops need their lower carrying capacity")
+require(stat_service, '"RTS inventory encumbrance"', "overload must apply a dedicated movement modifier")
+require(stat_service, "fatigueGainMultiplier", "carried load must increase fatigue growth")
+require(stat_service, "fatigueRecoveryMultiplier", "carried load must slow fatigue recovery")
+require(stat_service, "LivingAttackEvent", "melee skill and defence must resolve real melee hit chances")
+require(stat_service, "projectile.setDeltaMovement", "accuracy must affect real recruit projectiles")
+require(cavalry_combat, "TroopStatService.chargeMultiplier(rider)",
+        "charge bonus must affect cavalry impact damage and morale shock")
+require(tactical, "TroopStatService.chargeMultiplier(attacker)",
+        "charge bonus must affect foot charge damage and morale shock")
+require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/BattleStateSyncPacket.java"),
+        "for (TroopStatistic statistic : TroopStatistic.values())",
+        "all live troop statistics must synchronize to Commander")
+require(overlay, "battle.statistics().value(statistic)", "the inspector must use synchronized real statistics")
+require(overlay, "battle.carriedWeight()", "the inspector must expose carried weight and capacity")
+require(overlay, "battle.foodSupply()", "the inspector must expose remaining food supply")
 require(battle, "FATIGUE_GAIN_SCALE = 1.0D / 2.3D", "battle fatigue growth must be 2.3x slower")
 require(battle, "ROUTING_MORALE = 4.0F", "ordinary rout susceptibility must be halved")
 require(battle, "ARCHER_MELEE_ROUTING_MORALE = 8.0F",
@@ -518,7 +540,7 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
         "native cavalry combat must cap the horse speed modifier at 1.25x")
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
-require(network, 'PROTOCOL = "rts-camera-158"', "group flag packets require protocol 158")
-require(source("gradle.properties"), "mod_version=0.17.1-server.1", "semantic version must be updated")
+require(network, 'PROTOCOL = "rts-camera-159"', "live troop-stat packet changes require protocol 159")
+require(source("gradle.properties"), "mod_version=0.18.0-server.1", "semantic version must be updated")
 
-print("0.17.1-server.1 source contracts passed")
+print("0.18.0-server.1 source contracts passed")

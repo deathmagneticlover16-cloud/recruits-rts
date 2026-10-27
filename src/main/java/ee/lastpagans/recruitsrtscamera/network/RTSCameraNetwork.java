@@ -6,7 +6,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class RTSCameraNetwork {
-    private static final String PROTOCOL = "rts-camera-158";
+    private static final String PROTOCOL = "rts-camera-159";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(RecruitsRTSCameraMod.MOD_ID, "main"),

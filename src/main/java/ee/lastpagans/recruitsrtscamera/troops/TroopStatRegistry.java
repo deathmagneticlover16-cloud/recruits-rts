@@ -5,8 +5,9 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Group-scoped storage boundary for troop statistics. No gameplay system consumes these
- * profiles yet; persistence/import code can be added behind this API without changing UI IDs.
+ * Group-scoped live storage boundary for authoritative troop statistics. The battle sampler
+ * replaces this snapshot once per second, allowing integrations to read the same values sent
+ * to Commander without rescanning recruit inventories.
  */
 public final class TroopStatRegistry {
     private static final Map<UUID, TroopStatProfile> BY_GROUP = new HashMap<>();
@@ -26,6 +27,11 @@ public final class TroopStatRegistry {
 
     public static synchronized Map<UUID, TroopStatProfile> snapshot() {
         return Map.copyOf(BY_GROUP);
+    }
+
+    public static synchronized void replace(Map<UUID, TroopStatProfile> profiles) {
+        BY_GROUP.clear();
+        if (profiles != null) BY_GROUP.putAll(profiles);
     }
 
     public static synchronized void clear() { BY_GROUP.clear(); }

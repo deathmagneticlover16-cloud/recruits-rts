@@ -18,6 +18,17 @@ public final class RTSTags {
             new ResourceLocation("rts", "morale_items")
     );
 
+    /** Optional datapack overrides for the inventory encumbrance classifier. */
+    public static final TagKey<Item> ENCUMBRANCE_WEIGHTLESS = weightTag("weightless");
+    public static final TagKey<Item> ENCUMBRANCE_LIGHT = weightTag("light");
+    public static final TagKey<Item> ENCUMBRANCE_HEAVY = weightTag("heavy");
+    public static final TagKey<Item> ENCUMBRANCE_VERY_HEAVY = weightTag("very_heavy");
+
+    private static TagKey<Item> weightTag(String name) {
+        return TagKey.create(Registries.ITEM,
+                new ResourceLocation(RecruitsRTSCameraMod.MOD_ID, "encumbrance/" + name));
+    }
+
     private RTSTags() {
     }
 }

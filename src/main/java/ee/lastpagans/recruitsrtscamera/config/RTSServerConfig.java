@@ -53,6 +53,12 @@ public final class RTSServerConfig {
     public static final ForgeConfigSpec SERVER;
     public static final ForgeConfigSpec.DoubleValue ARROW_LIGHT_ARMOR_DAMAGE;
     public static final ForgeConfigSpec.DoubleValue JAVELIN_LIGHT_ARMOR_DAMAGE;
+    public static final ForgeConfigSpec.BooleanValue ENCUMBRANCE_ENABLED;
+    public static final ForgeConfigSpec.DoubleValue ENCUMBRANCE_FOOT_CAPACITY;
+    public static final ForgeConfigSpec.DoubleValue ENCUMBRANCE_RANGED_CAPACITY;
+    public static final ForgeConfigSpec.DoubleValue ENCUMBRANCE_MOUNTED_BONUS;
+    public static final ForgeConfigSpec.DoubleValue ENCUMBRANCE_MAX_SPEED_PENALTY;
+    public static final ForgeConfigSpec.DoubleValue ENCUMBRANCE_FATIGUE_SCALE;
 
     static {
         BUILDER.push("permissions");
@@ -206,6 +212,21 @@ public final class RTSServerConfig {
                 .defineInRange("arrowLightArmorDamageMultiplier", 2.0D, 1.0D, 5.0D);
         JAVELIN_LIGHT_ARMOR_DAMAGE = BUILDER.comment("Commander thrown weapons vs unarmored recruits, fading to 1x at 20 armor.")
                 .defineInRange("javelinLightArmorDamageMultiplier", 1.6D, 1.0D, 5.0D);
+        BUILDER.pop();
+
+        BUILDER.push("encumbrance");
+        ENCUMBRANCE_ENABLED = BUILDER.comment("Apply full-inventory weight to recruit speed and fatigue.")
+                .define("enabled", true);
+        ENCUMBRANCE_FOOT_CAPACITY = BUILDER.comment("Base carrying capacity for ordinary recruits.")
+                .defineInRange("footCapacity", 36.0D, 10.0D, 100.0D);
+        ENCUMBRANCE_RANGED_CAPACITY = BUILDER.comment("Lower base capacity for bowmen, crossbowmen and nomads, encouraging light secondary weapons.")
+                .defineInRange("rangedCapacity", 30.0D, 10.0D, 100.0D);
+        ENCUMBRANCE_MOUNTED_BONUS = BUILDER.comment("Capacity added while a recruit rides a living mount.")
+                .defineInRange("mountedCapacityBonus", 14.0D, 0.0D, 100.0D);
+        ENCUMBRANCE_MAX_SPEED_PENALTY = BUILDER.comment("Maximum movement-speed reduction from inventory weight.")
+                .defineInRange("maximumSpeedPenalty", 0.48D, 0.0D, 0.80D);
+        ENCUMBRANCE_FATIGUE_SCALE = BUILDER.comment("Additional fatigue gain per point of load ratio above the comfortable threshold.")
+                .defineInRange("fatigueScale", 1.35D, 0.0D, 4.0D);
         BUILDER.pop();
         SERVER = BUILDER.build();
     }

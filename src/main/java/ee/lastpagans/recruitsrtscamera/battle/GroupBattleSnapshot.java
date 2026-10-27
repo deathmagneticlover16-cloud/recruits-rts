@@ -1,5 +1,7 @@
 package ee.lastpagans.recruitsrtscamera.battle;
 
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatProfile;
+
 /**
  * Client-facing group battle state.
  *
@@ -14,6 +16,16 @@ public record GroupBattleSnapshot(
         int moraleState,
         int combatBaseline,
         int currentCount,
-        boolean routedThisBattle
+        boolean routedThisBattle,
+        TroopStatProfile statistics,
+        float carriedWeight,
+        float carryCapacity,
+        float foodSupply
 ) {
+    public GroupBattleSnapshot {
+        statistics = statistics == null ? TroopStatProfile.NEUTRAL : statistics;
+        carriedWeight = Math.max(0.0F, carriedWeight);
+        carryCapacity = Math.max(0.0F, carryCapacity);
+        foodSupply = Math.max(0.0F, foodSupply);
+    }
 }
