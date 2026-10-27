@@ -4,8 +4,8 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.CaptainEntity;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitSpatialIndex;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /** Server-authoritative tactical visibility used by Fog of War. */
@@ -34,9 +34,9 @@ public final class RTSVision {
                 RTSServerConfig.FOG_RECRUIT_VISION_RADIUS.get(),
                 Math.max(RTSServerConfig.FOG_CAVALRY_VISION_RADIUS.get(), RTSServerConfig.FOG_SHIP_VISION_RADIUS.get())
         );
-        AABB box = new AABB(target, target).inflate(maxRadius, 96.0D, maxRadius);
-        for (AbstractRecruitEntity recruit : player.serverLevel().getEntitiesOfClass(AbstractRecruitEntity.class, box)) {
-            if (!recruit.isAlive() || !player.getUUID().equals(recruit.getOwnerUUID())) {
+        for (AbstractRecruitEntity recruit : RecruitSpatialIndex.nearby(player.serverLevel(), target, maxRadius)) {
+            if (!recruit.isAlive() || Math.abs(recruit.getY() - target.y) > 96.0D
+                    || !player.getUUID().equals(recruit.getOwnerUUID())) {
                 continue;
             }
             Vec3 source = recruit.position();

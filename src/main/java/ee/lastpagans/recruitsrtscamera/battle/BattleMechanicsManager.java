@@ -17,6 +17,7 @@ import ee.lastpagans.recruitsrtscamera.network.BattleStateSyncPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitSpatialIndex;
 import ee.lastpagans.recruitsrtscamera.server.BodyguardManager;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatProfile;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatRegistry;
@@ -501,7 +502,7 @@ public final class BattleMechanicsManager {
         ServerLevel level = player.serverLevel();
         double radiusSq = BODYGUARD_GUARD_RADIUS * BODYGUARD_GUARD_RADIUS;
         List<AbstractRecruitEntity> defenders = new ArrayList<>();
-        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+        for (AbstractRecruitEntity recruit : RecruitSpatialIndex.nearby(level, player.position(), BODYGUARD_GUARD_RADIUS)) {
             if (!recruit.isAlive()
                     || !player.getUUID().equals(recruit.getOwnerUUID())
                     || !groupId.equals(recruit.getGroup()) || recruit.isAlliedTo(attacker)
@@ -533,7 +534,7 @@ public final class BattleMechanicsManager {
         if (level == null || bearer == null || attacker == null || bearer.getGroup() == null) return;
         double radiusSq = STANDARD_GUARD_RADIUS * STANDARD_GUARD_RADIUS;
         List<AbstractRecruitEntity> defenders = new ArrayList<>();
-        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+        for (AbstractRecruitEntity recruit : RecruitSpatialIndex.nearby(level, bearer.position(), STANDARD_GUARD_RADIUS)) {
             if (recruit == bearer || !recruit.isAlive()
                     || !bearer.getGroup().equals(recruit.getGroup()) || recruit.isAlliedTo(attacker)
                     || recruit.distanceToSqr(bearer) > radiusSq) {
@@ -566,7 +567,7 @@ public final class BattleMechanicsManager {
         if (delta < 0.0F && groupHasMoraleItem(level, groupId)) {
             effectiveDelta *= 0.80F;
         }
-        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+        for (AbstractRecruitEntity recruit : RecruitSpatialIndex.group(level, groupId)) {
             if (recruit.isAlive()
                     && groupId.equals(recruit.getGroup())) {
                 recruit.setMoral(Math.max(0.0F, Math.min(100.0F, recruit.getMorale() + effectiveDelta)));
@@ -587,7 +588,7 @@ public final class BattleMechanicsManager {
     }
 
     private static boolean groupHasMoraleItem(ServerLevel level, UUID groupId) {
-        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+        for (AbstractRecruitEntity recruit : RecruitSpatialIndex.group(level, groupId)) {
             if (recruit.isAlive()
                     && groupId.equals(recruit.getGroup())
                     && (recruit.getMainHandItem().is(RTSTags.MORALE_ITEMS)

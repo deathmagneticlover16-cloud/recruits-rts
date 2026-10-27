@@ -9,6 +9,7 @@ import net.minecraft.world.item.TridentItem;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -52,10 +53,20 @@ public final class TroopEquipmentCompat {
         return id != null && MUSKET_NAMESPACE.equals(id.getNamespace()) && "cartridge".equals(id.getPath());
     }
 
-    /** Reads Musket Mod's configured GunItem.damage() at runtime. */
-    public static double rangedDamage(ItemStack stack) {
-        if (!isMusketGun(stack)) return Double.NaN;
-        return invokeNumber(stack.getItem(), "damage");
+    /** Musket Mod defines the bayonet value as total melee damage, not bullet damage. */
+    public static double meleeDamage(ItemStack stack, double fallback) {
+        ResourceLocation id = id(stack);
+        if (id == null || !MUSKET_NAMESPACE.equals(id.getNamespace())
+                || !"musket_with_bayonet".equals(id.getPath())) return fallback;
+        try {
+            Class<?> config = Class.forName("ewewukek.musketmod.Config", false,
+                    stack.getItem().getClass().getClassLoader());
+            Field field = config.getField("bayonetDamage");
+            Object value = field.get(null);
+            return value instanceof Number number ? number.doubleValue() : fallback;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return 5.0D;
+        }
     }
 
     /** Converts Musket Mod's configured angular standard deviation into the shared 0-100 display. */

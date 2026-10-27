@@ -73,6 +73,7 @@ routing = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/RoutedGro
 world_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalWorldRenderer.java")
 render_scene = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TacticalRenderScene.java")
 runtime_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitRuntimeRegistry.java")
+spatial_index = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitSpatialIndex.java")
 doctrine = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationDoctrineManager.java")
 terrain_cache = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/TacticalTerrainCache.java")
 fog_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/FogOfWarWorldRenderer.java")
@@ -425,15 +426,20 @@ require(stat_service, "fatigueGainMultiplier", "carried load must increase fatig
 require(stat_service, "fatigueRecoveryMultiplier", "carried load must slow fatigue recovery")
 require(stat_service, "LivingAttackEvent", "melee skill and defence must resolve real melee hit chances")
 require(stat_service, "projectile.setDeltaMovement", "accuracy must affect real recruit projectiles")
-require(stat_service, "movement.getValue() * 200.0D",
-        "speed must use the controlled entity's effective current movement attribute")
+require(stat_service, "double base = 110.0D", "unarmored foot formations must have 110 speed")
+require(stat_service, "double armorPenalty = armor * 2.5D",
+        "four armor points must reduce formation speed from 110 to 100")
+forbid(stat_service, "movement.getValue() * 200.0D",
+       "walking and running modifiers must never change maximum formation speed")
 require(stat_service, "TroopEquipmentCompat.equippedCombatWeapon(recruit)",
         "live stats must follow weapons parked in a recruit's offhand")
 require(equipment_compat, '"musketmod"', "Musket Mod must have direct optional integration")
 require(equipment_compat, '"magistuarmory", "slavicarmory", "darkagesarmory", "magistuarmoryaddon", "antiquelegacy"',
         "all supplied Epic Knights modules must share direct equipment integration")
-for method in ("damage", "bulletStdDev", "getLoadingDuration", "getWeight"):
+for method in ("bayonetDamage", "bulletStdDev", "getLoadingDuration", "getWeight"):
     require(equipment_compat, '"' + method + '"', "equipment integration must read live " + method)
+require(stat_service, "TroopEquipmentCompat.meleeDamage(weapon, recruit.getAttackDamage())",
+        "Damage must report melee damage rather than musket projectile damage")
 require(equipment_compat, "isMusketGun(off)", "Musket Rest offhand parking must remain visible to stats")
 for mod_id in ("musketmod", "musketrestposition", "magistuarmory", "slavicarmory", "darkagesarmory",
                "magistuarmoryaddon", "antiquelegacy"):
@@ -449,6 +455,15 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/BattleStat
 require(overlay, "battle.statistics().value(statistic)", "the inspector must use synchronized real statistics")
 require(overlay, "battle.carriedWeight()", "the inspector must expose carried weight and capacity")
 require(overlay, "battle.foodSupply()", "the inspector must expose remaining food supply")
+require(spatial_index, "RecruitRuntimeRegistry.loaded(level)",
+        "stage four needs one shared position-correct spatial snapshot per level tick")
+require(spatial_index, "public static List<AbstractRecruitEntity> within",
+        "stage four needs bounded recruit queries for impact and projectile corridors")
+require(cavalry_combat, "RecruitSpatialIndex.within", "cavalry impact scans must use the shared grid")
+require(source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ProjectileAwarenessManager.java"),
+        "RecruitSpatialIndex.within", "projectile corridors must use the shared grid")
+require(fog_renderer, "float[][] hiddenRaster", "stage-four fog must rasterize visibility")
+require(fog_renderer, "lastEmittedQuads", "fog raster LOD must expose its emitted-quad count")
 require(battle, "FATIGUE_GAIN_SCALE = 1.0D / 2.3D", "battle fatigue growth must be 2.3x slower")
 require(battle, "ROUTING_MORALE = 4.0F", "ordinary rout susceptibility must be halved")
 require(battle, "ARCHER_MELEE_ROUTING_MORALE = 8.0F",
@@ -556,6 +571,6 @@ require(cavalry_combat, "MAX_MOUNTED_SPEED_MULTIPLIER = 1.25D",
 require(cavalry_combat, "mount.getFirstPassenger() == recruit",
         "mount bonuses must only exist while the recruit actually occupies the horse")
 require(network, 'PROTOCOL = "rts-camera-159"', "live troop-stat packet changes require protocol 159")
-require(source("gradle.properties"), "mod_version=0.18.1-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.19.0-server.1", "semantic version must be updated")
 
-print("0.18.1-server.1 source contracts passed")
+print("0.19.0-server.1 source contracts passed")

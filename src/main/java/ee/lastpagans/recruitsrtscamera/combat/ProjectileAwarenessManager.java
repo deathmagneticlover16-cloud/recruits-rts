@@ -5,6 +5,8 @@ import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeMetrics;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitSpatialIndex;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.phys.AABB;
@@ -49,12 +51,10 @@ public final class ProjectileAwarenessManager {
         Vec3 end = start.add(velocity.scale(24.0D));
         AABB corridor = new AABB(start, end).inflate(3.0D);
         Map<UUID, AbstractRecruitEntity> threatenedGroups = new HashMap<>();
-        for (AbstractRecruitEntity recruit : projectile.level().getEntitiesOfClass(
-                AbstractRecruitEntity.class,
-                corridor,
-                recruit -> recruit.isAlive() && recruit.getGroup() != null
-                        && recruit != owner && (owner == null || !recruit.isAlliedTo(owner))
-        )) {
+        if (!(projectile.level() instanceof ServerLevel level)) return;
+        for (AbstractRecruitEntity recruit : RecruitSpatialIndex.within(level, corridor)) {
+            if (!recruit.isAlive() || recruit.getGroup() == null || recruit == owner
+                    || (owner != null && recruit.isAlliedTo(owner))) continue;
             Vec3 delta = recruit.getEyePosition().subtract(start);
             double time = Math.max(0.0D, Math.min(24.0D, delta.dot(velocity) / velocity.lengthSqr()));
             if (delta.subtract(velocity.scale(time)).lengthSqr() <= 9.0D) {

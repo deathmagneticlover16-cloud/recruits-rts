@@ -9,6 +9,7 @@ import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitSpatialIndex;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatService;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -113,9 +114,9 @@ public final class CavalryCombatManager {
         double dot = state.heading == null ? 1.0D : heading.dot(state.heading);
         boolean near = attacking && rider.distanceToSqr(target) < 36.0D;
         if (!near && state.momentum.hasImpactMomentum()) {
-            near = !state.level.getEntitiesOfClass(AbstractRecruitEntity.class,
-                    state.mount.getBoundingBox().inflate(6.0D, 2.0D, 6.0D),
-                    enemy -> validFootEnemy(rider, enemy)).isEmpty();
+            near = RecruitSpatialIndex.within(state.level,
+                            state.mount.getBoundingBox().inflate(6.0D, 2.0D, 6.0D)).stream()
+                    .anyMatch(enemy -> validFootEnemy(rider, enemy));
         }
         state.momentum.step(moved, dot, forward, near, state.mount.onGround() && !state.mount.isInWater(),
                 RTSServerConfig.CAVALRY_FULL_CHARGE_SPEED.get(), RTSServerConfig.CAVALRY_CHARGE_RUNUP.get());
@@ -129,8 +130,9 @@ public final class CavalryCombatManager {
 
     private static void sweepImpact(AbstractRecruitEntity rider, RiderState state, Vec3 from, Vec3 to) {
         AABB swept = state.mount.getBoundingBox().expandTowards(from.subtract(to)).inflate(0.20D, 0.0D, 0.20D);
-        List<AbstractRecruitEntity> victims = state.level.getEntitiesOfClass(AbstractRecruitEntity.class, swept,
-                victim -> validFootEnemy(rider, victim) && !state.victims.contains(victim.getUUID()));
+        List<AbstractRecruitEntity> victims = RecruitSpatialIndex.within(state.level, swept).stream()
+                .filter(victim -> validFootEnemy(rider, victim) && !state.victims.contains(victim.getUUID()))
+                .collect(java.util.stream.Collectors.toCollection(java.util.ArrayList::new));
         victims.sort(Comparator.comparingDouble(victim -> victim.distanceToSqr(from)));
         double radius = state.mount.getBbWidth() * 0.5D + 0.20D;
         for (AbstractRecruitEntity victim : victims) {

@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.19.0-server.1
+Stable capability statistics and stage-four scaling
+
+- Corrected Speed to represent maximum formation capability rather than current movement. Standing, Walk, Run, Hasty Move and order-time attribute changes no longer move the number. Unarmored foot troops read 110 and four armor points read 100; additional armor and inventory overload lower it, while mounted formations use the mount's stable base capability.
+- Corrected Damage to report melee damage. A Musket Mod bayonet reads its configured `bayonetDamage` value (5 by default) instead of the musket's 16 projectile damage, including while Musket Rest parks it in a crossbowman's offhand. Accuracy and Rate of Fire remain firearm statistics.
+- Implemented stage four's immutable per-level/per-tick recruit spatial grid. Formation separation, cavalry threat and swept-impact checks, projectile corridors, guard reactions, group morale operations and server fog vision now share bounded bucket/group queries instead of repeated world or whole-army scans.
+- Implemented the stage-four fog visibility raster. Friendly vision sources stamp only their affected cells, replacing the previous every-cell-by-every-source scan. Distance and density LOD reduce distant fog to one sheet and retain extra depth only near the camera; the debug panel reports raster cells and emitted quads.
+- Added spatial rebuild and candidate counters to `/recruitsperf navigation` for battlefield-scale profiling.
+- Network protocol remains rts-camera-159 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.19.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.18.1-server.1
 Live speed and supplied equipment integration
 

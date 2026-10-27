@@ -75,7 +75,7 @@ public final class TroopStatService {
                 ? Math.min(3.0D, 1.0D + excess * RTSServerConfig.ENCUMBRANCE_FATIGUE_SCALE.get()) : 1.0D;
         double fatigueRecovery = 1.0D / (1.0D + excess * 1.60D);
         if (!RTSServerConfig.ENCUMBRANCE_ENABLED.get()) fatigueRecovery = 1.0D;
-        TroopStatProfile profile = liveProfile(recruit, fatigue, load.ammunition, carrier);
+        TroopStatProfile profile = liveProfile(recruit, fatigue, load.ammunition, carrier, ratio);
         SoldierStats result = new SoldierStats(profile, load.weight, load.capacity, ratio,
                 fatigueGain, fatigueRecovery, load.ammunition, load.food);
         LiveState state = LIVE.computeIfAbsent(recruit.getUUID(), ignored -> new LiveState());
@@ -97,7 +97,7 @@ public final class TroopStatService {
         SoldierStats old = current(recruit);
         LivingEntity carrier = recruit.getVehicle() instanceof LivingEntity living ? living : recruit;
         SoldierStats updated = new SoldierStats(
-                liveProfile(recruit, fatigue, old.ammunition(), carrier),
+                liveProfile(recruit, fatigue, old.ammunition(), carrier, old.loadRatio()),
                 old.carriedWeight(), old.capacity(), old.loadRatio(),
                 old.fatigueGainMultiplier(), old.fatigueRecoveryMultiplier(), old.ammunition(), old.food());
         LiveState state = LIVE.computeIfAbsent(recruit.getUUID(), ignored -> new LiveState());
@@ -114,16 +114,11 @@ public final class TroopStatService {
     }
 
     private static TroopStatProfile liveProfile(
-            AbstractRecruitEntity recruit, double fatigue, int ammunition, LivingEntity carrier
+            AbstractRecruitEntity recruit, double fatigue, int ammunition, LivingEntity carrier, double loadRatio
     ) {
         ItemStack weapon = TroopEquipmentCompat.equippedCombatWeapon(recruit);
         double level = Math.max(0, recruit.getXpLevel());
-        double damage = recruit.getAttackDamage();
-        double integratedDamage = TroopEquipmentCompat.rangedDamage(weapon);
-        if (Double.isFinite(integratedDamage)) damage = integratedDamage;
-        else if (weapon.getItem() instanceof BowItem) damage = 6.0D;
-        else if (weapon.getItem() instanceof CrossbowItem) damage = 9.0D;
-        else if (weapon.getItem() instanceof TridentItem) damage = 8.0D;
+        double damage = TroopEquipmentCompat.meleeDamage(weapon, recruit.getAttackDamage());
 
         double meleeSkill = 44.0D + Math.min(30.0D, level * 3.0D) - fatigue * 0.16D;
         double meleeDefence = 24.0D + recruit.getArmorValue() * 2.4D
@@ -135,10 +130,7 @@ public final class TroopStatService {
                 && FormationService.activeKind(levelServer, recruit.getGroup()) == FormationKind.CAVALRY_WEDGE) {
             charge += 17.0D;
         }
-        // getValue() includes every current modifier: RTS pace, formation doctrine, fatigue,
-        // inventory encumbrance, Epic Knights equipment attributes and Armor Weight v1.1.
-        AttributeInstance movement = carrier.getAttribute(Attributes.MOVEMENT_SPEED);
-        double speed = movement == null ? 0.0D : movement.getValue() * 200.0D;
+        double speed = maximumSpeedRating(recruit, carrier, loadRatio);
         double accuracy = rangedAccuracy(recruit, weapon, fatigue, level);
         double rateOfFire = rangedRate(weapon);
         return TroopStatProfile.builder()
@@ -153,6 +145,25 @@ public final class TroopStatService {
                 .set(TroopStatistic.AMMUNITION, ammunition)
                 .set(TroopStatistic.RATE_OF_FIRE, rateOfFire)
                 .build();
+    }
+
+    /** Stable formation capability: movement orders and current velocity never change this value. */
+    private static double maximumSpeedRating(
+            AbstractRecruitEntity recruit, LivingEntity carrier, double loadRatio
+    ) {
+        double base = 110.0D;
+        double armor = recruit.getArmorValue();
+        if (carrier != recruit) {
+            AttributeInstance movement = carrier.getAttribute(Attributes.MOVEMENT_SPEED);
+            double mountBase = movement == null ? 0.225D : movement.getBaseValue();
+            base = Math.max(120.0D, Math.min(160.0D, 110.0D + mountBase / 0.225D * 30.0D));
+            armor += carrier.getArmorValue();
+        }
+        double armorPenalty = armor * 2.5D; // 0 AP = 110; 4 AP = 100 for foot troops.
+        double cargoRate = RTSServerConfig.ENCUMBRANCE_ENABLED.get()
+                ? Math.min(RTSServerConfig.ENCUMBRANCE_MAX_SPEED_PENALTY.get(), movementPenalty(loadRatio)) : 0.0D;
+        double cargoPenalty = base * cargoRate * (carrier == recruit ? 1.0D : 0.65D);
+        return Math.max(1.0D, base - armorPenalty - cargoPenalty);
     }
 
     private static double rangedAccuracy(AbstractRecruitEntity recruit, ItemStack weapon, double fatigue, double level) {

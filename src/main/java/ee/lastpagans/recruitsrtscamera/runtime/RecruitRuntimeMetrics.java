@@ -30,6 +30,8 @@ public final class RecruitRuntimeMetrics {
     public static final LongAdder TERRAIN_CACHE_HITS = new LongAdder();
     public static final LongAdder TERRAIN_CACHE_MISSES = new LongAdder();
     public static final LongAdder PATH_SLICES = new LongAdder();
+    public static final LongAdder SPATIAL_REBUILDS = new LongAdder();
+    public static final LongAdder SPATIAL_CANDIDATES = new LongAdder();
 
     private RecruitRuntimeMetrics() {
     }
@@ -96,7 +98,9 @@ public final class RecruitRuntimeMetrics {
                 + " · failures=" + PATH_FAILURES.sum()
                 + " · terrain invalidations=" + TERRAIN_INVALIDATIONS.sum()
                 + " · terrain cache=" + TERRAIN_CACHE_HITS.sum() + "/" + TERRAIN_CACHE_MISSES.sum()
-                + " · path slices=" + PATH_SLICES.sum();
+                + " · path slices=" + PATH_SLICES.sum()
+                + " · spatial rebuilds=" + SPATIAL_REBUILDS.sum()
+                + " · spatial candidates=" + SPATIAL_CANDIDATES.sum();
     }
 
     public static void reset() {
@@ -115,6 +119,8 @@ public final class RecruitRuntimeMetrics {
         TERRAIN_CACHE_HITS.reset();
         TERRAIN_CACHE_MISSES.reset();
         PATH_SLICES.reset();
+        SPATIAL_REBUILDS.reset();
+        SPATIAL_CANDIDATES.reset();
     }
 
     @SubscribeEvent

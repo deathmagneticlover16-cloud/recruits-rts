@@ -20,6 +20,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -47,6 +48,8 @@ public final class FogOfWarWorldRenderer {
     private static long lastSampleMillis;
     private static int lastCameraCellX = Integer.MIN_VALUE;
     private static int lastCameraCellZ = Integer.MIN_VALUE;
+    private static int lastRasterCells;
+    private static int lastEmittedQuads;
 
     private FogOfWarWorldRenderer() {
     }
@@ -56,6 +59,8 @@ public final class FogOfWarWorldRenderer {
         lastSampleMillis = 0L;
         lastCameraCellX = Integer.MIN_VALUE;
         lastCameraCellZ = Integer.MIN_VALUE;
+        lastRasterCells = 0;
+        lastEmittedQuads = 0;
     }
 
     public static void render(RenderLevelStageEvent event) {
@@ -121,7 +126,10 @@ public final class FogOfWarWorldRenderer {
                 continue;
             }
 
-            int layers = density < 0.30F ? 2 : 4;
+            // Raster LOD: distant and thin fog needs one sheet, while dense nearby banks
+            // retain depth. This bounds quad emission instead of drawing eight per cell.
+            int layers = density < 0.30F || horizontalDistance > 120.0D ? 1
+                    : density < 0.80F ? 2 : 3;
             for (int layer = 0; layer < layers; layer++) {
                 double phase = cell.seed() * 0.017453292519943295D + layer * 1.91D;
                 double driftX = Math.sin(t * 0.095D + phase) * (1.2D + layer * 0.35D);
@@ -147,17 +155,21 @@ public final class FogOfWarWorldRenderer {
                         183, 188, 181, alpha);
                 emittedQuads++;
 
-                emitBillboard(buffer, matrix, left, up,
-                        centerX + Math.cos(phase) * 2.4D,
-                        centerY + 2.1D,
-                        centerZ + Math.sin(phase) * 2.4D,
-                        width * 0.78F,
-                        height * 0.82F,
-                        201, 203, 198,
-                        Math.max(10, (int) (alpha * 0.58F)));
-                emittedQuads++;
+                if (horizontalDistance < 96.0D && density >= 0.45F) {
+                    emitBillboard(buffer, matrix, left, up,
+                            centerX + Math.cos(phase) * 2.4D,
+                            centerY + 2.1D,
+                            centerZ + Math.sin(phase) * 2.4D,
+                            width * 0.78F,
+                            height * 0.82F,
+                            201, 203, 198,
+                            Math.max(10, (int) (alpha * 0.58F)));
+                    emittedQuads++;
+                }
             }
         }
+
+        lastEmittedQuads = emittedQuads;
 
         if (emittedQuads > 0) {
             Tesselator.getInstance().end();
@@ -183,11 +195,41 @@ public final class FogOfWarWorldRenderer {
         }
 
         CELLS.clear();
+        lastEmittedQuads = 0;
         List<RTSCameraController.FogVisionSource> sources = RTSCameraController.fogVisionSources();
         int sampleRadius = RTSClientConfig.FOG_RENDER_DISTANCE.get();
         double edgeFadeDistance = RTSClientConfig.FOG_EDGE_FADE_DISTANCE.get();
         int cells = (int) Math.ceil(sampleRadius / (double) CELL_SIZE);
         double radiusSq = sampleRadius * (double) sampleRadius;
+
+        // Stage-four visibility raster. Friendly sources stamp only the cells inside their
+        // radius plus feather instead of every fog cell scanning every source.
+        int diameter = cells * 2 + 1;
+        float[][] hiddenRaster = new float[diameter][diameter];
+        for (float[] row : hiddenRaster) Arrays.fill(row, 1.0F);
+        double feather = Math.max(0.001D, edgeFadeDistance);
+        for (RTSCameraController.FogVisionSource source : sources) {
+            double influence = source.radius() + feather;
+            int reach = (int) Math.ceil(influence / CELL_SIZE);
+            int sourceCellX = floorDiv(source.position().x, CELL_SIZE);
+            int sourceCellZ = floorDiv(source.position().z, CELL_SIZE);
+            for (int worldCellX = sourceCellX - reach; worldCellX <= sourceCellX + reach; worldCellX++) {
+                int rasterX = worldCellX - (cameraCellX - cells);
+                if (rasterX < 0 || rasterX >= diameter) continue;
+                double worldX = worldCellX * (double) CELL_SIZE + CELL_SIZE * 0.5D;
+                for (int worldCellZ = sourceCellZ - reach; worldCellZ <= sourceCellZ + reach; worldCellZ++) {
+                    int rasterZ = worldCellZ - (cameraCellZ - cells);
+                    if (rasterZ < 0 || rasterZ >= diameter) continue;
+                    double worldZ = worldCellZ * (double) CELL_SIZE + CELL_SIZE * 0.5D;
+                    double distance = Math.sqrt(horizontalDistanceSqr(
+                            source.position().x, source.position().z, worldX, worldZ));
+                    double outside = distance - source.radius();
+                    float hidden = outside <= 0.0D ? 0.0F
+                            : (float) clamp(outside / feather, 0.0D, 1.0D);
+                    hiddenRaster[rasterX][rasterZ] = Math.min(hiddenRaster[rasterX][rasterZ], hidden);
+                }
+            }
+        }
 
         for (int dz = -cells; dz <= cells; dz++) {
             for (int dx = -cells; dx <= cells; dx++) {
@@ -202,11 +244,7 @@ public final class FogOfWarWorldRenderer {
                     continue;
                 }
 
-                float hidden = RTSCameraController.fogHiddenFactor(
-                        new Vec3(worldX + 0.5D, cameraPos.y, worldZ + 0.5D),
-                        sources,
-                        edgeFadeDistance
-                );
+                float hidden = hiddenRaster[dx + cells][dz + cells];
                 if (hidden <= 0.025F) {
                     continue;
                 }
@@ -216,6 +254,7 @@ public final class FogOfWarWorldRenderer {
                 CELLS.add(new FogCell(worldX + 0.5D, groundY, worldZ + 0.5D, hidden, seed));
             }
         }
+        lastRasterCells = diameter * diameter;
 
         // Cell membership and ordering remain valid until the camera enters another
         // sampling cell, avoiding a full translucent-depth sort on every render frame.
@@ -226,6 +265,9 @@ public final class FogOfWarWorldRenderer {
         lastCameraCellX = cameraCellX;
         lastCameraCellZ = cameraCellZ;
     }
+
+    public static int lastRasterCells() { return lastRasterCells; }
+    public static int lastEmittedQuads() { return lastEmittedQuads; }
 
     private static void emitBillboard(
             BufferBuilder buffer,

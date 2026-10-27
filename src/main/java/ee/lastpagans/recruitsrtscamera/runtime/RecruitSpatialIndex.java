@@ -2,113 +2,142 @@ package ee.lastpagans.recruitsrtscamera.runtime;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.Level;
-import net.minecraftforge.event.entity.EntityJoinLevelEvent;
-import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
-import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 
-/** A small event-maintained grid used for same-formation steering queries. */
+/** One immutable, position-correct recruit grid per level/tick for all proximity consumers. */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RecruitSpatialIndex {
     private static final int CELL_SIZE = 8;
-    private static final Map<UUID, Entry> ENTRIES = new HashMap<>();
-    private static final Map<Cell, Set<UUID>> CELLS = new HashMap<>();
+    private static final Map<ServerLevel, Snapshot> SNAPSHOTS = new HashMap<>();
 
-    private RecruitSpatialIndex() {
-    }
+    private RecruitSpatialIndex() { }
 
+    /** Retained for steering callers; the tick snapshot updates every moving recruit together. */
     public static void track(AbstractRecruitEntity recruit) {
-        if (recruit == null || recruit.level().isClientSide) return;
-        Cell cell = cell(recruit);
-        Entry previous = ENTRIES.put(recruit.getUUID(), new Entry(recruit, cell));
-        if (previous != null && !previous.cell.equals(cell)) remove(previous.cell, recruit.getUUID());
-        CELLS.computeIfAbsent(cell, ignored -> new HashSet<>()).add(recruit.getUUID());
+        if (recruit != null && !recruit.level().isClientSide) RecruitRuntimeRegistry.brain(recruit);
     }
 
     public static List<AbstractRecruitEntity> nearbyGroup(AbstractRecruitEntity origin, double radius) {
-        if (origin == null || radius <= 0.0D || origin.getGroup() == null) return List.of();
-        track(origin);
+        if (origin == null || !(origin.level() instanceof ServerLevel level)
+                || radius <= 0.0D || origin.getGroup() == null) return List.of();
+        List<AbstractRecruitEntity> result = new ArrayList<>();
+        for (AbstractRecruitEntity recruit : nearby(level, origin.position(), radius)) {
+            if (recruit != origin && Objects.equals(origin.getGroup(), recruit.getGroup())
+                    && recruit.distanceToSqr(origin) <= radius * radius) result.add(recruit);
+        }
+        return result;
+    }
+
+    public static List<AbstractRecruitEntity> nearby(ServerLevel level, Vec3 center, double radius) {
+        if (level == null || center == null || radius <= 0.0D) return List.of();
+        Snapshot snapshot = snapshot(level);
         int reach = Math.max(1, (int) Math.ceil(radius / CELL_SIZE));
-        int cx = floorCell(origin.getX());
-        int cz = floorCell(origin.getZ());
+        int centerX = cell(center.x);
+        int centerZ = cell(center.z);
         double radiusSq = radius * radius;
         List<AbstractRecruitEntity> result = new ArrayList<>();
         for (int dx = -reach; dx <= reach; dx++) {
             for (int dz = -reach; dz <= reach; dz++) {
-                Set<UUID> ids = CELLS.get(new Cell(origin.level().dimension(), cx + dx, cz + dz));
-                if (ids == null) continue;
-                for (UUID id : ids) {
-                    if (id.equals(origin.getUUID())) continue;
-                    Entry entry = ENTRIES.get(id);
-                    AbstractRecruitEntity recruit = entry == null ? null : entry.recruit;
-                    if (recruit == null || !recruit.isAlive() || recruit.isRemoved()
-                            || recruit.level() != origin.level() || !Objects.equals(recruit.getGroup(), origin.getGroup())) {
-                        continue;
+                List<AbstractRecruitEntity> bucket = snapshot.cells.get(key(centerX + dx, centerZ + dz));
+                if (bucket == null) continue;
+                RecruitRuntimeMetrics.SPATIAL_CANDIDATES.add(bucket.size());
+                for (AbstractRecruitEntity recruit : bucket) {
+                    if (valid(recruit, level) && horizontalDistanceSqr(recruit.position(), center) <= radiusSq) {
+                        result.add(recruit);
                     }
-                    if (recruit.distanceToSqr(origin) <= radiusSq) result.add(recruit);
                 }
             }
         }
         return result;
     }
 
-    @SubscribeEvent
-    public static void onJoin(EntityJoinLevelEvent event) {
-        if (!event.getLevel().isClientSide && event.getEntity() instanceof AbstractRecruitEntity recruit) track(recruit);
-    }
-
-    @SubscribeEvent
-    public static void onLeave(EntityLeaveLevelEvent event) {
-        if (!event.getLevel().isClientSide && event.getEntity() instanceof AbstractRecruitEntity recruit) remove(recruit);
-    }
-
-    @SubscribeEvent
-    public static void onDeath(LivingDeathEvent event) {
-        if (!event.getEntity().level().isClientSide && event.getEntity() instanceof AbstractRecruitEntity recruit) {
-            remove(recruit);
+    public static List<AbstractRecruitEntity> within(ServerLevel level, AABB bounds) {
+        if (level == null || bounds == null) return List.of();
+        Snapshot snapshot = snapshot(level);
+        int minX = cell(bounds.minX);
+        int maxX = cell(bounds.maxX);
+        int minZ = cell(bounds.minZ);
+        int maxZ = cell(bounds.maxZ);
+        List<AbstractRecruitEntity> result = new ArrayList<>();
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                List<AbstractRecruitEntity> bucket = snapshot.cells.get(key(x, z));
+                if (bucket == null) continue;
+                RecruitRuntimeMetrics.SPATIAL_CANDIDATES.add(bucket.size());
+                for (AbstractRecruitEntity recruit : bucket) {
+                    if (valid(recruit, level) && bounds.intersects(recruit.getBoundingBox())) result.add(recruit);
+                }
+            }
         }
+        return result;
     }
 
-    private static void remove(AbstractRecruitEntity recruit) {
-        Entry entry = ENTRIES.remove(recruit.getUUID());
-        if (entry != null) remove(entry.cell, recruit.getUUID());
+    public static List<AbstractRecruitEntity> group(ServerLevel level, UUID groupId) {
+        if (level == null || groupId == null) return List.of();
+        return snapshot(level).groups.getOrDefault(groupId, List.of());
     }
 
-    private static void remove(Cell cell, UUID id) {
-        Set<UUID> ids = CELLS.get(cell);
-        if (ids == null) return;
-        ids.remove(id);
-        if (ids.isEmpty()) CELLS.remove(cell);
+    private static Snapshot snapshot(ServerLevel level) {
+        long tick = level.getGameTime();
+        Snapshot cached = SNAPSHOTS.get(level);
+        if (cached != null && cached.tick == tick) return cached;
+
+        Map<Long, List<AbstractRecruitEntity>> cells = new HashMap<>();
+        Map<UUID, List<AbstractRecruitEntity>> groups = new HashMap<>();
+        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+            if (!valid(recruit, level)) continue;
+            cells.computeIfAbsent(key(cell(recruit.getX()), cell(recruit.getZ())), ignored -> new ArrayList<>())
+                    .add(recruit);
+            if (recruit.getGroup() != null) {
+                groups.computeIfAbsent(recruit.getGroup(), ignored -> new ArrayList<>()).add(recruit);
+            }
+        }
+        cells.replaceAll((ignored, members) -> List.copyOf(members));
+        groups.replaceAll((ignored, members) -> List.copyOf(members));
+        Snapshot rebuilt = new Snapshot(tick, Map.copyOf(cells), Map.copyOf(groups));
+        SNAPSHOTS.put(level, rebuilt);
+        RecruitRuntimeMetrics.SPATIAL_REBUILDS.increment();
+        return rebuilt;
     }
 
-    private static Cell cell(Entity entity) {
-        return new Cell(entity.level().dimension(), floorCell(entity.getX()), floorCell(entity.getZ()));
+    private static boolean valid(AbstractRecruitEntity recruit, ServerLevel level) {
+        return recruit != null && recruit.level() == level && recruit.isAlive() && !recruit.isRemoved();
     }
 
-    private static int floorCell(double coordinate) {
+    private static int cell(double coordinate) {
         return Math.floorDiv((int) Math.floor(coordinate), CELL_SIZE);
+    }
+
+    private static long key(int x, int z) {
+        return ((long) x << 32) ^ (z & 0xffffffffL);
+    }
+
+    private static double horizontalDistanceSqr(Vec3 a, Vec3 b) {
+        double dx = a.x - b.x;
+        double dz = a.z - b.z;
+        return dx * dx + dz * dz;
     }
 
     @SubscribeEvent
     public static void onStop(ServerStoppedEvent event) {
-        ENTRIES.clear();
-        CELLS.clear();
+        SNAPSHOTS.clear();
     }
 
-    private record Cell(ResourceKey<Level> level, int x, int z) {}
-    private record Entry(AbstractRecruitEntity recruit, Cell cell) {}
+    private record Snapshot(
+            long tick,
+            Map<Long, List<AbstractRecruitEntity>> cells,
+            Map<UUID, List<AbstractRecruitEntity>> groups
+    ) { }
 }

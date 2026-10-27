@@ -9,7 +9,7 @@ import java.util.Locale;
 public enum TroopStatistic {
     DAMAGE(
             "stat.damage", "Damage",
-            "Determines the damage dealt by the soldier's currently equipped weapon, including melee and ranged weapons.",
+            "Current melee damage dealt by the soldier's equipped weapon. Ranged projectile damage is tracked separately by its weapon.",
             6.0D, 40.0D, true),
     MELEE_SKILL(
             "stat.melee_skill", "Melee Skill",
@@ -25,7 +25,7 @@ public enum TroopStatistic {
             30.0D, 100.0D, true),
     SPEED(
             "stat.speed", "Speed",
-            "Current movement capability after mount, armor, inventory load, fatigue, formation and other active speed modifiers.",
+            "Maximum formation movement capability from mount, armor and carried inventory. Current walking, running or standing state does not change it.",
             60.0D, 160.0D, true),
     MORALE(
             "stat.morale", "Morale",
