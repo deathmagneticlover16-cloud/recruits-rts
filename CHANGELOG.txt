@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.22.0-server.1
+Formation volleys, troop roads and draggable unit cards
+
+- Foot recruits and recruit-mounted horses now accumulate traffic on supported natural dirt and wear it into ordinary dirt paths. Mounted footfalls count triple, `mobGriefing` is respected, tracking is bounded, and servers can configure the feature and footfall threshold.
+- Added formation volley timing. Bowmen and mounted Nomads share a draw/reload clock; Crossbowmen reload independently, then hold loaded weapons until the group is ready with a bounded straggler timeout; javelin users share one animation release tick and reload window.
+- Bowman entities already accepted tagged throwable weapons and already render as Bowmen on Commander cards. Epic Knights Dark Ages' `darkagesarmory:steel_javelin` is now explicitly included; Bowman javelin weight is 0.22 each so they can carry a missile reserve, while ordinary recruits pay 2.75 each and overload after only a few alongside normal equipment.
+- Wavering cards flash under a translucent white overlay. Routing cards retain a permanent white overlay until the routed group disappears and reject card clicks while remaining hoverable for status inspection.
+- Commander unit cards can be dragged to reorder the full card list. The active card lifts, scales slightly and follows the cursor with damped parallax; a blue insertion marker shows placement, and the order persists in client configuration across pages and sessions.
+- All existing RTS hotkeys were already configurable Minecraft `KeyMapping` entries, including camera height, selection, pace, rotation, deployment, fire control, route controls, halt and Space previews. Their working Controls-menu bindings remain intact.
+- Network protocol remains rts-camera-161 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.22.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.21.0-server.1
 Cavalry camera impact and live morale standards
 

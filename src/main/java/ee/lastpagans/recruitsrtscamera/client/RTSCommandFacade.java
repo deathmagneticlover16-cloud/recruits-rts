@@ -134,8 +134,14 @@ public final class RTSCommandFacade {
             ));
         }
 
+        UnitCardOrder.apply(result, UnitCardView::groupId);
         cachedCards = List.copyOf(result);
         return cachedCards;
+    }
+
+    public static void reorderUnitCard(UUID dragged, UUID target, boolean after) {
+        UnitCardOrder.move(dragged, target, after);
+        cachedGameTime = Long.MIN_VALUE;
     }
 
     private static Map<UUID, GroupSample> sampleLoadedGroups() {

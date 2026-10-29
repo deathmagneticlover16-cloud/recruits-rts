@@ -2,6 +2,8 @@ package ee.lastpagans.recruitsrtscamera.config;
 
 import net.minecraftforge.common.ForgeConfigSpec;
 
+import java.util.List;
+
 /** Client-only visual preferences. These never change server-side Fog of War authority. */
 public final class RTSClientConfig {
     private static final ForgeConfigSpec.Builder BUILDER = new ForgeConfigSpec.Builder();
@@ -14,6 +16,7 @@ public final class RTSClientConfig {
     public static final ForgeConfigSpec.EnumValue<GroundMarkerShape> GROUND_MARKER_SHAPE;
     public static final ForgeConfigSpec.BooleanValue CAVALRY_CAMERA_SHAKE;
     public static final ForgeConfigSpec.DoubleValue CAVALRY_CAMERA_SHAKE_INTENSITY;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> UNIT_CARD_ORDER;
     public static final ForgeConfigSpec CLIENT;
 
     static {
@@ -49,6 +52,9 @@ public final class RTSClientConfig {
         CAVALRY_CAMERA_SHAKE_INTENSITY = BUILDER
                 .comment("Strength of cavalry camera shake. 1.0 makes a nearby 17-rider formation clearly visible.")
                 .defineInRange("cavalryCameraShakeIntensity", 1.0D, 0.0D, 3.0D);
+        UNIT_CARD_ORDER = BUILDER
+                .comment("Persistent Commander unit-card order. Managed by dragging cards in the command bar.")
+                .defineList("unitCardOrder", List.of(), value -> value instanceof String);
         BUILDER.pop();
 
         CLIENT = BUILDER.build();

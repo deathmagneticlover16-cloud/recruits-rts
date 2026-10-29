@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
+    {"id": "darkagesarmory:steel_javelin", "required": false},
     {"id": "antiquelegacy:iron_antique_spear", "required": false},
     {"id": "antiquelegacy:iron_triarii_spear", "required": false}
   ]

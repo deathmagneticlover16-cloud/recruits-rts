@@ -59,6 +59,8 @@ public final class RTSServerConfig {
     public static final ForgeConfigSpec.DoubleValue ENCUMBRANCE_MOUNTED_BONUS;
     public static final ForgeConfigSpec.DoubleValue ENCUMBRANCE_MAX_SPEED_PENALTY;
     public static final ForgeConfigSpec.DoubleValue ENCUMBRANCE_FATIGUE_SCALE;
+    public static final ForgeConfigSpec.BooleanValue TROOP_ROAD_EROSION;
+    public static final ForgeConfigSpec.IntValue TROOP_FOOTFALLS_TO_PATH;
 
     static {
         BUILDER.push("permissions");
@@ -212,6 +214,16 @@ public final class RTSServerConfig {
                 .defineInRange("arrowLightArmorDamageMultiplier", 2.0D, 1.0D, 5.0D);
         JAVELIN_LIGHT_ARMOR_DAMAGE = BUILDER.comment("Commander thrown weapons vs unarmored recruits, fading to 1x at 20 armor.")
                 .defineInRange("javelinLightArmorDamageMultiplier", 1.6D, 1.0D, 5.0D);
+        BUILDER.pop();
+
+        BUILDER.push("troopRoads");
+        TROOP_ROAD_EROSION = BUILDER.comment(
+                        "Allow moving foot recruits and recruit-mounted horses to wear natural dirt into paths.",
+                        "Respects the mobGriefing game rule; mounted footfalls count three times.")
+                .define("enabled", true);
+        TROOP_FOOTFALLS_TO_PATH = BUILDER.comment(
+                        "Accumulated footfall weight on one block before it becomes a dirt path.")
+                .defineInRange("footfallsToPath", 80, 10, 1000);
         BUILDER.pop();
 
         BUILDER.push("encumbrance");

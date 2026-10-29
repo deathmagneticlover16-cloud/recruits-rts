@@ -194,7 +194,7 @@ public final class TroopStatService {
         for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
             ItemStack stack = inventory.getItem(slot);
             if (stack == null || stack.isEmpty()) continue;
-            double weight = stackWeight(stack);
+            double weight = stackWeight(recruit, stack);
             total += weight;
             if (isAmmunition(stack)) ammunition += stack.getCount();
             if (stack.getItem().getFoodProperties() != null) food += stack.getCount();
@@ -211,12 +211,18 @@ public final class TroopStatService {
         return capacity;
     }
 
-    private static double stackWeight(ItemStack stack) {
+    private static double stackWeight(AbstractRecruitEntity recruit, ItemStack stack) {
         int count = stack.getCount();
         if (stack.is(RTSTags.ENCUMBRANCE_WEIGHTLESS)) return 0.0D;
         if (stack.is(RTSTags.ENCUMBRANCE_LIGHT)) return count * 0.05D;
         if (stack.is(RTSTags.ENCUMBRANCE_HEAVY)) return count * 1.0D;
         if (stack.is(RTSTags.ENCUMBRANCE_VERY_HEAVY)) return count * 2.5D;
+        // Bowman equipment training includes bundled javelins. Ordinary infantry can
+        // carry a few, but using every inventory slot as a pila cart rapidly overloads
+        // them; a Bowman can sustain a real missile-unit ammunition reserve.
+        if (stack.is(RTSTags.THROWABLE_WEAPONS)) {
+            return count * (recruit instanceof BowmanEntity ? 0.22D : 2.75D);
+        }
         double integratedWeight = TroopEquipmentCompat.explicitEquipmentWeight(stack);
         if (Double.isFinite(integratedWeight)) return count * integratedWeight;
         Item item = stack.getItem();

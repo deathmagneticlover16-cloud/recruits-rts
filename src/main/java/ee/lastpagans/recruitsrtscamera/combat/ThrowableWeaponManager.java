@@ -81,6 +81,9 @@ public final class ThrowableWeaponManager {
 
         int releaseDelay = SeriousAnimationsCompat.spearThrowReleaseTick();
         int duration = SeriousAnimationsCompat.spearThrowDurationTicks();
+        long sharedRelease = FormationVolleyManager.reserveJavelinRelease(
+                recruit, releaseDelay, THROW_COOLDOWN_TICKS);
+        if (sharedRelease < 0L) return false;
         CommanderAnimationHints.offer(recruit, CommanderAnimationHints.Hint.SPEAR_THROW, duration);
         SeriousAnimationsCompat.playSpearThrow(recruit);
 
@@ -88,7 +91,7 @@ public final class ThrowableWeaponManager {
                 level,
                 recruit.getUUID(),
                 target.getId(),
-                now + releaseDelay,
+                sharedRelease,
                 now + Math.max(duration + 6L, releaseDelay + 6L)
         ));
         // Reserve the cooldown immediately so repeated RTS retarget ticks cannot queue duplicates.

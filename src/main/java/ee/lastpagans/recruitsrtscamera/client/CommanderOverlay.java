@@ -67,6 +67,12 @@ public final class CommanderOverlay {
     private static Layout lastLayout = Layout.EMPTY;
     private static Boolean enemyBannersVisibleOverride;
     private static UUID cardSelectionAnchor;
+    private static UUID draggedCardId;
+    private static UUID dragTargetCardId;
+    private static int cardDragStartX;
+    private static int cardDragStartY;
+    private static boolean cardDragActive;
+    private static boolean dragAfterTarget;
 
     private CommanderOverlay() {
     }
@@ -79,6 +85,7 @@ public final class CommanderOverlay {
         lastLayout = Layout.EMPTY;
         enemyBannersVisibleOverride = null;
         cardSelectionAnchor = null;
+        clearCardDrag();
     }
 
     public static void render(GuiGraphics graphics) {
@@ -134,6 +141,14 @@ public final class CommanderOverlay {
         int mouseX = guiMouseX();
         int mouseY = guiMouseY();
         Layout layout = currentLayout();
+
+        if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT && action == GLFW.GLFW_RELEASE && draggedCardId != null) {
+            if (cardDragActive && dragTargetCardId != null) {
+                RTSCommandFacade.reorderUnitCard(draggedCardId, dragTargetCardId, dragAfterTarget);
+            }
+            clearCardDrag();
+            return true;
+        }
         Bounds popup = formationPopupBounds(layout);
         boolean overPopup = formationMenuOpen && popup.contains(mouseX, mouseY);
         boolean overSelectionPopup = selectionMenuOpen && selectionPopupBounds(layout).contains(mouseX, mouseY);
@@ -265,6 +280,7 @@ public final class CommanderOverlay {
         List<RTSCommandFacade.UnitCardView> groups = RTSCommandFacade.unitCards();
         for (CardHitbox hitbox : cardHitboxes(groups, layout)) {
             if (hitbox.bounds().contains(mouseX, mouseY)) {
+                if (hitbox.view().moraleState() >= 2) return true;
                 boolean additive = (modifiers & GLFW.GLFW_MOD_CONTROL) != 0;
                 boolean range = (modifiers & GLFW.GLFW_MOD_SHIFT) != 0;
                 UUID clicked = hitbox.view().groupId();
@@ -275,6 +291,12 @@ public final class CommanderOverlay {
                 RTSCommandFacade.selectUnit(clicked, additive);
                 // Ctrl toggles and Shift ranges preserve the last plain-click anchor.
                 if (!additive && !range) cardSelectionAnchor = clicked;
+                draggedCardId = clicked;
+                dragTargetCardId = clicked;
+                cardDragStartX = mouseX;
+                cardDragStartY = mouseY;
+                cardDragActive = false;
+                dragAfterTarget = false;
                 return true;
             }
         }
@@ -367,6 +389,7 @@ public final class CommanderOverlay {
                 layout.cardsX(), layout.panelY(), layout.cardsRight() - layout.cardsX(), CARD_HEIGHT + 6);
         int mouseX = guiMouseX();
         int mouseY = guiMouseY();
+        updateCardDrag(hitboxes, mouseX, mouseY);
 
         for (CardHitbox hitbox : hitboxes) {
             Bounds b = hitbox.bounds();
@@ -374,6 +397,18 @@ public final class CommanderOverlay {
             CommanderUiRegistry.record(CommanderUiElementIds.UNIT_CARD, view.groupId(),
                     b.x1(), b.y1(), b.width(), b.height(), Float.NaN);
             boolean hovered = b.contains(mouseX, mouseY) && RTSCommandFacade.commandCursor();
+            boolean dragging = cardDragActive && view.groupId().equals(draggedCardId);
+            graphics.pose().pushPose();
+            if (dragging) {
+                float dx = (mouseX - cardDragStartX) * 0.92F;
+                float dy = (mouseY - cardDragStartY) * 0.92F - 3.0F;
+                float cx = (b.x1() + b.x2()) * 0.5F;
+                float cy = (b.y1() + b.y2()) * 0.5F;
+                graphics.pose().translate(dx, dy, 100.0F);
+                graphics.pose().translate(cx, cy, 0.0F);
+                graphics.pose().scale(1.04F, 1.04F, 1.0F);
+                graphics.pose().translate(-cx, -cy, 0.0F);
+            }
 
             // Never draw an opaque selection texture over the user's card artwork.
             // Selection/hover live outside the exact runtime card texture.
@@ -439,7 +474,17 @@ public final class CommanderOverlay {
                 renderFatigueBar(graphics, b.x1() + 5, b.y2() + 4,
                         CARD_WIDTH - 10, view.averageFatigue());
             }
+            if (view.moraleState() >= 2) {
+                graphics.fill(b.x1(), b.y1(), b.x2(), b.y2(), 0x66FFFFFF);
+            } else if (view.moraleState() == 1) {
+                double phase = (MC.level.getGameTime() + MC.getFrameTime()) * 0.32D;
+                int alpha = 24 + (int) Math.round((Math.sin(phase) * 0.5D + 0.5D) * 82.0D);
+                graphics.fill(b.x1(), b.y1(), b.x2(), b.y2(), alpha << 24 | 0x00FFFFFF);
+            }
+            graphics.pose().popPose();
         }
+
+        renderCardDropIndicator(graphics, hitboxes);
 
         // Draw the shared frame last so selected-card and hover borders cannot erase its
         // continuous outer edge. The frame and tab occur once for the whole visible bundle.
@@ -1353,6 +1398,45 @@ public final class CommanderOverlay {
             ));
         }
         return result;
+    }
+
+    private static void updateCardDrag(List<CardHitbox> hitboxes, int mouseX, int mouseY) {
+        if (draggedCardId == null) return;
+        int dx = mouseX - cardDragStartX;
+        int dy = mouseY - cardDragStartY;
+        if (!cardDragActive && dx * dx + dy * dy >= 16) cardDragActive = true;
+        if (!cardDragActive || hitboxes.isEmpty()) return;
+        CardHitbox nearest = null;
+        int best = Integer.MAX_VALUE;
+        for (CardHitbox hitbox : hitboxes) {
+            int center = (hitbox.bounds().x1() + hitbox.bounds().x2()) / 2;
+            int distance = Math.abs(mouseX - center);
+            if (distance < best) {
+                best = distance;
+                nearest = hitbox;
+            }
+        }
+        if (nearest != null) {
+            dragTargetCardId = nearest.view().groupId();
+            dragAfterTarget = mouseX > (nearest.bounds().x1() + nearest.bounds().x2()) / 2;
+        }
+    }
+
+    private static void renderCardDropIndicator(GuiGraphics graphics, List<CardHitbox> hitboxes) {
+        if (!cardDragActive || dragTargetCardId == null) return;
+        for (CardHitbox hitbox : hitboxes) {
+            if (!dragTargetCardId.equals(hitbox.view().groupId())) continue;
+            int x = dragAfterTarget ? hitbox.bounds().x2() + 1 : hitbox.bounds().x1() - 2;
+            graphics.fill(x, hitbox.bounds().y1() - 2, x + 2, hitbox.bounds().y2() + 2, 0xFF7DB7FF);
+            return;
+        }
+    }
+
+    private static void clearCardDrag() {
+        draggedCardId = null;
+        dragTargetCardId = null;
+        cardDragActive = false;
+        dragAfterTarget = false;
     }
 
     private static Layout currentLayout() {

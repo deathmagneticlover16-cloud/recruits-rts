@@ -645,6 +645,34 @@ require(morale_sync, "RTSMoraleItemSavedData", "runtime standards must synchroni
 require(client_events, "ClientMoraleItemState.clear()", "runtime morale-item client state must clear on logout")
 require(tactical, "Math.expm1(3.0D * progress)",
         "infantry and cavalry charge speed must retain exponential growth")
-require(source("gradle.properties"), "mod_version=0.21.0-server.1", "semantic version must be updated")
+road_erosion = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/TroopRoadErosionManager.java")
+volley = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/FormationVolleyManager.java")
+bow_volley = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/BowVolleyMixin.java")
+crossbow_volley = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/CrossbowVolleyMixin.java")
+nomad_volley = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/NomadVolleyMixin.java")
+card_order = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/UnitCardOrder.java")
+require(road_erosion, "Blocks.DIRT_PATH.defaultBlockState()", "troop traffic must erode natural ground into paths")
+require(road_erosion, "GameRules.RULE_MOBGRIEFING", "troop road erosion must respect mob griefing policy")
+require(road_erosion, "mover == recruit ? 1 : 3", "mounted traffic must erode roads faster than foot traffic")
+require(volley, "nextBowDraw", "bow formations need one shared draw and reload clock")
+require(volley, "crossbowReady.size() >= expected", "loaded crossbows must wait for formation readiness")
+require(volley, "javelinRelease", "javelin formations need one shared release tick")
+require(bow_volley, "attackTime = synchronizedTime", "native Bowman timers must consume the formation volley clock")
+require(crossbow_volley, "CrossbowItem.isCharged", "loaded Crossbowmen must be held for their volley")
+require(nomad_volley, "FormationVolleyManager.bowAttackTime(nomad)",
+        "mounted missile units must share their formation volley clock")
+require(stat_service, "recruit instanceof BowmanEntity ? 0.22D : 2.75D",
+        "Bowmen must carry many javelins while ordinary recruits overload after a few")
+require(source("src/main/resources/data/recruits_rts_camera/tags/items/throwable_weapons.json"),
+        '"darkagesarmory:steel_javelin"', "Epic Knights Dark Ages javelins must enter RTS throwing logic")
+require(overlay, "view.moraleState() >= 2", "routing cards must reject interaction and retain a white overlay")
+require(overlay, "Math.sin(phase)", "wavering cards need a flashing translucent overlay")
+require(overlay, "graphics.pose().scale(1.04F", "dragged cards must lift with smooth visual parallax")
+require(card_order, "RTSClientConfig.UNIT_CARD_ORDER.set", "rearranged card order must persist")
+for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE", "ARMY_PRESET",
+                "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
+                "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
+    require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
+require(source("gradle.properties"), "mod_version=0.22.0-server.1", "semantic version must be updated")
 
-print("0.21.0-server.1 source contracts passed")
+print("0.22.0-server.1 source contracts passed")
