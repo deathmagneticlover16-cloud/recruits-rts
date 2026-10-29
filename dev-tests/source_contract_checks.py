@@ -173,6 +173,16 @@ require(formation, "RecruitAIScheduler.submitIncremental(",
         "formation and member routes must continue through bounded scheduler slices")
 require(formation, "state.routeGoal = requestedDestination",
         "partial safe routes must retain their continuation goal")
+require(formation, "MAX_PENDING_ROUTE_CONTINUITY = 6.0D",
+        "running formations need enough verified continuity to span a multi-slice route handoff")
+require(formation, "travelling && state.routePending && state.pendingRouteContinuity",
+        "a pending replacement route must not zero the shared formation velocity")
+require(formation, "TacticalPathfinder.standableAt(level, representative",
+        "pending-route continuity must prove collision-backed terrain on every step")
+require(formation, "elevation > 1.25D || elevation < -0.60D",
+        "pending-route continuity must reject unsafe rises and drops")
+require(formation, "state.routeIndex = routeResumeIndex(state.route.points(), state.center)",
+        "a replacement route must resume ahead of a formation that kept moving")
 
 require(pathfinder, "mover instanceof AbstractHorse", "cavalry rises need a dedicated route cost")
 require(steering, "if (mover.onGround())",
@@ -710,6 +720,8 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.22.4-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.22.5-server.1", "semantic version must be updated")
+require(controller, "0.22.5-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.22.5-server.1.jar", "build helper version must be updated")
 
-print("0.22.4-server.1 source contracts passed")
+print("0.22.5-server.1 source contracts passed")

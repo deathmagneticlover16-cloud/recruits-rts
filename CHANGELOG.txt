@@ -1,3 +1,12 @@
+Recruits: RTS Camera 0.22.5-server.1
+Continuous running cavalry route handoffs
+
+- Diagnosed the synchronized cavalry pauses from the supplied video as a shared formation-route handoff, rather than isolated horse pathfinding. When a partial route ended or terrain invalidated it, the shared anchor became stationary while the bounded scheduler prepared its replacement, stopping every horse on the same frame.
+- Running formations now retain the last accepted route tangent for up to six blocks while a replacement route is actively pending. Each interim step must resolve to nearby dry, collision-backed support with at most an ordinary one-block rise and no unsupported descent; walls, water, holes and canyons still stop continuity immediately.
+- Replacement routes now resume ahead of the formation's live position after the continuity handoff instead of targeting an already-passed route point. Explicit new orders still discard old momentum so a requested direction change remains authoritative.
+- Network protocol remains rts-camera-162 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.22.5-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.22.4-server.1
 Remove periodic cavalry locomotion resets
 
