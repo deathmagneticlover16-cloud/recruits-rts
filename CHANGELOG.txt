@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.22.2-server.1
+Supported cavalry rises and couched lance timing
+
+- Fixed mounted formations stalling against ordinary one-block rises. A horse now detects the dry, collision-backed upper surface before its wide body reaches the block face, preserves forward impulse and actively jumps; the check cannot approve water, holes, unsupported drops or canyon air.
+- Applied the same supported-rise assist to obstacle-aware member routes so both local slot steering and recovered laggards cross the transition instead of waiting below it.
+- Added optional Epic Knights lance posing during RTS cavalry attacks. Lances remain raised through the run-up, lower for the final six blocks before the existing charge impact damage, remain couched through contact, and lift again for the recovery turn.
+- Lance pose transitions synchronize to tracking clients and late trackers. Epic Knights remains optional and is accessed through its public `LanceItem.setRaised` method.
+- Network protocol is now rts-camera-162 for synchronized lance pose transitions; update clients and server together.
+- Source version and packaging references are 0.22.2-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.22.1-server.1
 Native firearm fog and movement continuity fixes
 

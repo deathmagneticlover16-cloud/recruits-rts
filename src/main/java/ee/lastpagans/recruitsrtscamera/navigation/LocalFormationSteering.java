@@ -89,6 +89,15 @@ public final class LocalFormationSteering {
                 formationVelocity.x, formationVelocity.z, safeScale
         );
         Vec3 requested = new Vec3(motion.x(), 0.0D, motion.z());
+        Vec3 supportedRise = TacticalPathfinder.supportedRiseAhead(level, mover,
+                requested.lengthSqr() > 1.0E-6D ? requested : error);
+        if (supportedRise != null && mover.onGround()) {
+            // Keep forward travel while lifting the horse over the verified face. Merely
+            // toggling JumpControl was too late for wide mounts already touching the block.
+            mover.getJumpControl().jump();
+            mover.setDeltaMovement(requested.x, Math.max(current.y, 0.52D), requested.z);
+            mover.hasImpulse = true;
+        }
         double distanceToSlot = Math.hypot(error.x, error.z);
         // Never probe beyond a nearby final slot. At a ledge the old mandatory 1.25-block
         // look-ahead sampled the terrain past the order, rejected an otherwise supported
@@ -119,11 +128,11 @@ public final class LocalFormationSteering {
             return false;
         }
 
-        if (safe.y > mover.getY() + 0.45D
+        if ((supportedRise != null || safe.y > mover.getY() + 0.45D)
                 && horizontalDistanceSq(position, safe) < 3.0D * 3.0D) {
             mover.getJumpControl().jump();
             if (mover.onGround()) {
-                mover.setDeltaMovement(current.x, Math.max(current.y, 0.42D), current.z);
+                mover.setDeltaMovement(requested.x, Math.max(mover.getDeltaMovement().y, 0.52D), requested.z);
             }
         }
         // Neutralize stale MoveControl without asking it to choose another yaw.

@@ -118,6 +118,44 @@ public final class TacticalPathfinder {
     }
 
     /**
+     * Finds an ordinary collision-backed rise immediately in front of a mover. Horses
+     * touch a block face before their centre enters its column, so waiting for the normal
+     * probe to change elevation can deadlock them against a one-block step. This helper
+     * accepts only a dry, collision-free surface above the current feet and therefore
+     * cannot turn holes, drops or water pits into jumpable transitions.
+     */
+    public static Vec3 supportedRiseAhead(ServerLevel level, Mob mover, Vec3 direction) {
+        if (level == null || mover == null || direction == null) return null;
+        Vec3 horizontal = new Vec3(direction.x, 0.0D, direction.z);
+        if (horizontal.lengthSqr() < 1.0E-6D) return null;
+        horizontal = horizontal.normalize();
+        double first = Math.max(0.72D, mover.getBbWidth() * 0.58D);
+        double[] distances = {first, Math.max(1.02D, first + 0.30D), Math.max(1.34D, first + 0.60D)};
+        for (double distance : distances) {
+            Vec3 sample = mover.position().add(horizontal.scale(distance)).add(0.0D, 0.95D, 0.0D);
+            Vec3 surface = standableAt(level, mover, sample);
+            if (surface == null) continue;
+            double rise = surface.y - mover.getY();
+            if (rise <= 0.42D || rise > MAX_STEP_UP) continue;
+            // Prove every column leading to the upper surface. This excludes a raised
+            // far bank across a hole and water-filled gaps while accepting the supported
+            // lower approach followed by one ordinary block face.
+            boolean supportedApproach = true;
+            for (double along = 0.25D; along < distance; along += 0.25D) {
+                Vec3 approach = standableAt(level, mover,
+                        mover.position().add(horizontal.scale(along)));
+                if (approach == null || approach.y < mover.getY() - 0.60D
+                        || approach.y > mover.getY() + MAX_STEP_UP) {
+                    supportedApproach = false;
+                    break;
+                }
+            }
+            if (supportedApproach) return surface;
+        }
+        return null;
+    }
+
+    /**
      * Cheap visibility test for local steering. Every sampled column must have a collision-shape-backed
      * standing point with a traversable height change; unsupported samples make a hole impassable.
      */

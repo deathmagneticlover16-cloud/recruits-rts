@@ -6,7 +6,10 @@ import com.talhanation.recruits.util.FormationUtils;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
+import ee.lastpagans.recruitsrtscamera.compat.EpicKnightsLanceCompat;
 import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
+import ee.lastpagans.recruitsrtscamera.network.LancePoseSyncPacket;
+import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMountControlRegistry;
 import net.minecraft.core.BlockPos;
@@ -17,9 +20,11 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.network.PacketDistributor;
 import java.util.*;
 
 /** Committed cavalry manoeuvres above vanilla terrain navigation; no teleport or velocity steering. */
@@ -63,6 +68,7 @@ public final class CavalryTacticalController {
         ((MobGoalAccess) s.mount).rts$getGoals().removeGoal(s.mountGoal);
         RTSMountControlRegistry.release(s.mount);
         s.mount.getNavigation().stop();
+        setLanceRaised(s, false);
         CommanderAnimationHints.clearMovement(rider);
         if (!rider.isRemoved() && !RoutedGroupManager.isRouting(rider)) {
             rider.setFollowState(0); rider.setTarget(null);
@@ -80,6 +86,14 @@ public final class CavalryTacticalController {
     }
     @SubscribeEvent public static void onLeave(EntityLeaveLevelEvent event) {
         if (!event.getLevel().isClientSide && event.getEntity() instanceof AbstractRecruitEntity rider) deactivate(rider);
+    }
+    @SubscribeEvent public static void onStartTracking(PlayerEvent.StartTracking event) {
+        if (!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+                || !(event.getTarget() instanceof AbstractRecruitEntity rider)) return;
+        State state = STATES.get(rider.getUUID());
+        if (state == null || !state.lancePoseKnown) return;
+        RTSCameraNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new LancePoseSyncPacket(rider.getId(), state.lanceRaised));
     }
     @SubscribeEvent public static void onStop(ServerStoppedEvent event) { cancelAll(); }
     private static boolean valid(AbstractRecruitEntity rider, LivingEntity target) {
@@ -129,6 +143,7 @@ public final class CavalryTacticalController {
         boolean galloping = s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
                 || s.maneuver.phase() == CavalryManeuver.Phase.PASS;
         CommanderAnimationHints.updateMovement(s.rider, true, galloping);
+        updateLancePose(s, liveTarget);
         if (s.maneuver.phase() == CavalryManeuver.Phase.CHARGE
                 || s.maneuver.phase() == CavalryManeuver.Phase.PASS) attack(s);
         if (++s.samples % 20 == 0) {
@@ -223,6 +238,31 @@ public final class CavalryTacticalController {
         state.mount.setYBodyRot(yaw);
         state.mount.setYHeadRot(yaw);
     }
+    private static void updateLancePose(State state, Vec3 liveTarget) {
+        if (!EpicKnightsLanceCompat.isLance(state.rider)) {
+            state.lancePoseKnown = false;
+            return;
+        }
+        CavalryManeuver.Phase phase = state.maneuver.phase();
+        double distanceSq = liveTarget == null ? Double.POSITIVE_INFINITY
+                : flat(liveTarget.subtract(state.mount.position())).lengthSqr();
+        // Carry the lance upright through the run-up and broad recovery turn. Lower it
+        // only for the last six blocks of the committed lane, before the existing impact
+        // attack range can deal damage, and keep it down through the pass/melee contact.
+        boolean raised = !state.committedMelee && phase != CavalryManeuver.Phase.PASS
+                && !(phase == CavalryManeuver.Phase.CHARGE && distanceSq <= 6.0D * 6.0D);
+        setLanceRaised(state, raised);
+    }
+
+    private static void setLanceRaised(State state, boolean raised) {
+        if (!state.lancePoseKnown && !EpicKnightsLanceCompat.isLance(state.rider)) return;
+        if (state.lancePoseKnown && state.lanceRaised == raised) return;
+        if (!EpicKnightsLanceCompat.setRaised(state.rider, raised)) return;
+        state.lancePoseKnown = true;
+        state.lanceRaised = raised;
+        RTSCameraNetwork.CHANNEL.send(PacketDistributor.TRACKING_ENTITY_AND_SELF.with(() -> state.rider),
+                new LancePoseSyncPacket(state.rider.getId(), raised));
+    }
     private static float approachHeading(float current, float target, float maximumStep) {
         float difference = (target - current) % 360.0F;
         if (difference >= 180.0F) difference -= 360.0F;
@@ -261,6 +301,8 @@ public final class CavalryTacticalController {
         long refreshed;
         boolean active;
         boolean committedMelee;
+        boolean lancePoseKnown;
+        boolean lanceRaised;
         State(AbstractRecruitEntity rider, AbstractHorse mount) {
             this.rider = rider; this.mount = mount; this.goal = new CavalryGoal(this);
             this.mountGoal = new MountControlGoal(this);

@@ -841,12 +841,18 @@ public final class NativeFormationController {
                     Math.max(0.14D * catchUpScale, velocity.y),
                     clamp(dz * 0.16D * catchUpScale, -0.14D, 0.14D));
         } else {
-            if (waypoint.y > mover.getY() + 0.45D
-                    && horizontalDistanceSq(mover.position(), waypoint) < 1.45D * 1.45D) {
+            Vec3 supportedRise = TacticalPathfinder.supportedRiseAhead(level, mover,
+                    waypoint.subtract(mover.position()));
+            if (supportedRise != null || (waypoint.y > mover.getY() + 0.45D
+                    && horizontalDistanceSq(mover.position(), waypoint) < 2.25D * 2.25D)) {
                 mover.getJumpControl().jump();
                 if (recruit.getVehicle() == mover && mover.onGround()) {
                     Vec3 motion = mover.getDeltaMovement();
-                    mover.setDeltaMovement(motion.x, Math.max(motion.y, 0.42D), motion.z);
+                    Vec3 toward = waypoint.subtract(mover.position()).multiply(1.0D, 0.0D, 1.0D);
+                    double speed = Math.max(0.12D, Math.hypot(motion.x, motion.z));
+                    if (toward.lengthSqr() > 1.0E-6D) toward = toward.normalize().scale(speed);
+                    else toward = new Vec3(motion.x, 0.0D, motion.z);
+                    mover.setDeltaMovement(toward.x, Math.max(motion.y, 0.52D), toward.z);
                     mover.hasImpulse = true;
                 }
             }

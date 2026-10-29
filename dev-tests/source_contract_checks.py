@@ -52,6 +52,8 @@ formation_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/format
 rumble = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryRumbleManager.java")
 triumph = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/MountedTriumphManager.java")
 spa = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/SeriousAnimationsCompat.java")
+lance_compat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/EpicKnightsLanceCompat.java")
+lance_sync = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/LancePoseSyncPacket.java")
 rumble_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CavalryRumbleClient.java")
 group_flag_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/GroupFlagClientState.java")
 group_flag_screen = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/ImmersivePaintingsFlagScreen.java")
@@ -579,7 +581,17 @@ require(cavalry_combat, "equippedMeleeDamage", "cavalry impact must include its 
 require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measured travel speed")
 require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
 require(stat_service, "movementPenalty /= 1.75D", "mounted carried weight impact must be 1.75x lower")
-require(network, 'PROTOCOL = "rts-camera-161"', "runtime morale-item synchronization requires protocol 161")
+require(network, 'PROTOCOL = "rts-camera-162"', "lance-pose synchronization requires protocol 162")
+require(pathfinder, "supportedRiseAhead", "mounted movement needs an early collision-backed rise probe")
+require(steering, "Math.max(current.y, 0.52D)",
+        "local mounted steering must actively lift over a verified one-block rise")
+require(formation, "Math.max(motion.y, 0.52D)",
+        "obstacle-aware member routes must actively lift mounts over verified rises")
+require(lance_compat, 'getMethod("setRaised", LivingEntity.class, boolean.class)',
+        "Epic Knights lance integration must use the real public pose API")
+require(cavalry, "distanceSq <= 6.0D * 6.0D",
+        "lances must lower only on the final charge approach")
+require(lance_sync, "EpicKnightsLanceCompat.setRaised", "lance poses must synchronize to clients")
 smoke = source("src/main/java/ee/lastpagans/recruitsrtscamera/effects/BlackPowderSmokeManager.java")
 musket_rest = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/MusketRestManager.java")
 client_events = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCameraClientEvents.java")
@@ -685,6 +697,6 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.22.1-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.22.2-server.1", "semantic version must be updated")
 
-print("0.22.1-server.1 source contracts passed")
+print("0.22.2-server.1 source contracts passed")
