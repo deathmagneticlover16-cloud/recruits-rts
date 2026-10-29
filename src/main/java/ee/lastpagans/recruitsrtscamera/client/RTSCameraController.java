@@ -2535,7 +2535,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.20.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.20.1-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2584,10 +2584,8 @@ public final class RTSCameraController {
                         + " target=" + (hoveredTarget == null ? "none" : hoveredTarget.getType().toString()),
                 textX, y, textWidth, 0xFF9FC7E8);
         y += lineHeight;
-        drawHudLine(graphics, "FOW: server=" + ClientPermissionState.fogEnabled()
-                        + " render=" + RTSClientConfig.FOG_RENDER_ENABLED.get()
-                        + " raster=" + FogOfWarWorldRenderer.lastRasterCells()
-                        + " quads=" + FogOfWarWorldRenderer.lastEmittedQuads()
+        drawHudLine(graphics, "FOW authority: server=" + ClientPermissionState.fogEnabled()
+                        + " hidden-unit LOS active · visual fog removed"
                         + " · inputGate=" + InputGate.isBlocking(),
                 textX, y, textWidth, 0xFF9FC7E8);
 

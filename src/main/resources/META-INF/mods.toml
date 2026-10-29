@@ -83,9 +83,16 @@ ordering="AFTER"
 side="BOTH"
 
 [[dependencies.${mod_id}]]
-modId="musketrestposition"
+modId="colonialcannons"
 mandatory=false
-versionRange="[0.1.1,)"
+versionRange="[1.0,)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="burnt"
+mandatory=false
+versionRange="[1.10,)"
 ordering="AFTER"
 side="BOTH"
 

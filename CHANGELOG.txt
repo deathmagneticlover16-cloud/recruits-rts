@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.20.1-server.1
+Human laggard recovery and absorbed firearm effects
+
+- Tactical pathfinding now heavily penalizes descending into a canyon when both route endpoints are on its rim, while preserving supported downhill routes whose commanded destination is genuinely lower. A short safe rim detour is preferred over turning fallen troops into permanent laggards.
+- Distant laggards no longer use direct magnetic slot steering. They receive obstacle-aware personal recovery routes, face their own smoothed route tangent through bends and reserve damped local correction for the final few blocks.
+- Foot laggard catch-up is capped at 1.12x and mounted catch-up at 1.06x. The formation body retains at least 68% of march pace under severe dispersion, removing the slow-column/supersonic-straggler mismatch; close-range separation and slot correction are gentler.
+- Removed the rendered RTS fog banks while retaining server LOS, terrain occlusion, forest concealment, hidden-unit fading and hidden-target rejection.
+- Absorbed Black Powder Smoke 0.5.2 behavior into RTS. Musket/cannon discharge and cannon impacts create merged, slowly expanding residual clouds, prefer Burnt fog particles when available, fall back to vanilla smoke, cap active clouds and use 85% of the addon's former spread. Repeated fire accumulates density, emission rate and lifetime until sustained volleys can heavily obscure the battlefield.
+- Absorbed Musket Rest Position 0.1.1 into RTS. Quiet Crossbowmen move Musket Mod long guns to the offhand after five seconds and restore them to the main hand when targeting, loading, strategically firing or leaving the level. The separate addon is no longer declared as a dependency.
+- Network protocol remains rts-camera-160 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.20.1-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.20.0-server.1
 Battlefield concealment and committed cavalry charges
 

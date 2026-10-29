@@ -35,11 +35,11 @@ public final class LocalFormationSteering {
             return steerMounted(level, mover, desired, position, error, current,
                     formationVelocity, safeScale);
         }
-        Vec3 requested = new Vec3(error.x * 0.34D, 0.0D, error.z * 0.34D)
+        Vec3 requested = new Vec3(error.x * 0.22D, 0.0D, error.z * 0.22D)
                 .add(formationVelocity)
-                .subtract(new Vec3(current.x * 0.08D, 0.0D, current.z * 0.08D))
+                .subtract(new Vec3(current.x * 0.12D, 0.0D, current.z * 0.12D))
                 .add(separation(recruit));
-        double maximum = 0.18D * safeScale;
+        double maximum = 0.15D * safeScale;
         double horizontal = Math.hypot(requested.x, requested.z);
         if (horizontal > maximum) requested = requested.scale(maximum / horizontal);
         Vec3 probe = position.add(requested.scale(2.5D));
@@ -146,7 +146,7 @@ public final class LocalFormationSteering {
             double distanceSq = delta.x * delta.x + delta.z * delta.z;
             if (distanceSq < 1.0E-5D || distanceSq >= SEPARATION_RADIUS * SEPARATION_RADIUS) continue;
             double distance = Math.sqrt(distanceSq);
-            double strength = (SEPARATION_RADIUS - distance) / SEPARATION_RADIUS * 0.055D;
+            double strength = (SEPARATION_RADIUS - distance) / SEPARATION_RADIUS * 0.025D;
             result = result.add(delta.x / distance * strength, 0.0D, delta.z / distance * strength);
         }
         return result;

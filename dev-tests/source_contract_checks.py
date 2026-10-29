@@ -76,7 +76,6 @@ runtime_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime
 spatial_index = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitSpatialIndex.java")
 doctrine = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationDoctrineManager.java")
 terrain_cache = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/TacticalTerrainCache.java")
-fog_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/FogOfWarWorldRenderer.java")
 language = source("src/main/resources/assets/recruits_rts_camera/lang/en_us.json")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
@@ -128,7 +127,7 @@ require(formation, "state.slotHeading = state.heading;",
 require(formation, "worldSlotPoints(start, heading, offsets)",
         "new orders must assign slots against live geometry instead of the distant destination")
 forbid(formation, "stabilizeMountedSlots", "movement must never reassign occupied formation slots")
-require(formation, "cohesionTarget = Math.max(0.20D",
+require(formation, "cohesionTarget = Math.max(0.68D",
         "the virtual centre must slow while physical members assemble")
 require(formation, "cohesionTarget - state.cohesionScale, -0.04D, 0.04D",
         "cohesion pace changes must be eased instead of pulsing")
@@ -204,7 +203,6 @@ require(mounted_facing_client, "commanderLoadedLivingEntities()",
         "mounted render alignment must reuse the client battlefield snapshot")
 require(controller, "retainedTacticalScene", "tactical scene data must be retained between render frames")
 require(world_renderer, "retainedRoutes", "route geometry must be retained until scene data changes")
-require(fog_renderer, "Cell membership and ordering remain valid", "fog cells must not sort every frame")
 
 require(keys, "GLFW.GLFW_KEY_E", "E must move the camera up")
 require(keys, "GLFW.GLFW_KEY_Q", "Q must move the camera down")
@@ -350,7 +348,7 @@ require(formation_packet, "packet.kind == FormationKind.CAVALRY_WEDGE || packet.
         "wedge and its square toggle must use one native formation controller")
 require(formation, "mover != recruit && (travelling || !arrived)",
         "mounted bodies must retain the route tangent through slow arrival cohesion")
-require(formation, "? slotError > 4.0D * 4.0D ? 1.08D",
+require(formation, "? slotError > 4.0D * 4.0D ? 1.06D",
         "mounted laggards need bounded catch-up instead of teleport-like surges")
 require(formation, "cohesionDistance = mountedMember ? 0.85D : 1.55D",
         "mounted cohesion must tighten before the virtual centre resumes full pace")
@@ -441,7 +439,7 @@ for method in ("bayonetDamage", "bulletStdDev", "getLoadingDuration", "getWeight
 require(stat_service, "TroopEquipmentCompat.meleeDamage(weapon, recruit.getAttackDamage())",
         "Damage must report melee damage rather than musket projectile damage")
 require(equipment_compat, "isMusketGun(off)", "Musket Rest offhand parking must remain visible to stats")
-for mod_id in ("musketmod", "musketrestposition", "magistuarmory", "slavicarmory", "darkagesarmory",
+for mod_id in ("musketmod", "magistuarmory", "slavicarmory", "darkagesarmory",
                "magistuarmoryaddon", "antiquelegacy"):
     require(source("src/main/resources/META-INF/mods.toml"), 'modId="' + mod_id + '"',
             "supplied equipment integration needs optional load ordering for " + mod_id)
@@ -462,8 +460,6 @@ require(spatial_index, "public static List<AbstractRecruitEntity> within",
 require(cavalry_combat, "RecruitSpatialIndex.within", "cavalry impact scans must use the shared grid")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ProjectileAwarenessManager.java"),
         "RecruitSpatialIndex.within", "projectile corridors must use the shared grid")
-require(fog_renderer, "float[][] hiddenRaster", "stage-four fog must rasterize visibility")
-require(fog_renderer, "lastEmittedQuads", "fog raster LOD must expose its emitted-quad count")
 require(battle, "FATIGUE_GAIN_SCALE = 1.0D / 2.3D", "battle fatigue growth must be 2.3x slower")
 require(battle, "ROUTING_MORALE = 4.0F", "ordinary rout susceptibility must be halved")
 require(battle, "ARCHER_MELEE_ROUTING_MORALE = 8.0F",
@@ -584,6 +580,38 @@ require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measu
 require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
 require(stat_service, "movementPenalty /= 1.75D", "mounted carried weight impact must be 1.75x lower")
 require(network, 'PROTOCOL = "rts-camera-160"', "visibility synchronization requires protocol 160")
-require(source("gradle.properties"), "mod_version=0.20.0-server.1", "semantic version must be updated")
+smoke = source("src/main/java/ee/lastpagans/recruitsrtscamera/effects/BlackPowderSmokeManager.java")
+musket_rest = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/MusketRestManager.java")
+client_events = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCameraClientEvents.java")
+require(pathfinder, "canyonDepth * canyonDepth * 12.0D",
+        "level-endpoint routes must strongly prefer a safe rim detour over a canyon descent")
+require(formation, "Math.max(0.68D, 1.0D - laggardShare * 0.55D)",
+        "laggards must not reduce the main formation to a crawl")
+require(formation, "slotError > 4.0D * 4.0D ? 1.12D",
+        "foot laggards need a bounded human catch-up pace")
+require(formation, "agent.steeringTarget", "laggards must face their personal route tangent")
+require(steering, "error.x * 0.22D", "final slot correction must be damped instead of magnetic")
+forbid(client_events, "FogOfWarWorldRenderer.render(event)",
+       "the visual fog bank must be removed without disabling server visibility")
+require(smoke, "SCALE = 0.85D", "absorbed black-powder smoke must use the requested smaller spread")
+require(smoke, "BurntModParticleTypes", "absorbed smoke must retain Burnt fog particle support")
+require(smoke, "com.camdenscottc.colonialcannons.projectile.CannonballEntity",
+        "absorbed smoke must retain Colonial Cannons projectile compatibility")
+require(smoke, 'invokeBoolean(projectile, "isExplosive")',
+        "Colonial Cannons explosive and solid impacts must remain distinct")
+require(smoke, "MAX_CLOUDS = 512", "absorbed smoke must bound persistent cloud cost")
+require(smoke, "closest.density = Math.min(32, closest.density + 1)",
+        "repeated musketry must accumulate battlefield-obscuring smoke density")
+require(smoke, "cloud.particles + cloud.density / 2",
+        "dense smoke must emit more fog than isolated shots")
+require(source("src/main/resources/META-INF/mods.toml"), 'modId="colonialcannons"',
+        "Colonial Cannons must retain optional load ordering")
+require(source("src/main/resources/META-INF/mods.toml"), 'modId="burnt"',
+        "Burnt fog particles must retain optional load ordering")
+require(musket_rest, "IDLE_TICKS = 20 * 5", "absorbed musket rest must park long guns after five quiet seconds")
+require(musket_rest, "recruit.getShouldStrategicFire()", "strategic fire must restore the long gun to main hand")
+forbid(source("src/main/resources/META-INF/mods.toml"), 'modId="musketrestposition"',
+       "RTS must no longer depend on the absorbed musket-rest addon")
+require(source("gradle.properties"), "mod_version=0.20.1-server.1", "semantic version must be updated")
 
-print("0.20.0-server.1 source contracts passed")
+print("0.20.1-server.1 source contracts passed")

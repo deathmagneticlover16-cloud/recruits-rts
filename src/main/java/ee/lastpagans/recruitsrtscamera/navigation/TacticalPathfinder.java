@@ -372,7 +372,8 @@ public final class TacticalPathfinder {
         return count;
     }
 
-    private static double movementCost(ServerLevel level, Mob mover, Cell a, Cell b) {
+    private static double movementCost(ServerLevel level, Mob mover, Cell a, Cell b,
+                                       double endpointFloor) {
         double dx = a.position.x - b.position.x;
         double dy = a.position.y - b.position.y;
         double dz = a.position.z - b.position.z;
@@ -383,9 +384,15 @@ public final class TacticalPathfinder {
         double elevationCost = a.climbable || b.climbable ? 1.1D
                 : mover instanceof AbstractHorse && dy < -0.40D && dy >= -MAX_STEP_UP ? 0.65D
                 : 1.8D;
+        // If both order endpoints are on the rim, descending into the canyon is almost
+        // never the human route. Keep supported downhill travel valid when the destination
+        // itself is lower, but strongly prefer a modest level detour between level endpoints.
+        double canyonDepth = Math.max(0.0D, endpointFloor - b.position.y);
+        double canyonPenalty = canyonDepth * canyonDepth * 12.0D;
         return Math.sqrt(dx * dx + dz * dz)
                 + Math.abs(dy) * elevationCost
-                + descentPenalty;
+                + descentPenalty
+                + canyonPenalty;
     }
 
     private static double heuristic(Cell a, Cell b) {
@@ -669,9 +676,11 @@ public final class TacticalPathfinder {
                     return advanceBuild(deadlineNanos);
                 }
                 neighbors(level, mover, current, neighborBuffer);
+                double endpointFloor = Math.min(start.position.y, goal.position.y) - 0.55D;
                 for (Cell neighbor : neighborBuffer) {
                     if (closed.contains(neighbor.key)) continue;
-                    double next = cost.get(current.key) + movementCost(level, mover, current, neighbor);
+                    double next = cost.get(current.key)
+                            + movementCost(level, mover, current, neighbor, endpointFloor);
                     if (next + 1.0E-6D >= cost.getOrDefault(neighbor.key, Double.POSITIVE_INFINITY)) continue;
                     cost.put(neighbor.key, next);
                     parent.put(neighbor.key, current.key);

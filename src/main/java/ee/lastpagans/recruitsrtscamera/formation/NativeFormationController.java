@@ -457,7 +457,10 @@ public final class NativeFormationController {
         if (travelling && !state.route.points().isEmpty()) {
             double laggardShare = state.offsets.isEmpty() ? 0.0D
                     : state.laggards / (double) state.offsets.size();
-            double cohesionTarget = Math.max(0.20D, 1.0D - laggardShare * 1.35D);
+            // The main body keeps marching while stragglers rejoin. The old 20% floor
+            // turned a single bad canyon route into a crawl while the isolated soldiers
+            // were simultaneously given extreme catch-up speed.
+            double cohesionTarget = Math.max(0.68D, 1.0D - laggardShare * 0.55D);
             // Let the formation assemble before its virtual centre outruns the physical
             // mounts. Ease this value so gaining/losing one laggard cannot pulse the pace.
             state.cohesionScale += clamp(cohesionTarget - state.cohesionScale, -0.04D, 0.04D);
@@ -510,13 +513,14 @@ public final class NativeFormationController {
             // Cohesion and catch-up are horizontal responsibilities; terrain traversal
             // handles height independently and must not mark an entire group insubordinate.
             double catchUpScale = mountedMember
-                    ? slotError > 4.0D * 4.0D ? 1.08D
-                    : slotError > 0.85D * 0.85D ? 1.04D : 1.0D
-                    : slotError > 4.0D * 4.0D ? 1.40D
-                    : slotError > 1.55D * 1.55D ? 1.20D : 1.0D;
+                    ? slotError > 4.0D * 4.0D ? 1.06D
+                    : slotError > 0.85D * 0.85D ? 1.03D : 1.0D
+                    : slotError > 4.0D * 4.0D ? 1.12D
+                    : slotError > 1.55D * 1.55D ? 1.07D : 1.0D;
             recruit.setHoldPos(desired);
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
-            boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit,
+            Vec3 recoveryGoal = slotError > 2.75D * 2.75D ? state.center : desired;
+            boolean arrived = drive(level, recruit, mover, desired, recoveryGoal, agent, columnTransit,
                     state.velocity, catchUpScale);
             CommanderAnimationHints.updateMovement(recruit, travelling || !arrived,
                     RTSMovementBoostManager.isHastyActive(state.groupId));
@@ -539,6 +543,13 @@ public final class NativeFormationController {
                 Entity targetBody = combatTarget.getVehicle() == null
                         ? combatTarget : combatTarget.getVehicle();
                 controlledHeading = headingTo(mover.position(), targetBody.position(), memberHeading);
+            } else if (!arrived && agent.steeringTarget != null
+                    && slotError > (mountedMember ? 0.85D * 0.85D : 1.55D * 1.55D)) {
+                // A rejoining soldier faces his own safe route tangent. Locking every
+                // laggard to the formation anchor's yaw made them strafe entire bends.
+                float personalHeading = headingTo(mover.position(), agent.steeringTarget, mover.getYRot());
+                controlledHeading = approachHeading(mover.getYRot(), personalHeading,
+                        mountedMember ? 6.0F : 8.0F);
             } else if (mover != recruit && (travelling || !arrived)) {
                 // Every rider/mount pair receives the same group-owned travel yaw. Per-member
                 // easing allowed tiny differences to survive after repeated angled orders.
@@ -658,6 +669,7 @@ public final class NativeFormationController {
             AbstractRecruitEntity recruit,
             Mob mover,
             Vec3 desired,
+            Vec3 recoveryGoal,
             Agent agent,
             boolean dispersed,
             Vec3 slotVelocity,
@@ -673,6 +685,7 @@ public final class NativeFormationController {
             mover.setDeltaMovement(0.0D, velocity.y, 0.0D);
             agent.clearPath();
             agent.manualControl = false;
+            agent.steeringTarget = desired;
             return true;
         }
 
@@ -680,8 +693,10 @@ public final class NativeFormationController {
         // On stairs/ladders use the shape-aware tactical waypoints exclusively. Local
         // steering is deliberately disabled there because its lateral correction can
         // pull a member toward the outside edge of a stair.
+        // Direct spring steering is only for final, local slot adjustment. A real
+        // laggard follows a route; it does not slide diagonally toward a moving magnet.
         boolean localCandidate = !dispersed && RTSServerConfig.LOCAL_STEERING.get()
-                && horizontal <= 8.0D * 8.0D && vertical <= 2.0D;
+                && horizontal <= 2.75D * 2.75D && vertical <= 1.35D;
         Boolean directSafety = localCandidate ? agent.canSteerDirect(level, mover, desired, now) : Boolean.FALSE;
         boolean fallenBehind = desired.y - mover.getY() > 0.72D;
         boolean direct = Boolean.TRUE.equals(directSafety);
@@ -695,6 +710,7 @@ public final class NativeFormationController {
                 && !agent.stuck(mover.position(), desired, now)) {
             agent.clearPath();
             agent.beginManual(mover);
+            agent.steeringTarget = desired;
             boolean manual = LocalFormationSteering.steer(level, recruit, mover, desired,
                     RecruitRuntimeRegistry.brain(recruit).desiredVelocity(), catchUpScale);
             agent.manualControl = manual;
@@ -721,7 +737,10 @@ public final class NativeFormationController {
         boolean needsPath = agent.path.points().isEmpty() || agent.index >= agent.path.points().size()
                 || goalChanged || !agent.path.isValid(level);
         if (needsPath && directSafety != null && !agent.pathPending && now >= agent.nextPlanAt) {
-            Vec3 pathGoal = desired;
+            // A distant member first recovers the safe shared centre route, then closes
+            // the final short distance to its slot. This prevents every moving slot from
+            // becoming a separate straight-line invitation into a canyon.
+            Vec3 pathGoal = recoveryGoal;
             long pathGeneration = agent.pathGeneration;
             RecruitAIScheduler.Priority priority = catchUpScale > 1.0D
                     ? RecruitAIScheduler.Priority.HIGH : RecruitAIScheduler.Priority.MEDIUM;
@@ -766,11 +785,22 @@ public final class NativeFormationController {
         }
 
         if (agent.path.points().isEmpty()) {
-            // Use Minecraft's navigator while the tactical replan is queued or when a
-            // bounded tactical search has no result. The grounded goal is supported, so
-            // this fallback keeps the recruit moving without steering toward open air.
+            if (agent.pathPending) {
+                // Do not let vanilla navigation undo the canyon-safe tactical search
+                // during its asynchronous planning window. Decelerate instead of snapping
+                // to zero so custom locomotion animations remain continuous.
+                agent.beginManual(mover);
+                Vec3 motion = mover.getDeltaMovement();
+                mover.setDeltaMovement(motion.x * 0.72D, motion.y, motion.z * 0.72D);
+                agent.steeringTarget = recoveryGoal;
+                return false;
+            }
+            // Use Minecraft's navigator only when a completed bounded tactical search
+            // found no route. The recovery goal is the supported shared centreline, not
+            // an unverified moving outer slot.
             agent.manualControl = false;
-            mover.getNavigation().moveTo(desired.x, desired.y, desired.z,
+            agent.steeringTarget = recoveryGoal;
+            mover.getNavigation().moveTo(recoveryGoal.x, recoveryGoal.y, recoveryGoal.z,
                     navigationSpeed(recruit) * catchUpScale);
             return false;
         }
@@ -790,6 +820,7 @@ public final class NativeFormationController {
         BlockPos waypointBlock = BlockPos.containing(waypoint);
         boolean climbing = TacticalPathfinder.isClimbable(level, feet)
                 || TacticalPathfinder.isClimbable(level, waypointBlock);
+        agent.steeringTarget = waypoint;
         agent.beginManual(mover);
         if (climbing && waypoint.y > mover.getY() + 0.15D) {
             double dx = waypoint.x - mover.getX();
@@ -1266,6 +1297,7 @@ public final class NativeFormationController {
         long directGoalRevision = Long.MIN_VALUE;
         Vec3 groundingGoal;
         Vec3 groundedGoal;
+        Vec3 steeringTarget;
         long groundingRevision = Long.MIN_VALUE;
         long directBlockedUntil;
 

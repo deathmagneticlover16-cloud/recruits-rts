@@ -90,7 +90,6 @@ public final class RTSCameraClientEvents {
         ClientEnemyVisibilityState.clear();
         AdvisorClient.reset();
         CavalryRumbleClient.reset();
-        FogOfWarWorldRenderer.reset();
         TacticalWorldRenderer.reset();
     }
 
@@ -121,7 +120,6 @@ public final class RTSCameraClientEvents {
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void onRenderLevel(RenderLevelStageEvent event) {
         TacticalWorldRenderer.render(event);
-        FogOfWarWorldRenderer.render(event);
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
