@@ -648,12 +648,19 @@ require(formation, "horizontalSpeed * 0.992D",
         "members must coast instead of braking to a stop during asynchronous path planning")
 require(formation, "slotVelocity.z * slotVelocity.z > 1.0E-6D",
         "slow walking slots must never be misclassified as stationary")
-require(formation, "state.pendingCoastDistance >= 1.75D",
-        "formation route handoffs need bounded movement continuity")
-require(formation, "elevation > 1.25D || elevation < -0.60D",
-        "route-handoff coasting must retain strict elevation safety")
 require(formation, "routeResumeIndex(agent.path.points(), mover.position())",
         "coasting members must resume ahead on a completed route instead of backtracking")
+require(formation, "horizontalDistanceSq(lastProgressPosition, position) > 0.03D * 0.03D",
+        "slow cavalry progress must not trigger periodic path-controller resets")
+require(formation, "now - lastProgressAt >= 30L",
+        "genuine stuck recovery needs a stable observation window")
+require(movement, "horizontalDistance(slot, state.lastRecoverySlot) > 0.005D",
+        "the recovery watchdog must recognize a slowly moving formation slot")
+require(movement, "state.lastSlotDistance - distance > 0.01D",
+        "the recovery watchdog must recognize ordinary walking progress")
+forbid(movement,
+       "NativeFormationController.requestRecovery(state.groupId, recruit.getUUID());\n        if (controlled instanceof Mob mob) mob.getNavigation().stop();",
+       "route recovery must never force a full cavalry navigation stop")
 require(client_events, "CavalryCameraShakeClient.apply(event)", "camera angle events must apply hoofbeat shake")
 require(overlay, "drawTooltipText", "Commander tooltips need colored key-segment rendering")
 require(overlay, "graphics.drawString(MC.font, key, drawX, y, GOLD",
@@ -703,6 +710,6 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.22.3-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.22.4-server.1", "semantic version must be updated")
 
-print("0.22.3-server.1 source contracts passed")
+print("0.22.4-server.1 source contracts passed")

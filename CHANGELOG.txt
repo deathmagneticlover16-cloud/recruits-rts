@@ -1,3 +1,12 @@
+Recruits: RTS Camera 0.22.4-server.1
+Remove periodic cavalry locomotion resets
+
+- Fixed the member progress detector that classified legitimate slow walking as stuck every 14 ticks. Moving formation slots and as little as 0.03 blocks of real horse progress now keep the existing controller, while a genuinely motionless horse must remain stalled for 30 ticks before requesting a recovery route.
+- Fixed the separate cavalry recovery watchdog: it now recognizes slots moving by 0.005 blocks and real distance improvement of 0.01 blocks. Recovery requests a new safe route without explicitly stopping the horse's navigation, eliminating the full stop animation during the handoff.
+- Retained the lower moving-slot threshold from 0.22.3 so fatigue and slow march remain continuous. Removed the ineffective formation-center coasting layer to keep route ownership simple and deterministic.
+- Network protocol remains rts-camera-162 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.22.4-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.22.3-server.1
 Continuous cavalry movement through route updates
 

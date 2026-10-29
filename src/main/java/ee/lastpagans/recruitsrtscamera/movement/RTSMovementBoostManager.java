@@ -477,7 +477,7 @@ public final class RTSMovementBoostManager {
 
         // A moving slot means the formation itself is still travelling. Recovery is only
         // for the final convergence phase, not a shortcut that lets cavalry warp along a march.
-        if (state.lastRecoverySlot == null || horizontalDistance(slot, state.lastRecoverySlot) > 0.05D) {
+        if (state.lastRecoverySlot == null || horizontalDistance(slot, state.lastRecoverySlot) > 0.005D) {
             state.lastRecoverySlot = slot;
             state.lastSlotDistance = horizontalDistance(controlled.position(), slot);
             state.slotStallTicks = 0;
@@ -492,7 +492,7 @@ public final class RTSMovementBoostManager {
             return;
         }
 
-        if (Double.isFinite(state.lastSlotDistance) && state.lastSlotDistance - distance > 0.08D) {
+        if (Double.isFinite(state.lastSlotDistance) && state.lastSlotDistance - distance > 0.01D) {
             state.slotStallTicks = Math.max(0, state.slotStallTicks - 3);
         } else {
             state.slotStallTicks++;
@@ -504,10 +504,10 @@ public final class RTSMovementBoostManager {
         if (state.slotStallTicks < delayTicks) {
             return;
         }
-        // Recovery is an explicit collision-aware route invalidation. Never snap or teleport
-        // cavalry through terrain; the native controller must find a wider legal route.
+        // Recovery only requests a fresh collision-aware route. Stopping navigation here
+        // created a visible full-stop animation before the formation controller could
+        // hand the mount its replacement tangent.
         NativeFormationController.requestRecovery(state.groupId, recruit.getUUID());
-        if (controlled instanceof Mob mob) mob.getNavigation().stop();
         resetRecovery(state);
         RecruitsRTSCameraMod.LOGGER.debug(
                 "Requested a fresh tactical route for stuck cavalry recruit {} (group {}).",
