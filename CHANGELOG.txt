@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.21.0-server.1
+Cavalry camera impact and live morale standards
+
+- Added smooth cavalry camera shake with exponential formation-size scaling, gait strength and distance falloff. A nearby formation of 17 moving riders produces a clearly visible effect; very large formations are capped, and client configuration can disable or scale it.
+- Removed all Burnt integration, reflective particle discovery and load-order metadata. Accumulating RTS musket/cannon smoke and Colonial Cannons support remain, using native Minecraft smoke particles.
+- Added the operator-only `/recruitsmoraleitem add|remove|list` command. Runtime morale-item registry changes persist in the world and join the existing `#rts:morale_items` datapack tag, standard-bearer positioning and morale-shock protection.
+- Holding Space while hovering the real general or a standard bearer now draws a translucent blue circle at the actual effect radius: 28 blocks for the commander's morale recovery and 10 blocks for a standard's local guard response. Runtime-added morale items are synchronized so their bearers preview correctly.
+- Every angle-bracketed `<KEY>` segment drawn by Commander tooltips is now yellow while surrounding descriptions retain their normal color.
+- Confirmed and contract-locked the existing shared exponential charge acceleration: melee infantry and cavalry build speed across a sustained charge rather than receiving a flat boost.
+- Network protocol is now rts-camera-161 because runtime morale-item IDs are synchronized for accurate standard-bearer aura previews; update clients and server together.
+- Source version and packaging references are 0.21.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.20.2-server.1
 Formation slot completion and meaningful food weight
 
@@ -13,7 +25,7 @@ Human laggard recovery and absorbed firearm effects
 - Distant laggards no longer use direct magnetic slot steering. They receive obstacle-aware personal recovery routes, face their own smoothed route tangent through bends and reserve damped local correction for the final few blocks.
 - Foot laggard catch-up is capped at 1.12x and mounted catch-up at 1.06x. The formation body retains at least 68% of march pace under severe dispersion, removing the slow-column/supersonic-straggler mismatch; close-range separation and slot correction are gentler.
 - Removed the rendered RTS fog banks while retaining server LOS, terrain occlusion, forest concealment, hidden-unit fading and hidden-target rejection.
-- Absorbed Black Powder Smoke 0.5.2 behavior into RTS. Musket/cannon discharge and cannon impacts create merged, slowly expanding residual clouds, prefer Burnt fog particles when available, fall back to vanilla smoke, cap active clouds and use 85% of the addon's former spread. Repeated fire accumulates density, emission rate and lifetime until sustained volleys can heavily obscure the battlefield.
+- Absorbed Black Powder Smoke 0.5.2 behavior into RTS. Musket/cannon discharge and cannon impacts create merged, slowly expanding residual clouds, cap active clouds and use 85% of the addon's former spread. Repeated fire accumulates density, emission rate and lifetime until sustained volleys can heavily obscure the battlefield.
 - Absorbed Musket Rest Position 0.1.1 into RTS. Quiet Crossbowmen move Musket Mod long guns to the offhand after five seconds and restore them to the main hand when targeting, loading, strategically firing or leaving the level. The separate addon is no longer declared as a dependency.
 - Network protocol remains rts-camera-160 because packet registration and wire formats are unchanged.
 - Source version and packaging references are 0.20.1-server.1. The Forge build remains for the packager by request.

@@ -60,6 +60,7 @@ public final class TacticalWorldRenderer {
 
         // Selection rings share this single battlefield-render entry point as well.
         GroundSelectionMarkerRenderer.render(event);
+        AuraRadiusRenderer.render(event);
 
         Camera camera = event.getCamera();
         Vec3 cameraPos = camera.getPosition();

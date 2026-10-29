@@ -22,7 +22,7 @@ import java.util.Map;
 /**
  * Native black-powder discharge and impact smoke. This replaces the former standalone
  * addon: projectile events create merged, expanding server-side clouds with no hard
- * dependency on Musket Mod, Colonial Cannons or Burnt.
+ * dependency on Musket Mod or Colonial Cannons.
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class BlackPowderSmokeManager {
@@ -33,12 +33,6 @@ public final class BlackPowderSmokeManager {
     private static final Map<String, ShotStamp> RECENT_SHOTS = new HashMap<>();
     private static final Map<java.util.UUID, Long> RECENT_IMPACTS = new HashMap<>();
     private static final List<Cloud> CLOUDS = new ArrayList<>();
-    private static ParticleOptions burntFlame;
-    private static ParticleOptions burntLargeFlame;
-    private static ParticleOptions burntFog;
-    private static ParticleOptions burntTallFog;
-    private static ParticleOptions burntThickFog;
-    private static boolean burntChecked;
     private static long lastCleanupTick = Long.MIN_VALUE;
 
     private BlackPowderSmokeManager() { }
@@ -104,8 +98,7 @@ public final class BlackPowderSmokeManager {
             double progress = cloud.age / (double) cloud.life;
             double expansion = cloud.expansionPerTick * cloud.age;
             if (--cloud.untilPulse > 0) continue;
-            int minimumInterval = burntFog() != null
-                    ? Math.max(10, (cloud.kind == Kind.MUSKET ? 32 : 28) - cloud.density) : 2;
+            int minimumInterval = 2;
             double densityRate = 1.0D + Math.min(4.0D, cloud.density * 0.32D);
             cloud.untilPulse = Math.max(minimumInterval, (int) Math.round(
                     cloud.interval * (1.0D + progress * progress * 2.25D) / densityRate));
@@ -208,75 +201,20 @@ public final class BlackPowderSmokeManager {
 
     private static void initial(ServerLevel level, Vec3 position, int count,
                                 double spreadX, double spreadY, double spreadZ, double speed) {
-        ParticleOptions particle = burntFlame();
-        if (particle == null) particle = ParticleTypes.CAMPFIRE_COSY_SMOKE;
-        int adjusted = burntFog() == null ? count : Math.max(1, (int) Math.ceil(count * 0.30D));
-        send(level, particle, position, adjusted, spreadX * SCALE, spreadY * SCALE, spreadZ * SCALE, speed);
-        if (count >= 28 && burntLargeFlame != null) {
-            send(level, burntLargeFlame, position.add(0.0D, 0.04D, 0.0D),
-                    Math.max(1, (int) Math.ceil(count * 0.035D)), spreadX * 0.40D * SCALE,
-                    spreadY * 0.36D * SCALE, spreadZ * 0.40D * SCALE, speed * 0.50D);
-        }
+        send(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, position, count,
+                spreadX * SCALE, spreadY * SCALE, spreadZ * SCALE, speed);
     }
 
     private static void lingering(ServerLevel level, Vec3 position, int count,
                                   double spreadX, double spreadY, double spreadZ, double speed) {
-        ParticleOptions fog = burntFog();
-        if (fog == null) {
-            send(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, position, count,
-                    spreadX, spreadY, spreadZ, speed);
-            return;
-        }
-        send(level, fog, position, count, spreadX * 0.62D, spreadY * 0.46D, spreadZ * 0.62D, speed * 0.38D);
-        if (count >= 2 && burntTallFog != null) send(level, burntTallFog, position.add(0.0D, 0.10D, 0.0D),
-                1, spreadX * 0.46D, spreadY * 0.54D, spreadZ * 0.46D, speed * 0.28D);
-        if (count >= 3 && burntThickFog != null) send(level, burntThickFog, position.add(0.0D, 0.05D, 0.0D),
-                1, spreadX * 0.34D, spreadY * 0.32D, spreadZ * 0.34D, speed * 0.24D);
+        send(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, position, count,
+                spreadX, spreadY, spreadZ, speed);
     }
 
     private static void send(ServerLevel level, ParticleOptions particle, Vec3 position, int count,
                              double spreadX, double spreadY, double spreadZ, double speed) {
         if (particle != null && count > 0) level.sendParticles(particle, position.x, position.y, position.z,
                 count, spreadX, spreadY, spreadZ, speed);
-    }
-
-    private static ParticleOptions burntFlame() {
-        inspectBurnt();
-        return burntFlame;
-    }
-
-    private static ParticleOptions burntFog() {
-        inspectBurnt();
-        return burntFog;
-    }
-
-    private static synchronized void inspectBurnt() {
-        if (burntChecked) return;
-        burntChecked = true;
-        try {
-            Class<?> types = Class.forName("net.pixelbank.burnt.init.BurntModParticleTypes");
-            burntFlame = particleField(types, "LIGHT_FLAME_SMOKE", "FLAME_SMOKE");
-            burntLargeFlame = particleField(types, "LARGE_FLAME_SMOKE");
-            burntFog = particleField(types, "FOG");
-            burntTallFog = particleField(types, "TALL_FOG");
-            burntThickFog = particleField(types, "THICK_FOG");
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
-            burntFlame = burntLargeFlame = burntFog = burntTallFog = burntThickFog = null;
-        }
-    }
-
-    private static ParticleOptions particleField(Class<?> type, String... names) {
-        for (String name : names) {
-            try {
-                Object value = type.getField(name).get(null);
-                if (value instanceof ParticleOptions particle) return particle;
-                if (value == null) continue;
-                Method get = value.getClass().getMethod("get");
-                Object resolved = get.invoke(value);
-                if (resolved instanceof ParticleOptions particle) return particle;
-            } catch (ReflectiveOperationException | RuntimeException ignored) { }
-        }
-        return null;
     }
 
     private static boolean invokeBoolean(Object target, String name) {

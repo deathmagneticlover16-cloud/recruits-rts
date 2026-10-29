@@ -957,7 +957,7 @@ public final class CommanderOverlay {
         for (int i = 0; i < lines.size(); i++) {
             int color = i == 0 ? GOLD : (lines.get(i).startsWith("+") ? 0xFF91D982
                     : lines.get(i).startsWith("-") ? 0xFFE07A70 : TEXT);
-            graphics.drawString(MC.font, lines.get(i), x + 5, ty, color, false);
+            drawTooltipText(graphics, lines.get(i), x + 5, ty, color);
             ty += 10;
         }
     }
@@ -970,8 +970,8 @@ public final class CommanderOverlay {
         int y = Math.max(4, Math.min(guiMouseY() - 6, virtualGuiHeight() - height - 4));
         graphics.fill(x, y, x + width, y + height, 0xEE11110F);
         drawBorder(graphics, new Bounds(x, y, x + width, y + height), 0xFF8F825C);
-        graphics.drawString(MC.font, lines.get(0), x + 5, y + 4, GOLD, false);
-        graphics.drawString(MC.font, lines.get(1), x + 5, y + 14, TEXT, false);
+        drawTooltipText(graphics, lines.get(0), x + 5, y + 4, GOLD);
+        drawTooltipText(graphics, lines.get(1), x + 5, y + 14, TEXT);
     }
 
     private static Bounds formationPopupBounds(Layout layout) {
@@ -1180,8 +1180,8 @@ public final class CommanderOverlay {
         int y = Math.max(4, guiMouseY() - height - 8);
         graphics.fill(x, y, x + width, y + height, 0xEE11110F);
         drawBorder(graphics, new Bounds(x, y, x + width, y + height), 0xFF8F825C);
-        graphics.drawString(MC.font, title, x + 5, y + 4, GOLD, false);
-        graphics.drawString(MC.font, description, x + 5, y + 14, TEXT, false);
+        drawTooltipText(graphics, title, x + 5, y + 4, GOLD);
+        drawTooltipText(graphics, description, x + 5, y + 14, TEXT);
     }
 
     private static void renderHotkeyTooltip(
@@ -1194,7 +1194,35 @@ public final class CommanderOverlay {
         int y = Math.max(4, guiMouseY() - height - 8);
         graphics.fill(x, y, x + width, y + height, 0xEE11110F);
         drawBorder(graphics, new Bounds(x, y, x + width, y + height), 0xFF8F825C);
-        graphics.drawString(MC.font, line, x + 5, y + 4, TEXT, false);
+        drawTooltipText(graphics, line, x + 5, y + 4, TEXT);
+    }
+
+    /** Draw angle-bracketed key hints in yellow while retaining ordinary tooltip text color. */
+    private static void drawTooltipText(GuiGraphics graphics, String text, int x, int y, int color) {
+        if (text == null || text.isEmpty()) return;
+        int cursor = 0;
+        int drawX = x;
+        while (cursor < text.length()) {
+            int keyStart = text.indexOf('<', cursor);
+            if (keyStart < 0) {
+                graphics.drawString(MC.font, text.substring(cursor), drawX, y, color, false);
+                return;
+            }
+            if (keyStart > cursor) {
+                String ordinary = text.substring(cursor, keyStart);
+                graphics.drawString(MC.font, ordinary, drawX, y, color, false);
+                drawX += MC.font.width(ordinary);
+            }
+            int keyEnd = text.indexOf('>', keyStart + 1);
+            if (keyEnd < 0) {
+                graphics.drawString(MC.font, text.substring(keyStart), drawX, y, color, false);
+                return;
+            }
+            String key = text.substring(keyStart, keyEnd + 1);
+            graphics.drawString(MC.font, key, drawX, y, GOLD, false);
+            drawX += MC.font.width(key);
+            cursor = keyEnd + 1;
+        }
     }
 
     private static String hotkey(net.minecraft.client.KeyMapping mapping) {

@@ -579,7 +579,7 @@ require(cavalry_combat, "equippedMeleeDamage", "cavalry impact must include its 
 require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measured travel speed")
 require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
 require(stat_service, "movementPenalty /= 1.75D", "mounted carried weight impact must be 1.75x lower")
-require(network, 'PROTOCOL = "rts-camera-160"', "visibility synchronization requires protocol 160")
+require(network, 'PROTOCOL = "rts-camera-161"', "runtime morale-item synchronization requires protocol 161")
 smoke = source("src/main/java/ee/lastpagans/recruitsrtscamera/effects/BlackPowderSmokeManager.java")
 musket_rest = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/MusketRestManager.java")
 client_events = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCameraClientEvents.java")
@@ -600,7 +600,7 @@ require(stat_service, "0.40D + item.getFoodProperties().getNutrition() * 0.06D",
 forbid(client_events, "FogOfWarWorldRenderer.render(event)",
        "the visual fog bank must be removed without disabling server visibility")
 require(smoke, "SCALE = 0.85D", "absorbed black-powder smoke must use the requested smaller spread")
-require(smoke, "BurntModParticleTypes", "absorbed smoke must retain Burnt fog particle support")
+forbid(smoke, "BurntModParticleTypes", "removed third-party particle integration must not return")
 require(smoke, "com.camdenscottc.colonialcannons.projectile.CannonballEntity",
         "absorbed smoke must retain Colonial Cannons projectile compatibility")
 require(smoke, 'invokeBoolean(projectile, "isExplosive")',
@@ -612,12 +612,39 @@ require(smoke, "cloud.particles + cloud.density / 2",
         "dense smoke must emit more fog than isolated shots")
 require(source("src/main/resources/META-INF/mods.toml"), 'modId="colonialcannons"',
         "Colonial Cannons must retain optional load ordering")
-require(source("src/main/resources/META-INF/mods.toml"), 'modId="burnt"',
-        "Burnt fog particles must retain optional load ordering")
+forbid(source("src/main/resources/META-INF/mods.toml"), 'modId="burnt"',
+       "removed third-party particles must not retain load-order metadata")
 require(musket_rest, "IDLE_TICKS = 20 * 5", "absorbed musket rest must park long guns after five quiet seconds")
 require(musket_rest, "recruit.getShouldStrategicFire()", "strategic fire must restore the long gun to main hand")
 forbid(source("src/main/resources/META-INF/mods.toml"), 'modId="musketrestposition"',
        "RTS must no longer depend on the absorbed musket-rest addon")
-require(source("gradle.properties"), "mod_version=0.20.2-server.1", "semantic version must be updated")
+camera_shake = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CavalryCameraShakeClient.java")
+morale_command = source("src/main/java/ee/lastpagans/recruitsrtscamera/server/MoraleItemCommand.java")
+morale_data = source("src/main/java/ee/lastpagans/recruitsrtscamera/persistence/RTSMoraleItemSavedData.java")
+morale_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/server/MoraleItemRegistry.java")
+aura_renderer = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/AuraRadiusRenderer.java")
+morale_sync = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/MoraleItemsSyncPacket.java")
+require(camera_shake, "Math.expm1(sample.riders / 17.0D)",
+        "cavalry camera shake must scale exponentially from a visible seventeen-rider baseline")
+require(camera_shake, "MAX_DISTANCE = 96.0D", "cavalry shake must have bounded distance falloff")
+require(client_events, "CavalryCameraShakeClient.apply(event)", "camera angle events must apply hoofbeat shake")
+require(overlay, "drawTooltipText", "Commander tooltips need colored key-segment rendering")
+require(overlay, "graphics.drawString(MC.font, key, drawX, y, GOLD",
+        "every angle-bracketed key segment must render yellow")
+require(morale_command, 'Commands.literal("recruitsmoraleitem")', "operators need live morale-item commands")
+require(morale_command, "source.hasPermission(2)", "live morale-item changes must be operator-only")
+require(morale_data, 'DATA_NAME = "recruits_rts_camera_morale_items"',
+        "runtime morale items must persist with the world")
+require(morale_registry, "stack.is(RTSTags.MORALE_ITEMS)",
+        "runtime morale items must extend rather than replace datapack standards")
+require(aura_renderer, "TRIANGLE_FAN", "hovered morale auras need a translucent filled blue circle")
+require(controller,
+        "capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown()",
+        "aura radii must only appear while Space is held")
+require(morale_sync, "RTSMoraleItemSavedData", "runtime standards must synchronize for client aura detection")
+require(client_events, "ClientMoraleItemState.clear()", "runtime morale-item client state must clear on logout")
+require(tactical, "Math.expm1(3.0D * progress)",
+        "infantry and cavalry charge speed must retain exponential growth")
+require(source("gradle.properties"), "mod_version=0.21.0-server.1", "semantic version must be updated")
 
-print("0.20.2-server.1 source contracts passed")
+print("0.21.0-server.1 source contracts passed")

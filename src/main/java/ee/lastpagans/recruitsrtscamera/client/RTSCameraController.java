@@ -163,6 +163,7 @@ public final class RTSCameraController {
     private static AbstractRecruitEntity hoveredRecruit;
     private static UUID hoveredFriendlyGroupId;
     private static LivingEntity hoveredTarget;
+    private static LivingEntity hoveredAuraEntity;
     private static BlockPos hoveredGround;
     private static String hoveredGroundSource = "MISS";
     private static String status = "";
@@ -243,6 +244,21 @@ public final class RTSCameraController {
 
     static List<LivingEntity> commanderLoadedLivingEntities() {
         return clientBattlefieldSnapshot().livingEntities();
+    }
+
+    static AuraPreview commanderAuraPreview() {
+        if (!active || hoveredAuraEntity == null
+                || !(capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown())) return null;
+        double radius;
+        if (hoveredAuraEntity == MC.player) {
+            radius = ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager.COMMANDER_AURA_RADIUS;
+        } else if (hoveredAuraEntity instanceof AbstractRecruitEntity recruit
+                && (ClientMoraleItemState.matches(recruit.getMainHandItem())
+                || ClientMoraleItemState.matches(recruit.getOffhandItem()))) {
+            radius = ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager.STANDARD_GUARD_RADIUS;
+        } else return null;
+        return new AuraPreview(new Vec3(hoveredAuraEntity.getX(),
+                hoveredAuraEntity.getBoundingBox().minY + 0.045D, hoveredAuraEntity.getZ()), radius);
     }
 
     static void commanderDropRoutedGroups(Set<UUID> routedGroups) {
@@ -1814,6 +1830,7 @@ public final class RTSCameraController {
             hoveredRecruit = null;
             hoveredFriendlyGroupId = null;
             hoveredTarget = null;
+            hoveredAuraEntity = null;
             hoveredGround = null;
             return;
         }
@@ -1824,6 +1841,7 @@ public final class RTSCameraController {
         hoveredTarget = hoveredRecruit == null && hoveredFriendlyGroupId == null
                 ? raycastAttackTarget(cursorX, cursorY)
                 : null;
+        hoveredAuraEntity = raycastAuraEntity(cursorX, cursorY);
         GroundHit groundHit = raycastGroundHit(cursorX, cursorY);
         hoveredGround = groundHit == null ? null : groundHit.pos();
         hoveredGroundSource = groundHit == null ? "MISS" : groundHit.source();
@@ -1877,6 +1895,29 @@ public final class RTSCameraController {
             if (distance < closestDistance) {
                 closestDistance = distance;
                 closest = recruit;
+            }
+        }
+        return closest;
+    }
+
+    private static LivingEntity raycastAuraEntity(double screenX, double screenY) {
+        RayContext ray = rayContext(screenX, screenY);
+        if (ray == null || MC.level == null || MC.player == null) return null;
+        double closestDistance = blockLimitDistance(ray);
+        LivingEntity closest = null;
+        List<LivingEntity> candidates = new ArrayList<>();
+        candidates.add(MC.player);
+        for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
+            if (ClientMoraleItemState.matches(recruit.getMainHandItem())
+                    || ClientMoraleItemState.matches(recruit.getOffhandItem())) candidates.add(recruit);
+        }
+        for (LivingEntity candidate : candidates) {
+            Optional<Vec3> hit = candidate.getBoundingBox().inflate(0.30D).clip(ray.start(), ray.end());
+            if (hit.isEmpty()) continue;
+            double distance = ray.start().distanceToSqr(hit.get());
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closest = candidate;
             }
         }
         return closest;
@@ -2535,7 +2576,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.20.2-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.21.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -3457,6 +3498,9 @@ public final class RTSCameraController {
     }
 
     private record GroundHit(BlockPos pos, Vec3 location, String source) {
+    }
+
+    record AuraPreview(Vec3 center, double radius) {
     }
 
     private record CustomStrokePoint(double screenX, double screenY, Vec3 world) {

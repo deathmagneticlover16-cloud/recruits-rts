@@ -90,13 +90,6 @@ ordering="AFTER"
 side="BOTH"
 
 [[dependencies.${mod_id}]]
-modId="burnt"
-mandatory=false
-versionRange="[1.10,)"
-ordering="AFTER"
-side="BOTH"
-
-[[dependencies.${mod_id}]]
 modId="magistuarmory"
 mandatory=false
 versionRange="[10.15,)"

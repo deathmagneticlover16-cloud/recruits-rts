@@ -12,6 +12,8 @@ public final class RTSClientConfig {
     public static final ForgeConfigSpec.BooleanValue ENEMY_BANNERS_DEFAULT;
     public static final ForgeConfigSpec.EnumValue<SelectionHighlightMode> SELECTION_HIGHLIGHT_MODE;
     public static final ForgeConfigSpec.EnumValue<GroundMarkerShape> GROUND_MARKER_SHAPE;
+    public static final ForgeConfigSpec.BooleanValue CAVALRY_CAMERA_SHAKE;
+    public static final ForgeConfigSpec.DoubleValue CAVALRY_CAMERA_SHAKE_INTENSITY;
     public static final ForgeConfigSpec CLIENT;
 
     static {
@@ -41,6 +43,12 @@ public final class RTSClientConfig {
         GROUND_MARKER_SHAPE = BUILDER
                 .comment("Shape used by the ground marker selection renderer.")
                 .defineEnum("groundMarkerShape", GroundMarkerShape.CIRCLE);
+        CAVALRY_CAMERA_SHAKE = BUILDER
+                .comment("Shake the camera when a moving cavalry formation passes nearby.")
+                .define("cavalryCameraShake", true);
+        CAVALRY_CAMERA_SHAKE_INTENSITY = BUILDER
+                .comment("Strength of cavalry camera shake. 1.0 makes a nearby 17-rider formation clearly visible.")
+                .defineInRange("cavalryCameraShakeIntensity", 1.0D, 0.0D, 3.0D);
         BUILDER.pop();
 
         CLIENT = BUILDER.build();

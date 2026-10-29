@@ -15,6 +15,7 @@ import net.minecraftforge.client.event.RenderGuiOverlayEvent;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.client.event.RenderLivingEvent;
 import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.client.event.ViewportEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -36,6 +37,7 @@ public final class RTSCameraClientEvents {
             MountedFacingClient.tick();
             ClientEnemyVisibilityState.tick();
             CavalryRumbleClient.tick();
+            CavalryCameraShakeClient.tick();
             AdvisorClient.tick();
             InputGate.suppressDisallowedKeyMappings();
         }
@@ -88,9 +90,16 @@ public final class RTSCameraClientEvents {
         ClientBattleState.reset();
         ClientTactics.reset();
         ClientEnemyVisibilityState.clear();
+        ClientMoraleItemState.clear();
         AdvisorClient.reset();
         CavalryRumbleClient.reset();
+        CavalryCameraShakeClient.reset();
         TacticalWorldRenderer.reset();
+    }
+
+    @SubscribeEvent
+    public static void onCameraAngles(ViewportEvent.ComputeCameraAngles event) {
+        CavalryCameraShakeClient.apply(event);
     }
 
 

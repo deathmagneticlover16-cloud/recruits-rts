@@ -15,10 +15,10 @@ import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.network.AdvisorEventPacket;
 import ee.lastpagans.recruitsrtscamera.network.BattleStateSyncPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
-import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitSpatialIndex;
 import ee.lastpagans.recruitsrtscamera.server.BodyguardManager;
+import ee.lastpagans.recruitsrtscamera.server.MoraleItemRegistry;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatProfile;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatRegistry;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatService;
@@ -71,7 +71,7 @@ public final class BattleMechanicsManager {
 
     private static final int SAMPLE_INTERVAL = 5;
     private static final int COMBAT_SESSION_TIMEOUT = 20 * 25;
-    private static final double STANDARD_GUARD_RADIUS = 10.0D;
+    public static final double STANDARD_GUARD_RADIUS = 10.0D;
     private static final int STANDARD_GUARD_COUNT = 4;
     private static final double BODYGUARD_GUARD_RADIUS = 12.0D;
     private static final int BODYGUARD_GUARD_COUNT = 6;
@@ -81,7 +81,7 @@ public final class BattleMechanicsManager {
     private static final float ARCHER_MELEE_ROUTING_MORALE = 8.0F;
     private static final double FATIGUE_GAIN_SCALE = 1.0D / 2.3D;
     private static final float WAVERING_MORALE = 24.0F;
-    private static final double COMMANDER_AURA_RADIUS = 28.0D;
+    public static final double COMMANDER_AURA_RADIUS = 28.0D;
     private static final float COMMANDER_AURA_RECOVERY_PER_SAMPLE = 0.10F;
 
     private static final Map<UUID, Vec3> LAST_POSITIONS = new ConcurrentHashMap<>();
@@ -485,9 +485,7 @@ public final class BattleMechanicsManager {
     }
 
     private static boolean carriesMoraleItem(AbstractRecruitEntity recruit) {
-        return recruit != null
-                && (recruit.getMainHandItem().is(RTSTags.MORALE_ITEMS)
-                || recruit.getOffhandItem().is(RTSTags.MORALE_ITEMS));
+        return MoraleItemRegistry.carries(recruit);
     }
 
     private static boolean isMoraleBearer(AbstractRecruitEntity recruit) {
@@ -591,8 +589,7 @@ public final class BattleMechanicsManager {
         for (AbstractRecruitEntity recruit : RecruitSpatialIndex.group(level, groupId)) {
             if (recruit.isAlive()
                     && groupId.equals(recruit.getGroup())
-                    && (recruit.getMainHandItem().is(RTSTags.MORALE_ITEMS)
-                    || recruit.getOffhandItem().is(RTSTags.MORALE_ITEMS))) {
+                    && MoraleItemRegistry.carries(recruit)) {
                 return true;
             }
         }

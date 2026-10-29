@@ -14,7 +14,7 @@ import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMountControlRegistry;
 import ee.lastpagans.recruitsrtscamera.network.FormationRouteSyncPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
-import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
+import ee.lastpagans.recruitsrtscamera.server.MoraleItemRegistry;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitAIScheduler;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeMetrics;
@@ -1126,8 +1126,7 @@ public final class NativeFormationController {
     }
 
     private static boolean carriesMoraleItem(AbstractRecruitEntity recruit) {
-        return recruit.getMainHandItem().is(RTSTags.MORALE_ITEMS)
-                || recruit.getOffhandItem().is(RTSTags.MORALE_ITEMS);
+        return MoraleItemRegistry.carries(recruit);
     }
 
     private static double horizontalDistanceSq(Vec3 a, Vec3 b) {
