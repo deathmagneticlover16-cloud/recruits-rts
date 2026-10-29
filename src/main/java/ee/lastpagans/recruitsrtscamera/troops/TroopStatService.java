@@ -232,7 +232,10 @@ public final class TroopStatService {
         if (item instanceof ProjectileWeaponItem) return count * 4.0D;
         if (item instanceof PotionItem) return count * 0.8D;
         if (item.getFoodProperties() != null) {
-            return count * (0.06D + item.getFoodProperties().getNutrition() * 0.015D);
+            // Food is campaign cargo, not weightless pocket inventory. Eight ordinary
+            // rations remain manageable, while one full stack of bread alone now exceeds
+            // comfortable foot capacity and strongly compounds armor/weapon encumbrance.
+            return count * (0.40D + item.getFoodProperties().getNutrition() * 0.06D);
         }
         if (item instanceof BlockItem) return count * 0.18D;
         return count * (stack.getMaxStackSize() <= 1 ? 1.25D : 0.05D);

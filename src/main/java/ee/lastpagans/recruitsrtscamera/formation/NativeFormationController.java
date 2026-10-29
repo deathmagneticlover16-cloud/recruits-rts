@@ -519,8 +519,7 @@ public final class NativeFormationController {
                     : slotError > 1.55D * 1.55D ? 1.07D : 1.0D;
             recruit.setHoldPos(desired);
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
-            Vec3 recoveryGoal = slotError > 2.75D * 2.75D ? state.center : desired;
-            boolean arrived = drive(level, recruit, mover, desired, recoveryGoal, agent, columnTransit,
+            boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit,
                     state.velocity, catchUpScale);
             CommanderAnimationHints.updateMovement(recruit, travelling || !arrived,
                     RTSMovementBoostManager.isHastyActive(state.groupId));
@@ -669,7 +668,6 @@ public final class NativeFormationController {
             AbstractRecruitEntity recruit,
             Mob mover,
             Vec3 desired,
-            Vec3 recoveryGoal,
             Agent agent,
             boolean dispersed,
             Vec3 slotVelocity,
@@ -737,10 +735,12 @@ public final class NativeFormationController {
         boolean needsPath = agent.path.points().isEmpty() || agent.index >= agent.path.points().size()
                 || goalChanged || !agent.path.isValid(level);
         if (needsPath && directSafety != null && !agent.pathPending && now >= agent.nextPlanAt) {
-            // A distant member first recovers the safe shared centre route, then closes
-            // the final short distance to its slot. This prevents every moving slot from
-            // becoming a separate straight-line invitation into a canyon.
-            Vec3 pathGoal = recoveryGoal;
+            // Route every member to its assigned grounded slot. Sending distant members
+            // to the formation centre made outer-rank soldiers perpetually qualify as
+            // laggards, so half the line collected in a circling central moshpit instead
+            // of ever being released to their real slots. TacticalPathfinder applies the
+            // same support, fluid and canyon checks to these per-slot routes.
+            Vec3 pathGoal = desired;
             long pathGeneration = agent.pathGeneration;
             RecruitAIScheduler.Priority priority = catchUpScale > 1.0D
                     ? RecruitAIScheduler.Priority.HIGH : RecruitAIScheduler.Priority.MEDIUM;
@@ -792,15 +792,15 @@ public final class NativeFormationController {
                 agent.beginManual(mover);
                 Vec3 motion = mover.getDeltaMovement();
                 mover.setDeltaMovement(motion.x * 0.72D, motion.y, motion.z * 0.72D);
-                agent.steeringTarget = recoveryGoal;
+                agent.steeringTarget = desired;
                 return false;
             }
             // Use Minecraft's navigator only when a completed bounded tactical search
-            // found no route. The recovery goal is the supported shared centreline, not
-            // an unverified moving outer slot.
+            // found no route. Keep the fallback on the assigned grounded slot so it can
+            // never become a permanent centre target.
             agent.manualControl = false;
-            agent.steeringTarget = recoveryGoal;
-            mover.getNavigation().moveTo(recoveryGoal.x, recoveryGoal.y, recoveryGoal.z,
+            agent.steeringTarget = desired;
+            mover.getNavigation().moveTo(desired.x, desired.y, desired.z,
                     navigationSpeed(recruit) * catchUpScale);
             return false;
         }

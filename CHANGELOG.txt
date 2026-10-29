@@ -1,3 +1,11 @@
+Recruits: RTS Camera 0.20.2-server.1
+Formation slot completion and meaningful food weight
+
+- Fixed infantry and cavalry outer ranks collapsing into the formation centre. Distant members now receive obstacle-aware routes to their actual grounded slots instead of repeatedly qualifying for a centre recovery target, so full lines can assemble without a permanent circling moshpit.
+- Increased carried-food weight substantially. A stack of bread now contributes 44.8 load: it causes a strong speed and fatigue burden by itself and compounds armor and weapon load, while a small eight-ration supply remains manageable.
+- Network protocol remains rts-camera-160 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.20.2-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.20.1-server.1
 Human laggard recovery and absorbed firearm effects
 

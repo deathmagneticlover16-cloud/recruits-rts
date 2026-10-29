@@ -416,7 +416,7 @@ require(stat_registry, "replace(Map<UUID, TroopStatProfile>",
 require(stat_service, "for (int slot = 0; slot < inventory.getContainerSize(); slot++)",
         "encumbrance must include equipped items and every recruit cargo slot")
 require(stat_service, "count * 0.04D", "ordinary ammunition must remain light per projectile")
-require(stat_service, "item.getFoodProperties().getNutrition() * 0.015D",
+require(stat_service, "item.getFoodProperties().getNutrition() * 0.06D",
         "large food stores must contribute nutrition-scaled weight")
 require(stat_service, "ENCUMBRANCE_RANGED_CAPACITY", "ranged troops need their lower carrying capacity")
 require(stat_service, '"RTS inventory encumbrance"', "overload must apply a dedicated movement modifier")
@@ -590,7 +590,13 @@ require(formation, "Math.max(0.68D, 1.0D - laggardShare * 0.55D)",
 require(formation, "slotError > 4.0D * 4.0D ? 1.12D",
         "foot laggards need a bounded human catch-up pace")
 require(formation, "agent.steeringTarget", "laggards must face their personal route tangent")
+require(formation, "Vec3 pathGoal = desired;",
+        "distant members must route to their actual grounded slots instead of the formation centre")
+forbid(formation, "Vec3 recoveryGoal",
+       "a persistent centre recovery target must not collapse outer ranks into a moshpit")
 require(steering, "error.x * 0.22D", "final slot correction must be damped instead of magnetic")
+require(stat_service, "0.40D + item.getFoodProperties().getNutrition() * 0.06D",
+        "a full food stack must strongly encumber its carrier")
 forbid(client_events, "FogOfWarWorldRenderer.render(event)",
        "the visual fog bank must be removed without disabling server visibility")
 require(smoke, "SCALE = 0.85D", "absorbed black-powder smoke must use the requested smaller spread")
@@ -612,6 +618,6 @@ require(musket_rest, "IDLE_TICKS = 20 * 5", "absorbed musket rest must park long
 require(musket_rest, "recruit.getShouldStrategicFire()", "strategic fire must restore the long gun to main hand")
 forbid(source("src/main/resources/META-INF/mods.toml"), 'modId="musketrestposition"',
        "RTS must no longer depend on the absorbed musket-rest addon")
-require(source("gradle.properties"), "mod_version=0.20.1-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.20.2-server.1", "semantic version must be updated")
 
-print("0.20.1-server.1 source contracts passed")
+print("0.20.2-server.1 source contracts passed")
