@@ -1,8 +1,8 @@
 package ee.lastpagans.recruitsrtscamera.effects;
 
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
+import ee.lastpagans.recruitsrtscamera.registry.RTSParticles;
 import net.minecraft.core.particles.ParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
@@ -201,13 +201,13 @@ public final class BlackPowderSmokeManager {
 
     private static void initial(ServerLevel level, Vec3 position, int count,
                                 double spreadX, double spreadY, double spreadZ, double speed) {
-        send(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, position, count,
+        send(level, RTSParticles.BLACK_POWDER_FOG.get(), position, count,
                 spreadX * SCALE, spreadY * SCALE, spreadZ * SCALE, speed);
     }
 
     private static void lingering(ServerLevel level, Vec3 position, int count,
                                   double spreadX, double spreadY, double spreadZ, double speed) {
-        send(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, position, count,
+        send(level, RTSParticles.BLACK_POWDER_FOG.get(), position, count,
                 spreadX, spreadY, spreadZ, speed);
     }
 

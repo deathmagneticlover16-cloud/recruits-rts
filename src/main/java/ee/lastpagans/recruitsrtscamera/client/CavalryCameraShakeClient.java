@@ -46,7 +46,9 @@ public final class CavalryCameraShakeClient {
             double formation = Math.expm1(sample.riders / 17.0D) / Math.expm1(1.0D);
             formation = Math.min(4.0D, formation);
             double speed = sample.speed / Math.max(1, sample.movingRiders);
-            double gait = Mth.clamp(speed / 0.18D, 0.35D, 1.40D);
+            // A march should read as weight in the ground rather than constant camera
+            // vibration. Shake rises smoothly once the formation enters a real run.
+            double gait = Mth.clamp((speed - 0.065D) / 0.20D, 0.025D, 1.20D);
             double range = 1.0D - distance / MAX_DISTANCE;
             combined += formation * gait * range * range;
         }
@@ -59,9 +61,9 @@ public final class CavalryCameraShakeClient {
         if (intensity < 0.001F || !RTSClientConfig.CAVALRY_CAMERA_SHAKE.get() || MC.level == null) return;
         double phase = (MC.level.getGameTime() + event.getPartialTick()) * 0.92D;
         float strength = intensity * RTSClientConfig.CAVALRY_CAMERA_SHAKE_INTENSITY.get().floatValue();
-        event.setPitch(event.getPitch() + (float) Math.sin(phase * 1.91D) * 0.34F * strength);
-        event.setYaw(event.getYaw() + (float) Math.sin(phase * 1.37D + 1.2D) * 0.20F * strength);
-        event.setRoll(event.getRoll() + (float) Math.sin(phase * 2.23D + 0.4D) * 0.16F * strength);
+        event.setPitch(event.getPitch() + (float) Math.sin(phase * 1.91D) * 0.17F * strength);
+        event.setYaw(event.getYaw() + (float) Math.sin(phase * 1.37D + 1.2D) * 0.10F * strength);
+        event.setRoll(event.getRoll() + (float) Math.sin(phase * 2.23D + 0.4D) * 0.08F * strength);
     }
 
     public static void reset() {

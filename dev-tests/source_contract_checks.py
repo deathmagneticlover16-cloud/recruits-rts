@@ -610,6 +610,10 @@ require(smoke, "closest.density = Math.min(32, closest.density + 1)",
         "repeated musketry must accumulate battlefield-obscuring smoke density")
 require(smoke, "cloud.particles + cloud.density / 2",
         "dense smoke must emit more fog than isolated shots")
+require(smoke, "RTSParticles.BLACK_POWDER_FOG.get()",
+        "absorbed firearm effects must use RTS-owned translucent fog")
+forbid(smoke, "CAMPFIRE_COSY_SMOKE",
+       "black-powder fog must not regress to vanilla campfire puffs")
 require(source("src/main/resources/META-INF/mods.toml"), 'modId="colonialcannons"',
         "Colonial Cannons must retain optional load ordering")
 forbid(source("src/main/resources/META-INF/mods.toml"), 'modId="burnt"',
@@ -627,17 +631,25 @@ morale_sync = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/Mora
 require(camera_shake, "Math.expm1(sample.riders / 17.0D)",
         "cavalry camera shake must scale exponentially from a visible seventeen-rider baseline")
 require(camera_shake, "MAX_DISTANCE = 96.0D", "cavalry shake must have bounded distance falloff")
+require(camera_shake, "0.025D, 1.20D", "walking cavalry shake must remain barely perceptible")
+require(formation, "movementHoldUntil = now + 10L",
+        "brief formation-route sampling gaps must not stop moving members")
+require(formation, "horizontalSpeed * 0.992D",
+        "members must coast instead of braking to a stop during asynchronous path planning")
 require(client_events, "CavalryCameraShakeClient.apply(event)", "camera angle events must apply hoofbeat shake")
 require(overlay, "drawTooltipText", "Commander tooltips need colored key-segment rendering")
 require(overlay, "graphics.drawString(MC.font, key, drawX, y, GOLD",
         "every angle-bracketed key segment must render yellow")
 require(morale_command, 'Commands.literal("recruitsmoraleitem")', "operators need live morale-item commands")
 require(morale_command, "source.hasPermission(2)", "live morale-item changes must be operator-only")
+require(morale_command, "StringArgumentType.string()",
+        "morale-item commands must accept namespace:item resource locations")
 require(morale_data, 'DATA_NAME = "recruits_rts_camera_morale_items"',
         "runtime morale items must persist with the world")
 require(morale_registry, "stack.is(RTSTags.MORALE_ITEMS)",
         "runtime morale items must extend rather than replace datapack standards")
 require(aura_renderer, "TRIANGLE_FAN", "hovered morale auras need a translucent filled blue circle")
+require(aura_renderer, "MOTION_BLOCKING_NO_LEAVES", "morale auras must follow terrain instead of being buried")
 require(controller,
         "capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown()",
         "aura radii must only appear while Space is held")
@@ -673,6 +685,6 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.22.0-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.22.1-server.1", "semantic version must be updated")
 
-print("0.22.0-server.1 source contracts passed")
+print("0.22.1-server.1 source contracts passed")

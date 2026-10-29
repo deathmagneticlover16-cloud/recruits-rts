@@ -675,8 +675,15 @@ public final class NativeFormationController {
     ) {
         double horizontal = horizontalDistanceSq(mover.position(), desired);
         double vertical = Math.abs(mover.getY() - desired.y);
-        boolean slotMoving = slotVelocity != null
+        long now = level.getGameTime();
+        boolean freshSlotMotion = slotVelocity != null
                 && (slotVelocity.x * slotVelocity.x + slotVelocity.z * slotVelocity.z > 0.0025D);
+        if (freshSlotMotion) agent.movementHoldUntil = now + 10L;
+        // Route planning and terrain projection can leave the formation anchor unchanged
+        // for one or two samples. Preserve movement intent through that gap so members do
+        // not hard-stop, restart their gait animation, and then accelerate again.
+        boolean slotMoving = freshSlotMotion
+                || (agent.movementHoldUntil > 0L && now <= agent.movementHoldUntil);
         if (!slotMoving && horizontal <= SLOT_LOCK_DISTANCE_SQ && vertical <= 0.70D) {
             mover.getNavigation().stop();
             Vec3 velocity = mover.getDeltaMovement();
@@ -687,7 +694,6 @@ public final class NativeFormationController {
             return true;
         }
 
-        long now = level.getGameTime();
         // On stairs/ladders use the shape-aware tactical waypoints exclusively. Local
         // steering is deliberately disabled there because its lateral correction can
         // pull a member toward the outside edge of a stair.
@@ -786,12 +792,17 @@ public final class NativeFormationController {
 
         if (agent.path.points().isEmpty()) {
             if (agent.pathPending) {
-                // Do not let vanilla navigation undo the canyon-safe tactical search
-                // during its asynchronous planning window. Decelerate instead of snapping
-                // to zero so custom locomotion animations remain continuous.
+                // Do not let vanilla navigation undo the canyon-safe tactical search.
+                // Coast on the already accepted tangent while the bounded job finishes;
+                // repeated damping here used to stop an entire cavalry line for several
+                // ticks before it abruptly resumed.
                 agent.beginManual(mover);
                 Vec3 motion = mover.getDeltaMovement();
-                mover.setDeltaMovement(motion.x * 0.72D, motion.y, motion.z * 0.72D);
+                double horizontalSpeed = Math.sqrt(motion.x * motion.x + motion.z * motion.z);
+                if (horizontalSpeed > 0.012D) {
+                    double retained = Math.max(0.012D, horizontalSpeed * 0.992D) / horizontalSpeed;
+                    mover.setDeltaMovement(motion.x * retained, motion.y, motion.z * retained);
+                }
                 agent.steeringTarget = desired;
                 return false;
             }
@@ -1299,6 +1310,7 @@ public final class NativeFormationController {
         Vec3 steeringTarget;
         long groundingRevision = Long.MIN_VALUE;
         long directBlockedUntil;
+        long movementHoldUntil;
 
         Agent(UUID recruitId) {
             steeringPhase = Math.floorMod(recruitId.hashCode(), 10);

@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.22.1-server.1
+Native firearm fog and movement continuity fixes
+
+- Replaced the campfire-smoke fallback with a large translucent RTS-owned black-powder fog particle. Musket and Colonial Cannons clouds retain their accumulated density, expansion and long battlefield persistence without restoring Burnt integration.
+- Cavalry members coast along their last accepted movement tangent while a bounded obstacle-aware path job is pending. Formation movement intent now has short hysteresis, removing the synchronized stop-and-restart pulse caused by route sampling gaps without allowing unsafe speculative shortcuts.
+- `/recruitsmoraleitem add|remove <namespace:item>` now consumes the complete resource location instead of stopping at the namespace colon.
+- General and standard-bearer aura hover uses a forgiving screen-space hit target, and the blue Space-held radius follows terrain height instead of being buried in a flat plane.
+- Halved cavalry camera-shake amplitude. Walking horses now contribute only a trace of shake, with strength building smoothly at running speed.
+- Network protocol remains rts-camera-161 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.22.1-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.22.0-server.1
 Formation volleys, troop roads and draggable unit cards
 

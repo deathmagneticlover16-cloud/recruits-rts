@@ -1901,9 +1901,13 @@ public final class RTSCameraController {
     }
 
     private static LivingEntity raycastAuraEntity(double screenX, double screenY) {
-        RayContext ray = rayContext(screenX, screenY);
-        if (ray == null || MC.level == null || MC.player == null) return null;
-        double closestDistance = blockLimitDistance(ray);
+        if (MC.level == null || MC.player == null) return null;
+        // General and standard previews are UI affordances, so select them in screen
+        // space. A high RTS camera ray otherwise has to strike a tiny entity hitbox and
+        // terrain can steal the hit before it reaches a standard bearer.
+        final double hitRadiusSq = 24.0D * 24.0D;
+        double closestDepth = Double.POSITIVE_INFINITY;
+        double closestScreenDistance = Double.POSITIVE_INFINITY;
         LivingEntity closest = null;
         List<LivingEntity> candidates = new ArrayList<>();
         candidates.add(MC.player);
@@ -1912,11 +1916,18 @@ public final class RTSCameraController {
                     || ClientMoraleItemState.matches(recruit.getOffhandItem())) candidates.add(recruit);
         }
         for (LivingEntity candidate : candidates) {
-            Optional<Vec3> hit = candidate.getBoundingBox().inflate(0.30D).clip(ray.start(), ray.end());
-            if (hit.isEmpty()) continue;
-            double distance = ray.start().distanceToSqr(hit.get());
-            if (distance < closestDistance) {
-                closestDistance = distance;
+            ScreenProjection.ProjectedPoint point = commanderProjectWorld(candidate.getX(),
+                    candidate.getBoundingBox().minY + candidate.getBbHeight() * 0.65D, candidate.getZ());
+            if (point == null || point.depth() <= 0.0D) continue;
+            double dx = point.x() - screenX;
+            double dy = point.y() - screenY;
+            double screenDistance = dx * dx + dy * dy;
+            if (screenDistance > hitRadiusSq) continue;
+            if (screenDistance < closestScreenDistance - 0.01D
+                    || (Math.abs(screenDistance - closestScreenDistance) <= 0.01D
+                    && point.depth() < closestDepth)) {
+                closestDepth = point.depth();
+                closestScreenDistance = screenDistance;
                 closest = candidate;
             }
         }
@@ -2576,7 +2587,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.22.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.22.1-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

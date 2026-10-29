@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 import ee.lastpagans.recruitsrtscamera.registry.RTSEntities;
 import ee.lastpagans.recruitsrtscamera.registry.RTSSounds;
+import ee.lastpagans.recruitsrtscamera.registry.RTSParticles;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.config.RTSClientConfig;
 import net.minecraftforge.fml.common.Mod;
@@ -21,6 +22,7 @@ public final class RecruitsRTSCameraMod {
         var modBus = FMLJavaModLoadingContext.get().getModEventBus();
         RTSEntities.register(modBus);
         RTSSounds.register(modBus);
+        RTSParticles.register(modBus);
 
         ModLoadingContext.get().registerConfig(
                 ModConfig.Type.SERVER,
