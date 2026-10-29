@@ -393,7 +393,9 @@ public final class NativeFormationController {
 
         if (!state.route.isValid(level)) {
             RecruitRuntimeMetrics.TERRAIN_INVALIDATIONS.increment();
-            invalidateRoutes(state);
+            // Block changes beneath a marching formation (especially its own road
+            // erosion) require a new route, but must not create a synchronized stop.
+            invalidateRoutes(state, true);
         }
 
         if (state.route.points().isEmpty() && (horizontalDistanceSq(state.center, state.destination) > 0.16D
@@ -425,11 +427,13 @@ public final class NativeFormationController {
                             RecruitRuntimeMetrics.FORMATION_PATHS.increment();
                             if (state.route.points().isEmpty()) RecruitRuntimeMetrics.PATH_FAILURES.increment();
                             if (state.route.constrained()) RecruitRuntimeMetrics.CONSTRAINED_ROUTES.increment();
-                            state.routeIndex = Math.min(1, Math.max(0, state.route.points().size() - 1));
+                            state.routeIndex = routeResumeIndex(state.route.points(), state.center);
                             // Elevation alone is not a reason to rotate a line into a column.
                             // Preserve frontage over ordinary slopes and broad stairs; only a
                             // genuinely narrow route may temporarily use the trail queue.
                             state.dispersed = false;
+                            state.coastEligible = false;
+                            state.pendingCoastDistance = 0.0D;
                             state.trail.clear();
                             rememberTrail(state, state.center);
                             state.nextRouteAt = level.getGameTime() + (state.route.points().isEmpty() ? 20L : 5L);
@@ -468,10 +472,28 @@ public final class NativeFormationController {
             // tick made every member chase a forward point and then snap back together.
             advanceAlongRoute(state, RTSMovementBoostManager.formationCenterStep(state.groupId, CENTER_SPEED)
                     * state.cohesionScale);
+        } else if (travelling && state.coastEligible && state.route.points().isEmpty()) {
+            // The scheduler starts newly submitted route work on its next server tick.
+            // Continue briefly on the last accepted tangent so a terrain revision or a
+            // partial-route boundary cannot make the whole formation stop for tea. Every
+            // interim point still requires dry collision-backed support, and the distance
+            // is capped so this can never substitute for obstacle-aware pathfinding.
+            double step = RTSMovementBoostManager.formationCenterStep(state.groupId, CENTER_SPEED)
+                    * state.cohesionScale;
+            Vec3 coasted = safePendingCoast(level, representative, state, step);
+            if (coasted != null) {
+                state.center = coasted;
+                state.pendingCoastDistance += horizontalDistanceSq(previousCenter, coasted) > 0.0D
+                        ? Math.sqrt(horizontalDistanceSq(previousCenter, coasted)) : 0.0D;
+                rememberTrail(state, state.center);
+            }
         } else if (!travelling) {
             state.dispersed = false;
         }
         state.velocity = state.center.subtract(previousCenter);
+        if (state.velocity.x * state.velocity.x + state.velocity.z * state.velocity.z > 1.0E-6D) {
+            state.lastTravelVelocity = state.velocity;
+        }
         if (travelling) {
             float desiredTravelHeading = movementHeading(state);
             if (Math.abs(angleDifference(state.travelHeading, desiredTravelHeading)) > 0.75F) {
@@ -677,13 +699,8 @@ public final class NativeFormationController {
         double vertical = Math.abs(mover.getY() - desired.y);
         long now = level.getGameTime();
         boolean freshSlotMotion = slotVelocity != null
-                && (slotVelocity.x * slotVelocity.x + slotVelocity.z * slotVelocity.z > 0.0025D);
-        if (freshSlotMotion) agent.movementHoldUntil = now + 10L;
-        // Route planning and terrain projection can leave the formation anchor unchanged
-        // for one or two samples. Preserve movement intent through that gap so members do
-        // not hard-stop, restart their gait animation, and then accelerate again.
-        boolean slotMoving = freshSlotMotion
-                || (agent.movementHoldUntil > 0L && now <= agent.movementHoldUntil);
+                && (slotVelocity.x * slotVelocity.x + slotVelocity.z * slotVelocity.z > 1.0E-6D);
+        boolean slotMoving = freshSlotMotion;
         if (!slotMoving && horizontal <= SLOT_LOCK_DISTANCE_SQ && vertical <= 0.70D) {
             mover.getNavigation().stop();
             Vec3 velocity = mover.getDeltaMovement();
@@ -775,7 +792,7 @@ public final class NativeFormationController {
                             RecruitRuntimeMetrics.AGENT_PATHS.increment();
                             RecruitRuntimeMetrics.RECOVERY_PATHS.increment();
                             if (agent.path.points().isEmpty()) RecruitRuntimeMetrics.PATH_FAILURES.increment();
-                            agent.index = Math.min(1, Math.max(0, agent.path.points().size() - 1));
+                            agent.index = routeResumeIndex(agent.path.points(), mover.position());
                             agent.goal = pathGoal;
                             agent.plannedAt = level.getGameTime();
                             agent.resetProgress(mover.position(), pathGoal, level.getGameTime());
@@ -888,10 +905,49 @@ public final class NativeFormationController {
                 state.routeGoal = null;
             }
         } else if (state.routeIndex >= state.route.points().size()) {
+            state.coastEligible = state.lastTravelVelocity.x * state.lastTravelVelocity.x
+                    + state.lastTravelVelocity.z * state.lastTravelVelocity.z > 1.0E-6D;
+            state.pendingCoastDistance = 0.0D;
             state.route = TacticalPathfinder.Route.EMPTY;
             state.routeIndex = 0;
             state.routeGoal = null;
         }
+    }
+
+    private static Vec3 safePendingCoast(
+            ServerLevel level,
+            Mob representative,
+            State state,
+            double requestedStep
+    ) {
+        if (state.pendingCoastDistance >= 1.75D || requestedStep <= 1.0E-5D) return null;
+        Vec3 tangent = new Vec3(state.lastTravelVelocity.x, 0.0D, state.lastTravelVelocity.z);
+        if (tangent.lengthSqr() < 1.0E-6D) return null;
+        double step = Math.min(requestedStep, 1.75D - state.pendingCoastDistance);
+        Vec3 proposed = state.center.add(tangent.normalize().scale(step));
+        Vec3 supported = TacticalPathfinder.standableAt(level, representative,
+                new Vec3(proposed.x, state.center.y, proposed.z));
+        if (supported == null) return null;
+        double elevation = supported.y - state.center.y;
+        if (elevation > 1.25D || elevation < -0.60D) return null;
+        return new Vec3(proposed.x, supported.y, proposed.z);
+    }
+
+    /** Resume ahead of the nearest route point after movement continued during planning. */
+    private static int routeResumeIndex(List<Vec3> points, Vec3 position) {
+        if (points == null || points.isEmpty()) return 0;
+        int nearest = 0;
+        double nearestDistance = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < points.size(); i++) {
+            Vec3 point = points.get(i);
+            double distance = horizontalDistanceSq(point, position)
+                    + Math.abs(point.y - position.y) * 0.20D;
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = i;
+            }
+        }
+        return Math.min(points.size() - 1, nearest + 1);
     }
 
     private static Vec3 trailPosition(State state, int memberIndex) {
@@ -981,10 +1037,19 @@ public final class NativeFormationController {
     }
 
     private static void invalidateRoutes(State state) {
+        invalidateRoutes(state, false);
+    }
+
+    private static void invalidateRoutes(State state, boolean preserveMomentum) {
+        state.coastEligible = preserveMomentum
+                && state.lastTravelVelocity.x * state.lastTravelVelocity.x
+                + state.lastTravelVelocity.z * state.lastTravelVelocity.z > 1.0E-6D;
+        state.pendingCoastDistance = 0.0D;
         state.routeGeneration++;
         state.route = TacticalPathfinder.Route.EMPTY;
         state.routeGoal = null;
         state.routeIndex = 0;
+        state.nextRouteAt = 0L;
         state.dispersed = false;
         state.agents.values().forEach(Agent::clearPath);
     }
@@ -1175,6 +1240,7 @@ public final class NativeFormationController {
         Vec3 center;
         Vec3 destination;
         Vec3 velocity = Vec3.ZERO;
+        Vec3 lastTravelVelocity = Vec3.ZERO;
         TacticalPathfinder.Route route = TacticalPathfinder.Route.EMPTY;
         Vec3 routeGoal;
         int routeIndex;
@@ -1190,6 +1256,8 @@ public final class NativeFormationController {
         boolean lastSyncedMoving;
         float slotHeading;
         double cohesionScale = 0.20D;
+        double pendingCoastDistance;
+        boolean coastEligible;
 
         State(UUID groupId, UUID ownerId, ResourceKey<Level> levelKey, FormationKind kind,
               float heading, Vec3 center, Vec3 destination,
@@ -1316,7 +1384,6 @@ public final class NativeFormationController {
         Vec3 steeringTarget;
         long groundingRevision = Long.MIN_VALUE;
         long directBlockedUntil;
-        long movementHoldUntil;
 
         Agent(UUID recruitId) {
             steeringPhase = Math.floorMod(recruitId.hashCode(), 10);

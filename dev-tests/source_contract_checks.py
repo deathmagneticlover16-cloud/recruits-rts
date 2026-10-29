@@ -644,10 +644,16 @@ require(camera_shake, "Math.expm1(sample.riders / 17.0D)",
         "cavalry camera shake must scale exponentially from a visible seventeen-rider baseline")
 require(camera_shake, "MAX_DISTANCE = 96.0D", "cavalry shake must have bounded distance falloff")
 require(camera_shake, "0.025D, 1.20D", "walking cavalry shake must remain barely perceptible")
-require(formation, "movementHoldUntil = now + 10L",
-        "brief formation-route sampling gaps must not stop moving members")
 require(formation, "horizontalSpeed * 0.992D",
         "members must coast instead of braking to a stop during asynchronous path planning")
+require(formation, "slotVelocity.z * slotVelocity.z > 1.0E-6D",
+        "slow walking slots must never be misclassified as stationary")
+require(formation, "state.pendingCoastDistance >= 1.75D",
+        "formation route handoffs need bounded movement continuity")
+require(formation, "elevation > 1.25D || elevation < -0.60D",
+        "route-handoff coasting must retain strict elevation safety")
+require(formation, "routeResumeIndex(agent.path.points(), mover.position())",
+        "coasting members must resume ahead on a completed route instead of backtracking")
 require(client_events, "CavalryCameraShakeClient.apply(event)", "camera angle events must apply hoofbeat shake")
 require(overlay, "drawTooltipText", "Commander tooltips need colored key-segment rendering")
 require(overlay, "graphics.drawString(MC.font, key, drawX, y, GOLD",
@@ -697,6 +703,6 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.22.2-server.1", "semantic version must be updated")
+require(source("gradle.properties"), "mod_version=0.22.3-server.1", "semantic version must be updated")
 
-print("0.22.2-server.1 source contracts passed")
+print("0.22.3-server.1 source contracts passed")

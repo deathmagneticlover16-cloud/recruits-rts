@@ -1,3 +1,12 @@
+Recruits: RTS Camera 0.22.3-server.1
+Continuous cavalry movement through route updates
+
+- Removed the hidden 0.05-block/tick stationary threshold that classified slow walking, fatigued movement and early cohesion movement as stopped. Any meaningful moving-slot velocity now keeps cavalry locomotion continuous instead of repeatedly locking and restarting nearby horses.
+- Formation centers now coast for at most 1.75 blocks along their last accepted tangent while a replacement obstacle-aware route is pending. Every interim column must remain dry, collision-backed and within safe elevation bounds; holes, water, canyons and unsupported drops still stop the coast immediately.
+- Terrain revisions caused by the formation's own road erosion now preserve movement momentum while requesting the replacement route immediately. Partial long routes receive the same bounded continuity handoff.
+- Network protocol remains rts-camera-162 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.22.3-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.22.2-server.1
 Supported cavalry rises and couched lance timing
 
