@@ -1,3 +1,11 @@
+Recruits: RTS Camera 0.22.7-server.1
+Remove troop road erosion
+
+- Removed troop road erosion completely. Recruit and cavalry movement no longer tracks footfalls or converts grass, dirt, coarse dirt, podzol, mycelium or rooted dirt into dirt paths.
+- Removed the `troopRoads.enabled` and `troopRoads.footfallsToPath` server configuration entries. Existing entries in an older config file are ignored by Forge after updating.
+- Network protocol remains rts-camera-162 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.22.7-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.22.6-server.1
 Dedicated-server equipment compatibility hotfix
 

@@ -78,6 +78,7 @@ runtime_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime
 spatial_index = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/RecruitSpatialIndex.java")
 doctrine = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/FormationDoctrineManager.java")
 terrain_cache = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/TacticalTerrainCache.java")
+server_config = source("src/main/java/ee/lastpagans/recruitsrtscamera/config/RTSServerConfig.java")
 language = source("src/main/resources/assets/recruits_rts_camera/lang/en_us.json")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
@@ -707,15 +708,15 @@ require(morale_sync, "RTSMoraleItemSavedData", "runtime standards must synchroni
 require(client_events, "ClientMoraleItemState.clear()", "runtime morale-item client state must clear on logout")
 require(tactical, "Math.expm1(3.0D * progress)",
         "infantry and cavalry charge speed must retain exponential growth")
-road_erosion = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/TroopRoadErosionManager.java")
 volley = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/FormationVolleyManager.java")
 bow_volley = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/BowVolleyMixin.java")
 crossbow_volley = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/CrossbowVolleyMixin.java")
 nomad_volley = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/NomadVolleyMixin.java")
 card_order = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/UnitCardOrder.java")
-require(road_erosion, "Blocks.DIRT_PATH.defaultBlockState()", "troop traffic must erode natural ground into paths")
-require(road_erosion, "GameRules.RULE_MOBGRIEFING", "troop road erosion must respect mob griefing policy")
-require(road_erosion, "mover == recruit ? 1 : 3", "mounted traffic must erode roads faster than foot traffic")
+if (ROOT / "src/main/java/ee/lastpagans/recruitsrtscamera/movement/TroopRoadErosionManager.java").exists():
+    raise AssertionError("troop road erosion runtime must remain removed")
+forbid(server_config, "TROOP_ROAD_EROSION", "troop road erosion config must remain removed")
+forbid(server_config, "footfallsToPath", "troop road footfall config must remain removed")
 require(volley, "nextBowDraw", "bow formations need one shared draw and reload clock")
 require(volley, "crossbowReady.size() >= expected", "loaded crossbows must wait for formation readiness")
 require(volley, "javelinRelease", "javelin formations need one shared release tick")
@@ -735,8 +736,8 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.22.6-server.1", "semantic version must be updated")
-require(controller, "0.22.6-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.22.6-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.22.7-server.1", "semantic version must be updated")
+require(controller, "0.22.7-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.22.7-server.1.jar", "build helper version must be updated")
 
-print("0.22.6-server.1 source contracts passed")
+print("0.22.7-server.1 source contracts passed")
