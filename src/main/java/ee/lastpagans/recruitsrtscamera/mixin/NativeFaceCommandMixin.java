@@ -16,7 +16,7 @@ import java.util.UUID;
 /** Carries the native Recruits Face command into the built-in formation runtime. */
 @Mixin(value = MessageFaceCommand.class, remap = false)
 public abstract class NativeFaceCommandMixin {
-    @Shadow private UUID group;
+    @Shadow(remap = false) private UUID group;
 
     @Inject(method = "executeServerSide", at = @At("TAIL"))
     private void rts$faceFormation(NetworkEvent.Context context, CallbackInfo callback) {

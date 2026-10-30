@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.22.6-server.1
+Dedicated-server equipment compatibility hotfix
+
+- Fixed a dedicated-server crash while calculating Epic Knights equipment weight. Exact `float getWeight()` method handles now avoid enumerating unrelated class metadata containing the client-only `HeraldryItemStackRenderer`, while supported Epic Knights weapons and shields retain their configured weights.
+- Optional compatibility lookup and invocation now contain reflection, runtime and linkage failures. A failed foreign-mod lookup returns to the existing vanilla armor, shield or weapon weight calculation instead of propagating through fatigue and crashing the server.
+- Marked native Recruits packet-field shadows as non-remappable, fixing the invalid remappable `@Shadow` startup error in `NativeOrderFormationReleaseMixin` and applying the same correct declaration to the related face-command mixin.
+- Dye Depot's invalid interface mixin is outside RTS and remains a Dye Depot compatibility/version issue; RTS contains no Dye Depot mixin or code reference.
+- Network protocol remains rts-camera-162 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.22.6-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.22.5-server.1
 Continuous running cavalry route handoffs
 

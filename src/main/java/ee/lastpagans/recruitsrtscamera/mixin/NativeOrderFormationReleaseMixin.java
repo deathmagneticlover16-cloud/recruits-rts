@@ -16,7 +16,7 @@ import java.util.UUID;
 /** Upkeep commands explicitly return movement authority to native Recruits. */
 @Mixin(value = {MessageUpkeepEntity.class, MessageUpkeepPos.class}, remap = false)
 public abstract class NativeOrderFormationReleaseMixin {
-    @Shadow private UUID group;
+    @Shadow(remap = false) private UUID group;
 
     @Inject(method = "executeServerSide", at = @At("TAIL"))
     private void rts$releaseFormation(NetworkEvent.Context context, CallbackInfo callback) {

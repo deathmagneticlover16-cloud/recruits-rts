@@ -277,6 +277,11 @@ require(selection_groups, "BUNDLES.containsKey(bundleSlot)",
 require(selection_groups, "!DIRECT_HOTKEYS.containsKey(keyForBundleSlot(candidate))",
         "bundle creation must skip numbers occupied by direct hotkeys")
 require(face_mixin, "FormationService.rememberFacing", "native Face must persist its facing lock")
+require(face_mixin, "@Shadow(remap = false) private UUID group;",
+        "native Face packet fields must not use Minecraft remapping")
+require(source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/NativeOrderFormationReleaseMixin.java"),
+        "@Shadow(remap = false) private UUID group;",
+        "native upkeep packet fields must not use Minecraft remapping")
 require(formation, "CENTER_SPEED = 0.21D", "foot formation travel must be 1.5x faster")
 require(formation, "FOOT_NAV_SPEED = 1.17D", "foot slot movement and rotation must be 1.5x faster")
 require(movement, "REGULAR_INFANTRY_NAV_SPEED = 1.17D", "regular foot navigation must be 1.5x faster")
@@ -448,6 +453,16 @@ require(equipment_compat, '"magistuarmory", "slavicarmory", "darkagesarmory", "m
         "all supplied Epic Knights modules must share direct equipment integration")
 for method in ("bayonetDamage", "bulletStdDev", "getLoadingDuration", "getWeight"):
     require(equipment_compat, '"' + method + '"', "equipment integration must read live " + method)
+require(equipment_compat, "MethodHandles.privateLookupIn(type, MethodHandles.lookup())",
+        "equipment weight discovery must avoid reflection that resolves client-only renderer signatures")
+require(equipment_compat, 'findVirtual(type, "getWeight", MethodType.methodType(float.class))',
+        "Epic Knights weight integration must link only its exact server-safe primitive signature")
+require(equipment_compat, "catch (Throwable ignored)",
+        "optional equipment invocation failures must fall back instead of crashing the server")
+require(equipment_compat, "RuntimeException | LinkageError ignored",
+        "foreign reflection and linkage failures must be contained during discovery")
+require(stat_service, "if (Double.isFinite(integratedWeight)) return count * integratedWeight;",
+        "failed optional weight lookup must retain the normal equipment-weight fallback")
 require(stat_service, "TroopEquipmentCompat.meleeDamage(weapon, recruit.getAttackDamage())",
         "Damage must report melee damage rather than musket projectile damage")
 require(equipment_compat, "isMusketGun(off)", "Musket Rest offhand parking must remain visible to stats")
@@ -720,8 +735,8 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.22.5-server.1", "semantic version must be updated")
-require(controller, "0.22.5-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.22.5-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.22.6-server.1", "semantic version must be updated")
+require(controller, "0.22.6-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.22.6-server.1.jar", "build helper version must be updated")
 
-print("0.22.5-server.1 source contracts passed")
+print("0.22.6-server.1 source contracts passed")

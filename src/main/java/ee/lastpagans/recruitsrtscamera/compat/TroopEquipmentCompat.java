@@ -7,6 +7,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.TridentItem;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Field;
@@ -25,6 +28,7 @@ public final class TroopEquipmentCompat {
             "magistuarmory", "slavicarmory", "darkagesarmory", "magistuarmoryaddon", "antiquelegacy"
     );
     private static final Map<MethodKey, Optional<Method>> METHODS = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Optional<MethodHandle>> EQUIPMENT_WEIGHT_METHODS = new ConcurrentHashMap<>();
 
     private TroopEquipmentCompat() { }
 
@@ -64,7 +68,7 @@ public final class TroopEquipmentCompat {
             Field field = config.getField("bayonetDamage");
             Object value = field.get(null);
             return value instanceof Number number ? number.doubleValue() : fallback;
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
             return 5.0D;
         }
     }
@@ -103,7 +107,7 @@ public final class TroopEquipmentCompat {
             };
         }
         if (!EPIC_KNIGHTS_NAMESPACES.contains(id.getNamespace())) return Double.NaN;
-        double kilograms = invokeNumber(stack.getItem(), "getWeight");
+        double kilograms = invokeEquipmentWeight(stack.getItem());
         return Double.isFinite(kilograms) && kilograms > 0.0D ? kilograms : Double.NaN;
     }
 
@@ -124,14 +128,47 @@ public final class TroopEquipmentCompat {
 
     private static Object invoke(Object target, String name, Class<?>[] parameters, Object... arguments) {
         if (target == null) return null;
-        Class<?> type = target instanceof Class<?> clazz ? clazz : target.getClass();
-        Method method = METHODS.computeIfAbsent(new MethodKey(type, name, ListKey.of(parameters)),
-                ignored -> find(type, name, parameters)).orElse(null);
-        if (method == null) return null;
         try {
+            Class<?> type = target instanceof Class<?> clazz ? clazz : target.getClass();
+            Method method = METHODS.computeIfAbsent(new MethodKey(type, name, ListKey.of(parameters)),
+                    ignored -> find(type, name, parameters)).orElse(null);
+            if (method == null) return null;
             return method.invoke(Modifier.isStatic(method.getModifiers()) ? null : target, arguments);
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
             return null;
+        }
+    }
+
+    /**
+     * Resolve only the exact primitive weight signature. Class.getDeclaredMethod enumerates
+     * a class's reflective method metadata; Epic Knights shields keep client-only renderer
+     * types in that same metadata, which Forge's dedicated-server dist cleaner rejects.
+     * A named MethodHandle lookup links getWeight()F directly without resolving unrelated
+     * renderer methods or fields.
+     */
+    private static double invokeEquipmentWeight(Object target) {
+        if (target == null) return Double.NaN;
+        try {
+            MethodHandle handle = EQUIPMENT_WEIGHT_METHODS.computeIfAbsent(target.getClass(),
+                    TroopEquipmentCompat::findEquipmentWeight).orElse(null);
+            if (handle == null) return Double.NaN;
+            Object value = handle.invoke(target);
+            return value instanceof Number number ? number.doubleValue() : Double.NaN;
+        } catch (ThreadDeath | VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable ignored) {
+            // Optional compatibility must never take down a dedicated server. Returning
+            // NaN selects TroopStatService's normal armor/shield/weapon weight fallback.
+            return Double.NaN;
+        }
+    }
+
+    private static Optional<MethodHandle> findEquipmentWeight(Class<?> type) {
+        try {
+            MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(type, MethodHandles.lookup());
+            return Optional.of(lookup.findVirtual(type, "getWeight", MethodType.methodType(float.class)));
+        } catch (NoSuchMethodException | IllegalAccessException | RuntimeException | LinkageError ignored) {
+            return Optional.empty();
         }
     }
 
@@ -143,6 +180,9 @@ public final class TroopEquipmentCompat {
                 return Optional.of(method);
             } catch (NoSuchMethodException ignored) {
                 // Continue through the optional mod's class hierarchy.
+            } catch (RuntimeException | LinkageError ignored) {
+                // A foreign class can expose client-only signature types. Skip that
+                // class rather than allowing optional compatibility to crash a server.
             }
         }
         return Optional.empty();
