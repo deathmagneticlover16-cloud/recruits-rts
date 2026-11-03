@@ -17,12 +17,7 @@ public final class RTSServerConfig {
     public static final ForgeConfigSpec.IntValue MAX_ROUTE_WAYPOINTS;
     public static final ForgeConfigSpec.IntValue MAX_GROUPS_PER_ORDER;
     public static final ForgeConfigSpec.IntValue MAX_RECRUITS_PER_ORDER;
-    public static final ForgeConfigSpec.BooleanValue FOG_OF_WAR;
-    public static final ForgeConfigSpec.IntValue FOG_PLAYER_VISION_RADIUS;
-    public static final ForgeConfigSpec.IntValue FOG_RECRUIT_VISION_RADIUS;
-    public static final ForgeConfigSpec.IntValue FOG_CAVALRY_VISION_RADIUS;
-    public static final ForgeConfigSpec.IntValue FOG_SHIP_VISION_RADIUS;
-    public static final ForgeConfigSpec.BooleanValue FOG_BLOCK_HIDDEN_TARGETING;
+    public static final ForgeConfigSpec.BooleanValue HIDDENNESS_BLOCK_TARGETING;
     public static final ForgeConfigSpec.BooleanValue FORMATION_DOCTRINE_ENABLED;
     public static final ForgeConfigSpec.BooleanValue NATIVE_FORMATION_RUNTIME;
     public static final ForgeConfigSpec.BooleanValue RUNTIME_BRAIN;
@@ -97,25 +92,10 @@ public final class RTSServerConfig {
                 .defineInRange("maxRecruitsPerOrder", 2048, 512, 4096);
         BUILDER.pop();
 
-        BUILDER.push("fogOfWar");
-        FOG_OF_WAR = BUILDER
-                .comment("Enable tactical Fog of War visibility logic and hidden-target checks for RTS orders. Client visual rendering can be disabled independently.")
-                .define("enabled", true);
-        FOG_PLAYER_VISION_RADIUS = BUILDER
-                .comment("Vision radius around the commander's real player body. The free camera itself grants no vision.")
-                .defineInRange("playerVisionRadius", 48, 8, 160);
-        FOG_RECRUIT_VISION_RADIUS = BUILDER
-                .comment("Vision radius around ordinary owned recruits.")
-                .defineInRange("recruitVisionRadius", 40, 8, 128);
-        FOG_CAVALRY_VISION_RADIUS = BUILDER
-                .comment("Vision radius around mounted owned recruits.")
-                .defineInRange("cavalryVisionRadius", 48, 8, 160);
-        FOG_SHIP_VISION_RADIUS = BUILDER
-                .comment("Vision radius around owned Captains currently commanding a Small Ships vessel.")
-                .defineInRange("shipVisionRadius", 64, 8, 192);
-        FOG_BLOCK_HIDDEN_TARGETING = BUILDER
-                .comment("Reject attack and strategic-fire targets that are outside friendly vision.")
-                .define("blockHiddenTargeting", true);
+        BUILDER.push("hiddenness");
+        HIDDENNESS_BLOCK_TARGETING = BUILDER
+                .comment("Reject attacks against formations concealed by terrain or dense brush. Visibility has no distance radius.")
+                .define("blockTargeting", true);
         BUILDER.pop();
 
         BUILDER.push("formationDoctrine");

@@ -12,6 +12,7 @@ public final class RTSClientConfig {
     public static final ForgeConfigSpec.BooleanValue ADVISOR_VOICES_ENABLED;
     public static final ForgeConfigSpec.BooleanValue ADVISOR_SUBTITLES;
     public static final ForgeConfigSpec.BooleanValue ENEMY_BANNERS_DEFAULT;
+    public static final ForgeConfigSpec.BooleanValue UNIT_STATISTICS_DEFAULT;
     public static final ForgeConfigSpec.EnumValue<SelectionHighlightMode> SELECTION_HIGHLIGHT_MODE;
     public static final ForgeConfigSpec.EnumValue<GroundMarkerShape> GROUND_MARKER_SHAPE;
     public static final ForgeConfigSpec.BooleanValue CAVALRY_CAMERA_SHAKE;
@@ -36,6 +37,9 @@ public final class RTSClientConfig {
         ENEMY_BANNERS_DEFAULT = BUILDER
                 .comment("Default visibility of hostile floating unit banners when RTS mode opens. Can be toggled in-game.")
                 .define("enemyBanners", true);
+        UNIT_STATISTICS_DEFAULT = BUILDER
+                .comment("Show the middle-right live Unit Statistics panel. Can be toggled in Commander settings.")
+                .define("unitStatistics", true);
         SELECTION_HIGHLIGHT_MODE = BUILDER
                 .comment(
                         "How owned RTS selections are shown.",

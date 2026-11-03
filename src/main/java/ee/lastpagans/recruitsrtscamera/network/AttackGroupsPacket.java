@@ -75,7 +75,7 @@ public record AttackGroupsPacket(List<UUID> groupIds, int targetEntityId, boolea
             return;
         }
         if (RTSVision.hiddenTargetChecksEnabled() && !RTSVision.canSee(sender, clickedTarget)) {
-            sender.displayClientMessage(Component.literal("That target is hidden by fog of war."), true);
+            sender.displayClientMessage(Component.literal("That target is concealed by terrain or dense brush."), true);
             return;
         }
 
@@ -83,8 +83,11 @@ public record AttackGroupsPacket(List<UUID> groupIds, int targetEntityId, boolea
         if (groups.isEmpty()) {
             return;
         }
-        groups.entrySet().removeIf(entry -> entry.getValue().stream().noneMatch(
-                recruit -> recruit.canAttack(clickedTarget) && !recruit.isAlliedTo(clickedTarget)));
+        // Explicit Commander orders override passive target acquisition. Mob#canAttack can
+        // be false while a recruit is formation-locked, which used to discard valid archer
+        // and charge orders after the client had accepted them.
+        groups.entrySet().removeIf(entry -> entry.getValue().stream().noneMatch(recruit ->
+                clickedTarget.isAttackable() && !recruit.isAlliedTo(clickedTarget)));
         if (groups.isEmpty()) return;
         List<UUID> authorized = new ArrayList<>(groups.keySet());
         RouteManager.cancel(sender, authorized);

@@ -600,9 +600,32 @@ client_visibility = source("src/main/java/ee/lastpagans/recruitsrtscamera/client
 require(visibility, "ClipContext.Block.COLLIDER", "terrain must occlude hostile formation sight")
 require(visibility, "BlockTags.LEAVES", "dense brush must conceal hostile formations")
 require(visibility, "BRUSH_REVEAL_RADIUS", "brush concealment must break at close identification range")
+forbid(visibility, "withinVision(", "distance radii must not hide formations on an open plain")
+forbid(server_config, "FOG_PLAYER_VISION_RADIUS", "distance-based player vision must remain removed")
+forbid(server_config, "FOG_RECRUIT_VISION_RADIUS", "distance-based formation vision must remain removed")
+require(server_config, "HIDDENNESS_BLOCK_TARGETING",
+        "terrain and brush hiddenness must remain independently configurable")
 require(visibility_sync, "Map<UUID, Boolean>", "the server must synchronize per-formation visibility")
 require(client_visibility, "FADE_OUT_PER_TICK", "lost contacts must fade instead of popping out")
 require(overlay, "ClientEnemyVisibilityState.targetable", "hidden enemy banners must not remain targetable")
+require(controller, "pendingContextAttackEntityId = pressedTarget.getId()",
+        "battlefield attacks must capture the target on mouse press")
+require(controller, "action == GLFW.GLFW_RELEASE && pendingContextAttackEntityId >= 0",
+        "a captured attack must consume release instead of falling through to a terrain move")
+require(controller, "ATTACK_SCREEN_ASSIST_PX = 18.0D",
+        "projected attack targets need a forgiving RTS-sized screen hit area")
+require(attack_packet, "clickedTarget.isAttackable() && !recruit.isAlliedTo(clickedTarget)",
+        "explicit attack packets must not depend on passive recruit target acquisition")
+forbid(attack, "attacker.canAttack(target)",
+       "persistent Commander attacks must not expire because passive AI is formation-locked")
+require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
+        "visual distance-fog boundaries must remain removed")
+forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive troop-state button must remain removed")
+forbid(overlay, "layout.aggressionButton()", "the troop-state button must not retain a hidden hitbox")
+require(ui_ids, 'SETTINGS_UNIT_STATISTICS = "settings.unit_statistics"',
+        "the Unit Statistics setting needs a stable editor-facing semantic id")
+require(overlay, "if (!unitStatisticsVisible()) return;",
+        "the Unit Statistics setting must control the live statistics panel")
 require(cavalry_combat, "equippedMeleeDamage", "cavalry impact must include its equipped weapon")
 require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measured travel speed")
 require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
@@ -736,8 +759,8 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.22.7-server.1", "semantic version must be updated")
-require(controller, "0.22.7-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.22.7-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.23.0-server.1", "semantic version must be updated")
+require(controller, "0.23.0-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.23.0-server.1.jar", "build helper version must be updated")
 
-print("0.22.7-server.1 source contracts passed")
+print("0.23.0-server.1 source contracts passed")

@@ -4,7 +4,6 @@ import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager;
-import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.network.RouteManager;
 import ee.lastpagans.recruitsrtscamera.network.PermissionSyncPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
@@ -69,11 +68,11 @@ public final class RTSServerEvents {
                         RTSPermissions.whitelistMode(),
                         SiegeWeaponsCompat.isAvailable(),
                         SmallShipsCompat.isAvailable(),
-                        RTSServerConfig.FOG_OF_WAR.get(),
-                        RTSServerConfig.FOG_PLAYER_VISION_RADIUS.get(),
-                        RTSServerConfig.FOG_RECRUIT_VISION_RADIUS.get(),
-                        RTSServerConfig.FOG_CAVALRY_VISION_RADIUS.get(),
-                        RTSServerConfig.FOG_SHIP_VISION_RADIUS.get()
+                        false,
+                        1,
+                        1,
+                        1,
+                        1
                 )
         );
         RTSCameraNetwork.CHANNEL.send(

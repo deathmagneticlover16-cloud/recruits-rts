@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.23.0-server.1
+Reliable combat orders and hiddenness-only visibility
+
+- Fixed right-click attack and charge orders falling through into terrain movement. Enemy targets are captured on mouse press, retained through release, and use a larger projected screen hit area so moving soldiers and gaps between model hitboxes no longer turn combat clicks into move orders. The double-click window is now 500 ms.
+- Explicit Commander attacks no longer depend on a recruit's passive target-acquisition state. Formation-locked melee troops, cavalry and archers retain and execute authorized hostile targets while alliance and vanilla attackability checks remain enforced.
+- Removed distance-based Fog of War and its visible range boundaries. Enemy formations on an open plain remain visible at any loaded distance; terrain line of sight and dense-brush concealment still hide formations, fade their troops and banners, and block attacks.
+- Removed the Neutral/Aggressive troop-state button and its command-bar hitbox.
+- Added `settings.unit_statistics`, an in-game Commander setting that toggles the live Unit Statistics panel. Its default remains configurable in the client config.
+- Network protocol remains rts-camera-162 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.23.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.22.7-server.1
 Remove troop road erosion
 

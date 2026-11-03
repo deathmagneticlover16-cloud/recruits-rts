@@ -24,7 +24,6 @@ public final class CommanderUiElementIds {
     public static final String COMMAND_FORMATION = "command.formation";
     public static final String COMMAND_SELECTION_GROUP = "command.selection_group";
     public static final String COMMAND_HALT = "command.halt";
-    public static final String COMMAND_AGGRESSION = "command.aggression";
     public static final String COMMAND_MOUNT = "command.mount";
     public static final String COMMAND_SPACING = "command.spacing";
     public static final String COMMAND_FIRE_CONTROL = "command.fire_control";
@@ -34,6 +33,7 @@ public final class CommanderUiElementIds {
     public static final String COMMAND_CAVALRY_WEDGE = "command.cavalry_wedge";
     public static final String SETTINGS_BUTTON = "settings.button";
     public static final String SETTINGS_PANEL = "settings.panel";
+    public static final String SETTINGS_UNIT_STATISTICS = "settings.unit_statistics";
 
     private CommanderUiElementIds() {
     }

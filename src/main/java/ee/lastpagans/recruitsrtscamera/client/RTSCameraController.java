@@ -86,10 +86,9 @@ public final class RTSCameraController {
     private static final double CLICK_DRAG_THRESHOLD = 5.0D;
     private static final double FRONTAGE_DRAG_THRESHOLD = 10.0D;
     private static final double CUSTOM_SCREEN_SAMPLE_STEP = 3.0D;
-    private static final double ATTACK_HITBOX_INFLATE = 0.65D;
-    private static final double ATTACK_SCREEN_ASSIST_PX = 6.0D;
+    private static final double ATTACK_SCREEN_ASSIST_PX = 18.0D;
     private static final int MAX_CLIENT_ROUTE_POINTS = 32;
-    private static final long HASTY_DOUBLE_CLICK_MS = 340L;
+    private static final long HASTY_DOUBLE_CLICK_MS = 500L;
     private static final int HASTY_TARGET_TOLERANCE = 2;
     private static final double ROTATE_MIN_RADIUS = 1.5D;
     private static final int TACTICAL_ROUTE_COLOR = 0xD8FFD36A;
@@ -118,6 +117,7 @@ public final class RTSCameraController {
     private static boolean draggingTranslation;
     private static boolean draggingFrontage;
     private static boolean draggingCustom;
+    private static int pendingContextAttackEntityId = -1;
     private static boolean rotatingFormation;
     private static boolean rotateKeyWasDown;
     private static boolean selectionAdditive;
@@ -436,6 +436,7 @@ public final class RTSCameraController {
         draggingFrontage = false;
         frontageStartGround = null;
         draggingCustom = false;
+        pendingContextAttackEntityId = -1;
         CUSTOM_STROKE.clear();
         cancelRotation();
         ROUTE_POINTS.clear();
@@ -743,6 +744,7 @@ public final class RTSCameraController {
         translationCurrentGround = null;
         draggingFrontage = false;
         draggingCustom = false;
+        pendingContextAttackEntityId = -1;
         rotatingFormation = false;
         rotateKeyWasDown = false;
         capturedRotateDown = false;
@@ -787,6 +789,7 @@ public final class RTSCameraController {
         translationCurrentGround = null;
         draggingFrontage = false;
         draggingCustom = false;
+        pendingContextAttackEntityId = -1;
         rotatingFormation = false;
         rotateKeyWasDown = false;
         capturedRotateDown = false;
@@ -920,6 +923,7 @@ public final class RTSCameraController {
             translationCurrentGround = null;
             draggingFrontage = false;
             draggingCustom = false;
+            pendingContextAttackEntityId = -1;
             return true;
         }
 
@@ -965,6 +969,7 @@ public final class RTSCameraController {
             if (action == GLFW.GLFW_PRESS) {
                 boolean customModifier = (modifiers & GLFW.GLFW_MOD_ALT) != 0;
                 if (customModifier) {
+                    pendingContextAttackEntityId = -1;
                     draggingFrontage = false;
                     frontageStartGround = null;
                     draggingCustom = true;
@@ -973,10 +978,29 @@ public final class RTSCameraController {
                 } else {
                     draggingCustom = false;
                     CUSTOM_STROKE.clear();
-                    draggingFrontage = true;
-                    frontageStartX = frontageCurrentX = cursorX;
-                    frontageStartY = frontageCurrentY = cursorY;
-                    frontageStartGround = raycastGroundHit(cursorX, cursorY);
+                    LivingEntity pressedTarget = raycastAttackTarget(cursorX, cursorY);
+                    if (isAttackableTarget(pressedTarget)) {
+                        // Capture the target on press. Requiring the release ray to hit the
+                        // same moving body turned valid attack/charge clicks into terrain
+                        // moves whenever a horse or cursor shifted by a few pixels.
+                        pendingContextAttackEntityId = pressedTarget.getId();
+                        draggingFrontage = false;
+                        frontageStartGround = null;
+                    } else {
+                        pendingContextAttackEntityId = -1;
+                        draggingFrontage = true;
+                        frontageStartX = frontageCurrentX = cursorX;
+                        frontageStartY = frontageCurrentY = cursorY;
+                        frontageStartGround = raycastGroundHit(cursorX, cursorY);
+                    }
+                }
+            } else if (action == GLFW.GLFW_RELEASE && pendingContextAttackEntityId >= 0) {
+                int targetEntityId = pendingContextAttackEntityId;
+                pendingContextAttackEntityId = -1;
+                draggingFrontage = false;
+                frontageStartGround = null;
+                if (!commanderAttackEntity(targetEntityId)) {
+                    setStatus("Attack target became unavailable before the order was released.");
                 }
             } else if (action == GLFW.GLFW_RELEASE && draggingCustom) {
                 sampleCustomStrokePoint(true);
@@ -1270,7 +1294,7 @@ public final class RTSCameraController {
             return;
         }
         if (!isClientVisible(Vec3.atCenterOf(target))) {
-            setStatus("That bombardment point is hidden by fog of war.");
+            setStatus("That bombardment point is concealed by terrain or dense brush.");
             return;
         }
         RTSCameraNetwork.CHANNEL.sendToServer(new StrategicFirePacket(
@@ -1979,12 +2003,13 @@ public final class RTSCameraController {
             return closest;
         }
 
-        // High-altitude RTS assist: an expanded world hitbox is only accepted when the
-        // actual projected body of the entity is also within a small screen-space pad
-        // around the cursor. This keeps targeting forgiving without creating phantom
-        // attack icons while moving the camera.
+        // High-altitude RTS assist is screen-space authoritative. Requiring a second
+        // inflated world-ray intersection after the projected body was already under the
+        // cursor left gaps between formation members and made attack clicks fall through
+        // into move orders. Hidden enemy groups were rejected above by isAttackableTarget.
+        double bestAssistDistance = Double.POSITIVE_INFINITY;
+        double bestAssistDepth = Double.POSITIVE_INFINITY;
         for (LivingEntity living : candidates) {
-            if (!search.intersects(living.getBoundingBox())) continue;
             if (!isAttackableTarget(living) || !isClientVisible(living.position())) {
                 continue;
             }
@@ -1999,14 +2024,18 @@ public final class RTSCameraController {
                     || screenY > bounds.maxY() + ATTACK_SCREEN_ASSIST_PX) {
                 continue;
             }
-            double dynamicPadding = ATTACK_HITBOX_INFLATE + Math.min(0.25D, living.getBbWidth() * 0.12D);
-            Optional<Vec3> hit = box.inflate(dynamicPadding).clip(ray.start(), ray.end());
-            if (hit.isEmpty()) {
-                continue;
-            }
-            double distance = ray.start().distanceToSqr(hit.get());
-            if (distance < closestDistance) {
-                closestDistance = distance;
+            double dx = screenX < bounds.minX() ? bounds.minX() - screenX
+                    : screenX > bounds.maxX() ? screenX - bounds.maxX() : 0.0D;
+            double dy = screenY < bounds.minY() ? bounds.minY() - screenY
+                    : screenY > bounds.maxY() ? screenY - bounds.maxY() : 0.0D;
+            double screenDistance = dx * dx + dy * dy;
+            ScreenProjection.ProjectedPoint center = commanderProjectWorld(
+                    living.getX(), living.getY() + living.getBbHeight() * 0.5D, living.getZ());
+            double depth = center == null ? Double.POSITIVE_INFINITY : center.depth();
+            if (screenDistance < bestAssistDistance
+                    || (Math.abs(screenDistance - bestAssistDistance) < 0.01D && depth < bestAssistDepth)) {
+                bestAssistDistance = screenDistance;
+                bestAssistDepth = depth;
                 closest = living;
             }
         }
@@ -2025,49 +2054,19 @@ public final class RTSCameraController {
                 || physicalKeyState(RTSCameraKeyMappings.CAMERA_DOWN);
     }
 
-    /**
-     * Client mirror of the server visibility rule. The free camera itself grants no vision.
-     * The snapshot form lets the world-space fog renderer evaluate hundreds of cells without
-     * repeatedly rebuilding the owned-recruit list.
-     */
+    /** Legacy renderer hook retained for binary/source integrations; distance fog is disabled. */
     public static List<FogVisionSource> fogVisionSources() {
-        if (!ClientPermissionState.fogEnabled() || MC.player == null) {
-            return List.of();
-        }
-        return clientBattlefieldSnapshot().visionSources();
+        return List.of();
     }
 
-    /**
-     * 0 = inside friendly vision, 1 = well inside hidden territory. The 18-block feather is
-     * visual only; the server still uses the exact configured radius for command authority.
-     */
+    /** Legacy visual-fog API. Distance no longer changes visibility, so this is always clear. */
     public static float fogHiddenFactor(Vec3 target, List<FogVisionSource> sources) {
-        return fogHiddenFactor(target, sources, 18.0D);
+        return 0.0F;
     }
 
-    /**
-     * Visual hidden-factor helper with a caller-selected feather distance. The exact
-     * visible/hidden boundary is unchanged: only the cosmetic fade outside that boundary
-     * changes. Server-side command visibility remains authoritative and independent.
-     */
+    /** Legacy feathered visual-fog API, retained as an always-clear compatibility hook. */
     public static float fogHiddenFactor(Vec3 target, List<FogVisionSource> sources, double edgeFadeDistance) {
-        if (!ClientPermissionState.fogEnabled() || MC.player == null || target == null) {
-            return 0.0F;
-        }
-        double nearestOutside = Double.POSITIVE_INFINITY;
-        for (FogVisionSource source : sources) {
-            double distance = Math.sqrt(horizontalDistanceSqr(source.position(), target));
-            double outside = distance - source.radius();
-            if (outside <= 0.0D) {
-                return 0.0F;
-            }
-            nearestOutside = Math.min(nearestOutside, outside);
-        }
-        if (!Double.isFinite(nearestOutside)) {
-            return 1.0F;
-        }
-        double feather = Math.max(0.001D, edgeFadeDistance);
-        return (float) Math.max(0.0D, Math.min(1.0D, nearestOutside / feather));
+        return 0.0F;
     }
 
     public static float fogHiddenFactor(Vec3 target) {
@@ -2075,13 +2074,7 @@ public final class RTSCameraController {
     }
 
     private static boolean isClientVisible(Vec3 target) {
-        return fogHiddenFactor(target, clientBattlefieldSnapshot().visionSources()) <= 0.0F;
-    }
-
-    private static double horizontalDistanceSqr(Vec3 a, Vec3 b) {
-        double dx = a.x - b.x;
-        double dz = a.z - b.z;
-        return dx * dx + dz * dz;
+        return true;
     }
 
     private static double square(double value) {
@@ -2248,28 +2241,8 @@ public final class RTSCameraController {
         }
         List<AbstractRecruitEntity> owned = List.copyOf(result);
 
-        List<FogVisionSource> vision = new ArrayList<>(owned.size() + 1);
-        if (ClientPermissionState.fogEnabled()) {
-            vision.add(new FogVisionSource(MC.player.position(), ClientPermissionState.playerVisionRadius()));
-            for (AbstractRecruitEntity recruit : owned) {
-                Vec3 source = recruit.position();
-                double radius;
-                if (ClientPermissionState.smallShipsAvailable()
-                        && recruit instanceof CaptainEntity captain
-                        && SmallShipsCompat.isCaptainAboard(captain)) {
-                    source = SmallShipsCompat.shipPosition(captain);
-                    radius = ClientPermissionState.shipVisionRadius();
-                } else if (recruit.isPassenger()) {
-                    radius = ClientPermissionState.cavalryVisionRadius();
-                } else {
-                    radius = ClientPermissionState.recruitVisionRadius();
-                }
-                vision.add(new FogVisionSource(source, radius));
-            }
-        }
-
         battlefieldSnapshot = new ClientBattlefieldSnapshot(
-                MC.level, gameTime, center, owned, List.copyOf(vision), List.copyOf(living));
+                MC.level, gameTime, center, owned, List.of(), List.copyOf(living));
     }
 
     private static UUID validOwnedGroupId(AbstractRecruitEntity recruit) {
@@ -2587,7 +2560,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.22.7-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.23.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2636,8 +2609,7 @@ public final class RTSCameraController {
                         + " target=" + (hoveredTarget == null ? "none" : hoveredTarget.getType().toString()),
                 textX, y, textWidth, 0xFF9FC7E8);
         y += lineHeight;
-        drawHudLine(graphics, "FOW authority: server=" + ClientPermissionState.fogEnabled()
-                        + " hidden-unit LOS active · visual fog removed"
+        drawHudLine(graphics, "Visibility: terrain/brush hiddenness · no distance fog"
                         + " · inputGate=" + InputGate.isBlocking(),
                 textX, y, textWidth, 0xFF9FC7E8);
 

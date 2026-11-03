@@ -912,8 +912,11 @@ public final class RTSGroupAttackManager {
     }
 
     private static boolean validTarget(AbstractRecruitEntity attacker, LivingEntity target) {
+        // Formation movement deliberately gates native target acquisition. An explicit RTS
+        // attack must therefore validate hostility and attackability directly instead of
+        // consulting that temporary passive-AI state.
         return attacker != null && target != null && target != attacker && target.isAlive()
-                && !attacker.isAlliedTo(target) && attacker.canAttack(target);
+                && !target.isRemoved() && target.isAttackable() && !attacker.isAlliedTo(target);
     }
 
     private static Vec3 averageControlledPosition(List<AbstractRecruitEntity> recruits) {

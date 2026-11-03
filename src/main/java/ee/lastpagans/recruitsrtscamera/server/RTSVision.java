@@ -1,10 +1,8 @@
 package ee.lastpagans.recruitsrtscamera.server;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
-import com.talhanation.recruits.entities.CaptainEntity;
-import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
-import ee.lastpagans.recruitsrtscamera.runtime.RecruitSpatialIndex;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
@@ -19,7 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** Server-authoritative tactical visibility used by Fog of War. */
+/** Server-authoritative terrain and brush hiddenness without distance-based Fog of War. */
 public final class RTSVision {
     private static final double BRUSH_REVEAL_RADIUS = 14.0D;
     private static final int BRUSH_THRESHOLD = 7;
@@ -27,16 +25,12 @@ public final class RTSVision {
     private RTSVision() {
     }
 
-    public static boolean fogEnabled() {
-        return RTSServerConfig.FOG_OF_WAR.get();
-    }
-
     public static boolean hiddenTargetChecksEnabled() {
-        return fogEnabled() && RTSServerConfig.FOG_BLOCK_HIDDEN_TARGETING.get();
+        return RTSServerConfig.HIDDENNESS_BLOCK_TARGETING.get();
     }
 
     public static boolean canSee(ServerPlayer player, Entity target) {
-        if (player == null || target == null || !fogEnabled()) return true;
+        if (player == null || target == null) return true;
         long bucket = player.serverLevel().getGameTime() / 5L;
         VisibilityKey key = new VisibilityKey(player.getUUID(), target.getUUID());
         VisibilitySample cached = ENTITY_CACHE.get(key);
@@ -48,44 +42,32 @@ public final class RTSVision {
     }
 
     public static boolean canSee(ServerPlayer player, Vec3 target) {
-        return player == null || target == null || !fogEnabled() || canSeeInternal(player, target, null);
+        return player == null || target == null || canSeeInternal(player, target, null);
     }
 
     private static boolean canSeeInternal(ServerPlayer player, Vec3 target, Entity targetEntity) {
         var level = player.serverLevel();
-        double playerRadius = RTSServerConfig.FOG_PLAYER_VISION_RADIUS.get();
-        if (withinVision(player.position(), target, playerRadius)
-                && visibleFrom(level, player, player.getEyePosition(), target, targetEntity)) return true;
-
-        int maxRadius = Math.max(
-                RTSServerConfig.FOG_RECRUIT_VISION_RADIUS.get(),
-                Math.max(RTSServerConfig.FOG_CAVALRY_VISION_RADIUS.get(), RTSServerConfig.FOG_SHIP_VISION_RADIUS.get())
-        );
-        for (AbstractRecruitEntity recruit : RecruitSpatialIndex.nearby(player.serverLevel(), target, maxRadius)) {
-            if (!recruit.isAlive() || Math.abs(recruit.getY() - target.y) > 96.0D
-                    || !player.getUUID().equals(recruit.getOwnerUUID())) {
+        // Brush density is a property of the target location. Sample it once per cached
+        // visibility decision rather than once for every potential friendly observer.
+        boolean concealedByBrush = targetEntity != null && isDenseBrush(level, targetEntity.blockPosition());
+        // Distance never hides an open-plain formation. The commander and every loaded
+        // owned formation are potential observers; only terrain and target-side brush
+        // concealment decide whether the target is hidden.
+        if (visibleFrom(level, player, player.getEyePosition(), target, concealedByBrush)) return true;
+        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+            if (!recruit.isAlive() || !player.getUUID().equals(recruit.getOwnerUUID())) {
                 continue;
             }
             Vec3 source = recruit.getEyePosition();
-            double radius;
-            if (recruit instanceof CaptainEntity captain && SmallShipsCompat.isCaptainAboard(captain)) {
-                source = SmallShipsCompat.shipPosition(captain).add(0.0D, 1.5D, 0.0D);
-                radius = RTSServerConfig.FOG_SHIP_VISION_RADIUS.get();
-            } else if (recruit.isPassenger()) {
-                radius = RTSServerConfig.FOG_CAVALRY_VISION_RADIUS.get();
-            } else {
-                radius = RTSServerConfig.FOG_RECRUIT_VISION_RADIUS.get();
-            }
-            if (withinVision(source, target, radius)
-                    && visibleFrom(level, recruit, source, target, targetEntity)) return true;
+            if (visibleFrom(level, recruit, source, target, concealedByBrush)) return true;
         }
         return false;
     }
 
     private static boolean visibleFrom(net.minecraft.server.level.ServerLevel level, Entity observer,
-                                       Vec3 source, Vec3 target, Entity targetEntity) {
+                                       Vec3 source, Vec3 target, boolean concealedByBrush) {
         // Concealment belongs to the target: troops in brush see outward, distant troops cannot see in.
-        if (targetEntity != null && isDenseBrush(level, targetEntity.blockPosition())
+        if (concealedByBrush
                 && horizontalDistanceSqr(source, target) > BRUSH_REVEAL_RADIUS * BRUSH_REVEAL_RADIUS) return false;
         return terrainClear(level, observer, source, target);
     }
@@ -116,11 +98,6 @@ public final class RTSVision {
             if (state.is(BlockTags.LEAVES) && ++foliage >= BRUSH_THRESHOLD) return true;
         }
         return false;
-    }
-
-    private static boolean withinVision(Vec3 source, Vec3 target, double radius) {
-        return Math.abs(source.y - target.y) <= 96.0D
-                && horizontalDistanceSqr(source, target) <= radius * radius;
     }
 
     private static double horizontalDistanceSqr(Vec3 a, Vec3 b) {
