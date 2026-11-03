@@ -11,6 +11,7 @@ public final class ScreenProjectionSelfTest {
         rayProjectionRoundTrip();
         rectangleIntersection();
         projectedBoxSelection();
+        boundedAttackAssistance();
         System.out.println("ScreenProjectionSelfTest: all checks passed");
     }
 
@@ -92,6 +93,25 @@ public final class ScreenProjectionSelfTest {
                         0.0D, 0.0D, 200.0D, 200.0D,
                         recruit.minX(), recruit.minY(), recruit.maxX(), recruit.maxY()),
                 "distant drag box should not select recruit body");
+    }
+
+    private static void boundedAttackAssistance() {
+        var center = new ScreenProjection.ProjectedPoint(960.0D, 540.0D, 12.0D);
+        var ordinary = new ScreenProjection.ProjectedBounds(954.0D, 524.0D, 966.0D, 556.0D);
+        require(Double.isFinite(ScreenProjection.assistedBodyDistanceSquared(
+                        ordinary, center, 980.0D, 540.0D, 18.0D, 24.0D, 32.0D)),
+                "small attack padding should accept a cursor next to the projected body");
+        require(!Double.isFinite(ScreenProjection.assistedBodyDistanceSquared(
+                        ordinary, center, 1200.0D, 540.0D, 18.0D, 24.0D, 32.0D)),
+                "attack padding must reject unrelated terrain far from the body");
+
+        var nearPlaneArtifact = new ScreenProjection.ProjectedBounds(-50000.0D, -50000.0D, 50000.0D, 50000.0D);
+        require(!Double.isFinite(ScreenProjection.assistedBodyDistanceSquared(
+                        nearPlaneArtifact, center, 1500.0D, 800.0D, 18.0D, 24.0D, 32.0D)),
+                "a near-plane projection artifact must not consume the whole screen");
+        require(Double.isFinite(ScreenProjection.assistedBodyDistanceSquared(
+                        nearPlaneArtifact, center, 970.0D, 550.0D, 18.0D, 24.0D, 32.0D)),
+                "a clamped near-plane box should remain clickable at its real center");
     }
 
     private static ScreenProjection.CameraSpec camera(double yaw, double pitch) {

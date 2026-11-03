@@ -610,10 +610,14 @@ require(client_visibility, "FADE_OUT_PER_TICK", "lost contacts must fade instead
 require(overlay, "ClientEnemyVisibilityState.targetable", "hidden enemy banners must not remain targetable")
 require(controller, "pendingContextAttackEntityId = pressedTarget.getId()",
         "battlefield attacks must capture the target on mouse press")
-require(controller, "action == GLFW.GLFW_RELEASE && pendingContextAttackEntityId >= 0",
-        "a captured attack must consume release instead of falling through to a terrain move")
+require(controller, "targetEntityId < 0 || !commanderAttackEntity(targetEntityId)",
+        "a captured attack must fall back safely when its target disappears")
 require(controller, "ATTACK_SCREEN_ASSIST_PX = 18.0D",
         "projected attack targets need a forgiving RTS-sized screen hit area")
+require(controller, "ScreenProjection.assistedBodyDistanceSquared(",
+        "projected attack assistance must not expand into a screen-wide terrain-click blocker")
+require(controller, "draggingFrontage = true;\n                    frontageStartX",
+        "every ordinary right press must retain terrain movement/frontage gesture state")
 require(attack_packet, "clickedTarget.isAttackable() && !recruit.isAlliedTo(clickedTarget)",
         "explicit attack packets must not depend on passive recruit target acquisition")
 forbid(attack, "attacker.canAttack(target)",
@@ -759,8 +763,8 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.23.0-server.1", "semantic version must be updated")
-require(controller, "0.23.0-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.23.0-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.23.1-server.1", "semantic version must be updated")
+require(controller, "0.23.1-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.23.1-server.1.jar", "build helper version must be updated")
 
-print("0.23.0-server.1 source contracts passed")
+print("0.23.1-server.1 source contracts passed")

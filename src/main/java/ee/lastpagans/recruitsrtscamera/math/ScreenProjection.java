@@ -99,6 +99,33 @@ public final class ScreenProjection {
         return aMaxX >= bMinX && bMaxX >= aMinX && aMaxY >= bMinY && bMaxY >= aMinY;
     }
 
+    /**
+     * Cursor distance from a projected entity body with bounded RTS click assistance.
+     * Projected boxes can become enormous when they cross the camera near plane, so their
+     * half-size is capped around a separately validated body centre. Infinity means miss.
+     */
+    public static double assistedBodyDistanceSquared(
+            ProjectedBounds bounds,
+            ProjectedPoint center,
+            double cursorX,
+            double cursorY,
+            double padding,
+            double maxHalfWidth,
+            double maxHalfHeight
+    ) {
+        if (bounds == null || center == null || center.depth() <= NEAR_DEPTH) {
+            return Double.POSITIVE_INFINITY;
+        }
+        double halfWidth = Math.min(maxHalfWidth,
+                Math.max(2.0D, Math.abs(bounds.maxX() - bounds.minX()) * 0.5D));
+        double halfHeight = Math.min(maxHalfHeight,
+                Math.max(3.0D, Math.abs(bounds.maxY() - bounds.minY()) * 0.5D));
+        double dx = Math.max(0.0D, Math.abs(cursorX - center.x()) - halfWidth);
+        double dy = Math.max(0.0D, Math.abs(cursorY - center.y()) - halfHeight);
+        if (dx > padding || dy > padding) return Double.POSITIVE_INFINITY;
+        return dx * dx + dy * dy;
+    }
+
     private static Basis basis(double yawDegrees, double pitchDegrees) {
         double yaw = yawDegrees * DEG_TO_RAD;
         double pitch = pitchDegrees * DEG_TO_RAD;

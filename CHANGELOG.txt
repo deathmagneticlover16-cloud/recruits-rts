@@ -1,3 +1,12 @@
+Recruits: RTS Camera 0.23.1-server.1
+Move-order regression hotfix
+
+- Fixed the 0.23.0 projected attack assist consuming ordinary terrain clicks. Entity boxes that cross the camera near plane can no longer create a screen-wide attack region.
+- Every ordinary right press now retains terrain movement and frontage gesture state. A short click commits a captured enemy when valid, otherwise it safely falls back to the live terrain order; dragging always commits frontage.
+- Retained the reliable press-captured attack/charge behavior, 500 ms double-click window, hiddenness-only visibility, Unit Statistics setting and removal of the troop-state button from 0.23.0.
+- Network protocol remains rts-camera-162 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.23.1-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.23.0-server.1
 Reliable combat orders and hiddenness-only visibility
 

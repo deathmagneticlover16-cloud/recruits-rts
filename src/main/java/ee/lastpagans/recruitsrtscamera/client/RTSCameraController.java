@@ -978,29 +978,19 @@ public final class RTSCameraController {
                 } else {
                     draggingCustom = false;
                     CUSTOM_STROKE.clear();
+                    draggingFrontage = true;
+                    frontageStartX = frontageCurrentX = cursorX;
+                    frontageStartY = frontageCurrentY = cursorY;
+                    frontageStartGround = raycastGroundHit(cursorX, cursorY);
                     LivingEntity pressedTarget = raycastAttackTarget(cursorX, cursorY);
                     if (isAttackableTarget(pressedTarget)) {
                         // Capture the target on press. Requiring the release ray to hit the
                         // same moving body turned valid attack/charge clicks into terrain
                         // moves whenever a horse or cursor shifted by a few pixels.
                         pendingContextAttackEntityId = pressedTarget.getId();
-                        draggingFrontage = false;
-                        frontageStartGround = null;
                     } else {
                         pendingContextAttackEntityId = -1;
-                        draggingFrontage = true;
-                        frontageStartX = frontageCurrentX = cursorX;
-                        frontageStartY = frontageCurrentY = cursorY;
-                        frontageStartGround = raycastGroundHit(cursorX, cursorY);
                     }
-                }
-            } else if (action == GLFW.GLFW_RELEASE && pendingContextAttackEntityId >= 0) {
-                int targetEntityId = pendingContextAttackEntityId;
-                pendingContextAttackEntityId = -1;
-                draggingFrontage = false;
-                frontageStartGround = null;
-                if (!commanderAttackEntity(targetEntityId)) {
-                    setStatus("Attack target became unavailable before the order was released.");
                 }
             } else if (action == GLFW.GLFW_RELEASE && draggingCustom) {
                 sampleCustomStrokePoint(true);
@@ -1016,8 +1006,16 @@ public final class RTSCameraController {
                         frontageCurrentY - frontageStartY
                 );
                 if (dragDistance < FRONTAGE_DRAG_THRESHOLD) {
-                    issueContextOrder();
+                    int targetEntityId = pendingContextAttackEntityId;
+                    pendingContextAttackEntityId = -1;
+                    if (targetEntityId < 0 || !commanderAttackEntity(targetEntityId)) {
+                        // A terrain click always remains a movement click. If a captured
+                        // moving target vanished before release, re-evaluate the live cursor;
+                        // issueContextOrder will attack a real target or move to the ground.
+                        issueContextOrder();
+                    }
                 } else {
+                    pendingContextAttackEntityId = -1;
                     issueFrontageOrder();
                 }
                 frontageStartGround = null;
@@ -2014,24 +2012,15 @@ public final class RTSCameraController {
                 continue;
             }
             AABB box = living.getBoundingBox();
+            ScreenProjection.ProjectedPoint center = commanderProjectWorld(
+                    living.getX(), living.getY() + living.getBbHeight() * 0.5D, living.getZ());
             ScreenProjection.ProjectedBounds bounds = ScreenProjection.projectBox(
                     camera, box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ
             );
-            if (bounds == null
-                    || screenX < bounds.minX() - ATTACK_SCREEN_ASSIST_PX
-                    || screenX > bounds.maxX() + ATTACK_SCREEN_ASSIST_PX
-                    || screenY < bounds.minY() - ATTACK_SCREEN_ASSIST_PX
-                    || screenY > bounds.maxY() + ATTACK_SCREEN_ASSIST_PX) {
-                continue;
-            }
-            double dx = screenX < bounds.minX() ? bounds.minX() - screenX
-                    : screenX > bounds.maxX() ? screenX - bounds.maxX() : 0.0D;
-            double dy = screenY < bounds.minY() ? bounds.minY() - screenY
-                    : screenY > bounds.maxY() ? screenY - bounds.maxY() : 0.0D;
-            double screenDistance = dx * dx + dy * dy;
-            ScreenProjection.ProjectedPoint center = commanderProjectWorld(
-                    living.getX(), living.getY() + living.getBbHeight() * 0.5D, living.getZ());
-            double depth = center == null ? Double.POSITIVE_INFINITY : center.depth();
+            double screenDistance = ScreenProjection.assistedBodyDistanceSquared(
+                    bounds, center, screenX, screenY, ATTACK_SCREEN_ASSIST_PX, 24.0D, 32.0D);
+            if (!Double.isFinite(screenDistance)) continue;
+            double depth = center.depth();
             if (screenDistance < bestAssistDistance
                     || (Math.abs(screenDistance - bestAssistDistance) < 0.01D && depth < bestAssistDepth)) {
                 bestAssistDistance = screenDistance;
@@ -2560,7 +2549,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.23.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.23.1-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
