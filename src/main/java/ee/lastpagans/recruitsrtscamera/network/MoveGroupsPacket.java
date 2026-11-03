@@ -78,6 +78,7 @@ public record MoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
         if (!ServerPacketGuard.allow(sender) || packet.groupIds.isEmpty()) {
             return;
         }
+        if (RTSGroupAttackManager.rejectMoveDuringCombatGrace(sender, packet.groupIds)) return;
         if (!routeStep) {
             RouteManager.cancel(sender, packet.groupIds);
             RTSGroupAttackManager.cancelOwned(sender, packet.groupIds);

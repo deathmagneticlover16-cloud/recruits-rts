@@ -71,6 +71,7 @@ public record HastyMoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
         if (!ServerPacketGuard.allow(sender) || packet.groupIds.isEmpty()) {
             return;
         }
+        if (RTSGroupAttackManager.rejectMoveDuringCombatGrace(sender, packet.groupIds)) return;
         RouteManager.cancel(sender, packet.groupIds);
         RTSGroupAttackManager.cancelOwned(sender, packet.groupIds);
         if (!sender.serverLevel().hasChunkAt(packet.target)) {

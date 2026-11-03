@@ -72,8 +72,8 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
             return;
         }
         if (RTSVision.hiddenTargetChecksEnabled()
-                && !RTSVision.canSee(sender, net.minecraft.world.phys.Vec3.atCenterOf(packet.target))) {
-            sender.displayClientMessage(Component.literal("That bombardment point is concealed by terrain or dense brush."), true);
+                && !RTSVision.canDesignateGround(sender, packet.target)) {
+            sender.displayClientMessage(Component.literal("Terrain blocks line of sight to that bombardment point."), true);
             return;
         }
 

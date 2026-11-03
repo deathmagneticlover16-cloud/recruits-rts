@@ -82,6 +82,7 @@ public record CustomFormationPacket(List<UUID> groupIds, List<Vec3> stroke, int 
         if (!ServerPacketGuard.allow(sender, ServerPacketGuard.Lane.CUSTOM) || packet.groupIds.isEmpty() || packet.stroke.size() < 2) {
             return;
         }
+        if (RTSGroupAttackManager.rejectMoveDuringCombatGrace(sender, packet.groupIds)) return;
         RouteManager.cancel(sender, packet.groupIds);
         RTSGroupAttackManager.cancelOwned(sender, packet.groupIds);
         if (packet.stroke.size() > RTSServerConfig.MAX_CUSTOM_STROKE_POINTS.get()) {

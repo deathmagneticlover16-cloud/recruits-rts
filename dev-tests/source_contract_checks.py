@@ -37,6 +37,8 @@ translate_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network
 ui_ids = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CommanderUiElementIds.java")
 ui_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/CommanderUiRegistry.java")
 cavalry = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryTacticalController.java")
+ballistic_arc = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/BallisticArc.java")
+ranged_arc = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/RangedProjectileArc.java")
 selection_groups = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/SelectionGroupManager.java")
 face_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/NativeFaceCommandMixin.java")
 movement = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/RTSMovementBoostManager.java")
@@ -600,6 +602,11 @@ client_visibility = source("src/main/java/ee/lastpagans/recruitsrtscamera/client
 require(visibility, "ClipContext.Block.COLLIDER", "terrain must occlude hostile formation sight")
 require(visibility, "BlockTags.LEAVES", "dense brush must conceal hostile formations")
 require(visibility, "BRUSH_REVEAL_RADIUS", "brush concealment must break at close identification range")
+require(visibility, "canDesignateGround(ServerPlayer player, BlockPos target)",
+        "strategic-fire ground visibility must be separate from entity brush concealment")
+require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/StrategicFirePacket.java"),
+        "RTSVision.canDesignateGround(sender, packet.target)",
+        "strategic fire must use terrain-only ground designation visibility")
 forbid(visibility, "withinVision(", "distance radii must not hide formations on an open plain")
 forbid(server_config, "FOG_PLAYER_VISION_RADIUS", "distance-based player vision must remain removed")
 forbid(server_config, "FOG_RECRUIT_VISION_RADIUS", "distance-based formation vision must remain removed")
@@ -620,8 +627,33 @@ require(controller, "draggingFrontage = true;\n                    frontageStart
         "every ordinary right press must retain terrain movement/frontage gesture state")
 require(attack_packet, "clickedTarget.isAttackable() && !recruit.isAlliedTo(clickedTarget)",
         "explicit attack packets must not depend on passive recruit target acquisition")
+require(attack_packet, "RTSGroupAttackManager.prepareAttackOrder(entry.getKey(), entry.getValue())",
+        "attack orders must clear every previous formation movement owner")
 forbid(attack, "attacker.canAttack(target)",
        "persistent Commander attacks must not expire because passive AI is formation-locked")
+require(attack, "explicitRanged(recruit)",
+        "explicit ranged orders must classify archers before attack approach planning")
+require(attack, "rangedFormationAssignments",
+        "archers must distribute targets through enemy formation depth")
+require(ballistic_arc, "0.5D * Math.max(0.0D, gravity) * flightTicks",
+        "formation arrows must receive a gravity-aware ballistic arc")
+require(ranged_arc, "target.getY(0.68D)",
+        "each arrow must solve against its assigned target's body")
+require(tactical, "RangedProjectileArc.apply(arrow, shooter, assignedTarget(shooter))",
+        "spawned formation arrows must consume the distributed target lock")
+require(attack, "MOVE_REPLACEMENT_GUARD_TICKS = 16",
+        "combat orders need an 0.8-second server-side movement replacement guard")
+for packet_path in ("MoveGroupsPacket.java", "SlowMoveGroupsPacket.java", "HastyMoveGroupsPacket.java",
+                    "FrontageGroupsPacket.java", "CustomFormationPacket.java", "RouteGroupsPacket.java",
+                    "TranslateGroupsPacket.java"):
+    require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/" + packet_path),
+            "rejectMoveDuringCombatGrace", "movement packet must honor combat grace: " + packet_path)
+require(cavalry, "MELEE_REPOSITION_SPEED = 0.68D",
+        "engaged cavalry may reposition only at a restrained melee pace")
+require(cavalry, "nextMeleeReposition = now + 16L",
+        "engaged cavalry must not recompute a frantic orbit every tick")
+forbid(cavalry, "rider.canAttack(target)",
+       "formation target-acquisition gates must not deactivate engaged cavalry")
 require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
         "visual distance-fog boundaries must remain removed")
 forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive troop-state button must remain removed")
@@ -763,8 +795,8 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.23.1-server.1", "semantic version must be updated")
-require(controller, "0.23.1-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.23.1-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.23.2-server.1", "semantic version must be updated")
+require(controller, "0.23.2-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.23.2-server.1.jar", "build helper version must be updated")
 
-print("0.23.1-server.1 source contracts passed")
+print("0.23.2-server.1 source contracts passed")

@@ -18,6 +18,7 @@ import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData;
 import ee.lastpagans.recruitsrtscamera.server.RTSVision;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -67,10 +68,11 @@ public final class RTSGroupAttackManager {
     private static final int MAX_APPROACH_TICKS = 20 * 45;
     private static final int MAX_ORDER_TICKS = 20 * 60 * 10;
     private static final int RANGED_FACE_TICKS = 10;
+    private static final int MOVE_REPLACEMENT_GUARD_TICKS = 16;
 
     // These are edge-to-edge gaps, not centre distances.
     private static final double INFANTRY_ENGAGE_GAP = 3.25D;
-    private static final double RANGED_ENGAGE_GAP = 18.0D;
+    private static final double RANGED_ENGAGE_GAP = 12.0D;
     // Give mounted lines room to leave formation and build a real run-up before the
     // first contact. Infantry releases much closer to the opposing frontage.
     private static final double CAVALRY_RELEASE_GAP = 20.0D;
@@ -93,7 +95,8 @@ public final class RTSGroupAttackManager {
         }
         cancel(List.of(attackingGroupId));
         ACTIVE.put(attackingGroupId, new AttackState(
-                sender, attackingGroupId, targetGroupId, MAX_ORDER_TICKS
+                sender, attackingGroupId, targetGroupId, MAX_ORDER_TICKS,
+                sender.serverLevel().getGameTime() + MOVE_REPLACEMENT_GUARD_TICKS
         ));
     }
 
@@ -123,7 +126,8 @@ public final class RTSGroupAttackManager {
         }
         cancel(List.of(attackingGroupId));
         SingleTargetState state = new SingleTargetState(
-                sender, attackingGroupId, target.getId(), MAX_ORDER_TICKS
+                sender, attackingGroupId, target.getId(), MAX_ORDER_TICKS,
+                sender.serverLevel().getGameTime() + MOVE_REPLACEMENT_GUARD_TICKS
         );
         SINGLE_TARGETS.put(attackingGroupId, state);
         // Ranged groups keep their slots while firing. Native Recruits used to release the
@@ -144,6 +148,43 @@ public final class RTSGroupAttackManager {
             }
         }
         return ordered;
+    }
+
+    /** Prevent an accidental terrain packet from immediately erasing a combat click. */
+    public static boolean rejectMoveDuringCombatGrace(ServerPlayer sender, Collection<UUID> groupIds) {
+        if (sender == null || groupIds == null || groupIds.isEmpty()) return false;
+        long now = sender.serverLevel().getGameTime();
+        for (UUID groupId : groupIds) {
+            AttackState attack = ACTIVE.get(groupId);
+            if (attack != null && attack.sender.getUUID().equals(sender.getUUID())
+                    && now < attack.moveUnlockedAt) {
+                sender.displayClientMessage(Component.literal(
+                        "Attack order locked briefly; movement was ignored."), true);
+                return true;
+            }
+            SingleTargetState single = SINGLE_TARGETS.get(groupId);
+            if (single != null && single.sender.getUUID().equals(sender.getUUID())
+                    && now < single.moveUnlockedAt) {
+                sender.displayClientMessage(Component.literal(
+                        "Attack order locked briefly; movement was ignored."), true);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Clear every older move owner before the new attack approach is installed. */
+    public static void prepareAttackOrder(UUID groupId, List<AbstractRecruitEntity> recruits) {
+        if (groupId == null || recruits == null) return;
+        FormationRuntime.haltFormation(groupId);
+        for (AbstractRecruitEntity recruit : recruits) {
+            if (recruit == null || !recruit.isAlive()) continue;
+            recruit.setTarget(null);
+            recruit.setShouldMovePos(false);
+            recruit.clearMovePos();
+            recruit.reachedMovePos = false;
+            if (!recruit.isPassenger()) recruit.getNavigation().stop();
+        }
     }
 
     public static void cancel(Collection<UUID> groupIds) {
@@ -346,7 +387,7 @@ public final class RTSGroupAttackManager {
                 continue;
             }
             alive++;
-            if (!TacticalCombatManager.ranged(recruit) && !(recruit instanceof SiegeEngineerEntity)) {
+            if (!explicitRanged(recruit) && !(recruit instanceof SiegeEngineerEntity)) {
                 melee++;
                 if (CavalryTacticalController.eligible(recruit)) {
                     horsemen++;
@@ -519,6 +560,7 @@ public final class RTSGroupAttackManager {
         }
 
         Map<UUID, LivingEntity> frontageAssignments = formationAssignments(attackers, candidates);
+        Map<UUID, LivingEntity> rangedAssignments = rangedFormationAssignments(attackers, candidates);
         boolean throwAllowed = fireAtWill(state.sender.serverLevel(), state.sourceGroupId);
         for (AbstractRecruitEntity attacker : attackers) {
             LivingEntity locked = lockedTarget(attacker, candidateById, state.lockedTargets);
@@ -526,7 +568,8 @@ public final class RTSGroupAttackManager {
                 // A dead front-rank target is replaced by the corresponding soldier in
                 // the opposing frontage first. Only fall back to nearest/least-loaded
                 // selection when that frontage slot is no longer valid.
-                locked = frontageAssignments.get(attacker.getUUID());
+                locked = (explicitRanged(attacker) ? rangedAssignments : frontageAssignments)
+                        .get(attacker.getUUID());
                 if (!validTarget(attacker, locked)
                         || assignments.getOrDefault(locked.getId(), 0) > minimumAssignment(candidates, assignments, attacker)) {
                     locked = chooseTarget(attacker, candidates, assignments);
@@ -601,13 +644,15 @@ public final class RTSGroupAttackManager {
 
         Map<Integer, Integer> assignments = new HashMap<>();
         Map<UUID, LivingEntity> frontageAssignments = formationAssignments(orderedAttackers, candidates);
+        Map<UUID, LivingEntity> rangedAssignments = rangedFormationAssignments(orderedAttackers, candidates);
         for (AbstractRecruitEntity attacker : orderedAttackers) {
             if (attacker.getUUID().equals(state.wedgeLeader)) {
                 TacticalCombatManager.lock(attacker, state.sourceGroupId, null);
                 attacker.setTarget(null);
                 continue;
             }
-            LivingEntity assigned = frontageAssignments.get(attacker.getUUID());
+            LivingEntity assigned = (explicitRanged(attacker) ? rangedAssignments : frontageAssignments)
+                    .get(attacker.getUUID());
             if (!validTarget(attacker, assigned)) {
                 assigned = chooseTarget(attacker, candidates, assignments);
             }
@@ -650,9 +695,9 @@ public final class RTSGroupAttackManager {
 
         if (attacker instanceof IStrategicFire strategic) {
             strategic.setShouldStrategicFire(false);
-            if (TacticalCombatManager.settings(attacker).combat() != TacticalSettings.CombatMode.MELEE
-                    && !TacticalCombatManager.settings(attacker).holdFire()) attacker.setShouldRanged(true);
         }
+        if (explicitRanged(attacker)) attacker.setShouldRanged(
+                !TacticalCombatManager.settings(attacker).holdFire());
 
         boolean preserveFormation = FormationRuntime.formationMemberCount(groupId) > 0;
         if (!preserveFormation) {
@@ -709,9 +754,9 @@ public final class RTSGroupAttackManager {
         // crossbows and other Recruits ranged roles follow the moving hostile group.
         if (attacker instanceof IStrategicFire strategic) {
             strategic.setShouldStrategicFire(false);
-            if (TacticalCombatManager.settings(attacker).combat() != TacticalSettings.CombatMode.MELEE
-                    && !TacticalCombatManager.settings(attacker).holdFire()) attacker.setShouldRanged(true);
         }
+        if (explicitRanged(attacker)) attacker.setShouldRanged(
+                !TacticalCombatManager.settings(attacker).holdFire());
 
         boolean preserveFormation = FormationRuntime.formationMemberCount(groupId) > 0;
         if (!preserveFormation) {
@@ -854,6 +899,56 @@ public final class RTSGroupAttackManager {
             result.put(orderedAttackers.get(i).getUUID(), orderedTargets.get(targetIndex));
         }
         return result;
+    }
+
+    /** Pair archers with targets through formation depth as well as frontage. */
+    private static Map<UUID, LivingEntity> rangedFormationAssignments(
+            List<AbstractRecruitEntity> attackers,
+            List<LivingEntity> candidates
+    ) {
+        Map<UUID, LivingEntity> result = new HashMap<>();
+        if (attackers == null || attackers.isEmpty() || candidates == null || candidates.isEmpty()) return result;
+        Vec3 sourceCenter = averageControlledPosition(attackers);
+        Vec3 targetCenter = averagePosition(candidates);
+        if (sourceCenter == null || targetCenter == null) return result;
+        Vec3 direction = new Vec3(targetCenter.x - sourceCenter.x, 0.0D, targetCenter.z - sourceCenter.z);
+        if (direction.lengthSqr() < 1.0E-5D) direction = new Vec3(0.0D, 0.0D, 1.0D);
+        else direction = direction.normalize();
+        final Vec3 forward = direction;
+        final Vec3 side = new Vec3(-forward.z, 0.0D, forward.x);
+
+        List<AbstractRecruitEntity> orderedAttackers = attackers.stream()
+                .filter(RTSGroupAttackManager::explicitRanged)
+                .sorted(Comparator.comparingDouble(a -> lateral(a.position(), sourceCenter, side)))
+                .toList();
+        List<LivingEntity> orderedTargets = candidates.stream()
+                .filter(t -> t != null && t.isAlive() && !t.isRemoved())
+                .sorted(Comparator
+                        .comparingDouble((LivingEntity t) -> forwardDepth(t.position(), targetCenter, forward))
+                        .thenComparingDouble(t -> lateral(t.position(), targetCenter, side)))
+                .toList();
+        if (orderedAttackers.isEmpty() || orderedTargets.isEmpty()) return result;
+
+        int attackerCount = orderedAttackers.size();
+        int targetCount = orderedTargets.size();
+        for (int i = 0; i < attackerCount; i++) {
+            int targetIndex = attackerCount <= 1
+                    ? targetCount / 2
+                    : (int) Math.round(i * (targetCount - 1.0D) / (attackerCount - 1.0D));
+            targetIndex = Math.max(0, Math.min(targetCount - 1, targetIndex));
+            result.put(orderedAttackers.get(i).getUUID(), orderedTargets.get(targetIndex));
+        }
+        return result;
+    }
+
+    private static double forwardDepth(Vec3 position, Vec3 center, Vec3 forward) {
+        return (position.x - center.x) * forward.x + (position.z - center.z) * forward.z;
+    }
+
+    private static boolean explicitRanged(AbstractRecruitEntity recruit) {
+        return recruit != null && recruit.isAlive() && !recruit.isRemoved()
+                && recruit instanceof IRangedRecruit
+                && TacticalCombatManager.settings(recruit).combat() != TacticalSettings.CombatMode.MELEE;
     }
 
     private static double lateral(Vec3 position, Vec3 center, Vec3 side) {
@@ -1016,12 +1111,15 @@ public final class RTSGroupAttackManager {
         private final int targetEntityId;
         private int remainingTicks;
         private int facingTicks;
+        private final long moveUnlockedAt;
 
-        private SingleTargetState(ServerPlayer sender, UUID sourceGroupId, int targetEntityId, int remainingTicks) {
+        private SingleTargetState(ServerPlayer sender, UUID sourceGroupId, int targetEntityId,
+                                  int remainingTicks, long moveUnlockedAt) {
             this.sender = sender;
             this.sourceGroupId = sourceGroupId;
             this.targetEntityId = targetEntityId;
             this.remainingTicks = remainingTicks;
+            this.moveUnlockedAt = moveUnlockedAt;
         }
     }
 
@@ -1029,6 +1127,7 @@ public final class RTSGroupAttackManager {
         private final ServerPlayer sender;
         private final UUID sourceGroupId;
         private final UUID targetGroupId;
+        private final long moveUnlockedAt;
         private int remainingTicks;
         private boolean charge;
         private int emptyTicks;
@@ -1045,12 +1144,14 @@ public final class RTSGroupAttackManager {
                 ServerPlayer sender,
                 UUID sourceGroupId,
                 UUID targetGroupId,
-                int remainingTicks
+                int remainingTicks,
+                long moveUnlockedAt
         ) {
             this.sender = sender;
             this.sourceGroupId = sourceGroupId;
             this.targetGroupId = targetGroupId;
             this.remainingTicks = remainingTicks;
+            this.moveUnlockedAt = moveUnlockedAt;
         }
     }
 }

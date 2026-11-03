@@ -172,6 +172,7 @@ public final class RTSCameraController {
     private static BlockPos lastTerrainOrderTarget;
     private static long lastEnemyOrderMillis;
     private static UUID lastEnemyOrderTarget;
+    private static long combatMoveGuardUntilMillis;
     private static ClientBattlefieldSnapshot battlefieldSnapshot = ClientBattlefieldSnapshot.EMPTY;
     private static TacticalRenderScene retainedTacticalScene = TacticalRenderScene.EMPTY;
     private static boolean tacticalSceneDirty = true;
@@ -1101,6 +1102,12 @@ public final class RTSCameraController {
             translationCurrentGround = null;
             return;
         }
+        if (moved && combatMoveGuardActive()) {
+            setStatus("Attack order locked briefly; movement was ignored.");
+            translationStartGround = null;
+            translationCurrentGround = null;
+            return;
+        }
         if (moved) {
             LOCAL_RUNNING_GROUPS.addAll(SELECTED_GROUPS);
             RTSCameraNetwork.CHANNEL.sendToServer(new TranslateGroupsPacket(new ArrayList<>(SELECTED_GROUPS), delta));
@@ -1496,6 +1503,10 @@ public final class RTSCameraController {
             setStatus("Select at least one group before drawing a custom formation.");
             return;
         }
+        if (combatMoveGuardActive()) {
+            setStatus("Attack order locked briefly; movement was ignored.");
+            return;
+        }
         if (CUSTOM_STROKE.size() < 2) {
             setStatus("Custom formation needs a longer terrain stroke.");
             return;
@@ -1705,6 +1716,10 @@ public final class RTSCameraController {
             sendAttackOrder(target);
             return;
         }
+        if (combatMoveGuardActive()) {
+            setStatus("Attack order locked briefly; movement was ignored.");
+            return;
+        }
         clearEnemyDoubleClick();
         GroundHit groundHit = raycastGroundHit(cursorX, cursorY);
         BlockPos targetPos = groundHit == null ? null : groundHit.pos();
@@ -1779,6 +1794,7 @@ public final class RTSCameraController {
         lastTerrainOrderTarget = null;
         lastEnemyOrderMillis = charge ? 0L : now;
         lastEnemyOrderTarget = charge ? null : targetKey;
+        combatMoveGuardUntilMillis = now + 800L;
         setStatus((charge ? "Charge order" : selectedAttackPrefersRangedTargeting()
                 ? "Tracked ranged target" : "Attack order")
                 + " sent to " + SELECTED_GROUPS.size() + " group(s)."
@@ -1790,10 +1806,18 @@ public final class RTSCameraController {
         lastEnemyOrderTarget = null;
     }
 
+    private static boolean combatMoveGuardActive() {
+        return System.currentTimeMillis() < combatMoveGuardUntilMillis;
+    }
+
     private static void issueFrontageOrder() {
         applySelectionToRecruits();
         if (SELECTED_GROUPS.isEmpty()) {
             setStatus("Select at least one group first.");
+            return;
+        }
+        if (combatMoveGuardActive()) {
+            setStatus("Attack order locked briefly; movement was ignored.");
             return;
         }
         if (frontageStartGround == null) {
@@ -2549,7 +2573,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.23.1-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.23.2-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

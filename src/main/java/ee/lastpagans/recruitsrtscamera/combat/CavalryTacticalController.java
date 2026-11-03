@@ -31,6 +31,8 @@ import java.util.*;
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID)
 public final class CavalryTacticalController {
     private static final Map<UUID, State> STATES = new HashMap<>();
+    private static final double MELEE_REPOSITION_SPEED = 0.68D;
+    private static final double MELEE_CATCHUP_SPEED = 0.82D;
     private CavalryTacticalController() {}
     public static boolean eligible(AbstractRecruitEntity rider) {
         return rider != null && rider.level() instanceof ServerLevel && rider.isAlive() && !rider.isRemoved()
@@ -98,7 +100,7 @@ public final class CavalryTacticalController {
     @SubscribeEvent public static void onStop(ServerStoppedEvent event) { cancelAll(); }
     private static boolean valid(AbstractRecruitEntity rider, LivingEntity target) {
         return target != null && target.isAlive() && !target.isRemoved() && target.level() == rider.level()
-                && !rider.isAlliedTo(target) && rider.canAttack(target);
+                && target.isAttackable() && !rider.isAlliedTo(target);
     }
     private static Vec3 flat(Vec3 v) { return v.multiply(1, 0, 1); }
     private static CavalryManeuver.Point point(Vec3 v) { return new CavalryManeuver.Point(v.x, v.z); }
@@ -115,6 +117,8 @@ public final class CavalryTacticalController {
         s.directPassGoal = null;
         s.directPassSafe = false;
         s.directPassControl = false;
+        s.meleeGoal = null;
+        s.nextMeleeReposition = 0L;
         s.appliedHeading = s.mount.getYRot();
         s.hasAppliedHeading = true;
     }
@@ -125,9 +129,18 @@ public final class CavalryTacticalController {
         if (s.committedMelee) {
             if (liveTarget == null) return;
             CommanderAnimationHints.updateMovement(s.rider, true, false);
-            BlockPos ground = FormationUtils.getPositionOrSurface((ServerLevel) s.rider.level(),
-                    BlockPos.containing(liveTarget.x, s.mount.getY(), liveTarget.z));
-            s.mount.getNavigation().moveTo(liveTarget.x, ground.getY(), liveTarget.z, 0.92D);
+            long now = s.rider.level().getGameTime();
+            double distanceSq = flat(liveTarget.subtract(s.mount.position())).lengthSqr();
+            if (s.meleeGoal == null || now >= s.nextMeleeReposition
+                    || distanceSq > 4.5D * 4.5D) {
+                s.meleeGoal = distanceSq > 4.5D * 4.5D
+                        ? liveTarget : meleeRepositionGoal(s, liveTarget);
+                BlockPos ground = FormationUtils.getPositionOrSurface((ServerLevel) s.rider.level(),
+                        BlockPos.containing(s.meleeGoal.x, s.mount.getY(), s.meleeGoal.z));
+                s.mount.getNavigation().moveTo(s.meleeGoal.x, ground.getY(), s.meleeGoal.z,
+                        distanceSq > 4.5D * 4.5D ? MELEE_CATCHUP_SPEED : MELEE_REPOSITION_SPEED);
+                s.nextMeleeReposition = now + 16L + Math.floorMod(s.rider.getId(), 7);
+            }
             matchRiderAndMountFacing(s, point(liveTarget));
             attack(s);
             return;
@@ -197,6 +210,18 @@ public final class CavalryTacticalController {
             s.lastNavigationAt = now;
         }
         matchRiderAndMountFacing(s, destination);
+    }
+
+    /** A restrained local sidestep so engaged horsemen keep fighting without standing still or orbiting at speed. */
+    private static Vec3 meleeRepositionGoal(State state, Vec3 target) {
+        Vec3 away = flat(state.mount.position().subtract(target));
+        if (away.lengthSqr() < 1.0E-5D) {
+            double yaw = Math.toRadians(state.mount.getYRot());
+            away = new Vec3(Math.sin(yaw), 0.0D, -Math.cos(yaw));
+        } else away = away.normalize();
+        double sideSign = (state.rider.getUUID().getLeastSignificantBits() & 1L) == 0L ? 1.0D : -1.0D;
+        Vec3 tangent = new Vec3(-away.z * sideSign, 0.0D, away.x * sideSign);
+        return target.add(away.scale(2.15D)).add(tangent.scale(1.35D));
     }
 
     private static double maneuverSpeed(CavalryManeuver.Phase phase) {
@@ -291,8 +316,10 @@ public final class CavalryTacticalController {
         Vec3 lastPosition;
         Vec3 lastNavigationGoal;
         Vec3 directPassGoal;
+        Vec3 meleeGoal;
         int samples, stallTicks;
         long lastNavigationAt = Long.MIN_VALUE;
+        long nextMeleeReposition;
         boolean navigationAccepted;
         boolean directPassSafe;
         boolean directPassControl;

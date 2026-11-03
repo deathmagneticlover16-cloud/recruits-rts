@@ -45,6 +45,23 @@ public final class RTSVision {
         return player == null || target == null || canSeeInternal(player, target, null);
     }
 
+    /**
+     * Strategic fire designates terrain rather than a concealed entity. Test a point above
+     * the clicked surface and apply terrain LOS only; brush around some unrelated formation
+     * must never reject a flat-plain bombardment coordinate.
+     */
+    public static boolean canDesignateGround(ServerPlayer player, BlockPos target) {
+        if (player == null || target == null) return true;
+        Vec3 aim = new Vec3(target.getX() + 0.5D, target.getY() + 1.15D, target.getZ() + 0.5D);
+        var level = player.serverLevel();
+        if (terrainClear(level, player, player.getEyePosition(), aim)) return true;
+        for (AbstractRecruitEntity recruit : RecruitRuntimeRegistry.loaded(level)) {
+            if (recruit.isAlive() && player.getUUID().equals(recruit.getOwnerUUID())
+                    && terrainClear(level, recruit, recruit.getEyePosition(), aim)) return true;
+        }
+        return false;
+    }
+
     private static boolean canSeeInternal(ServerPlayer player, Vec3 target, Entity targetEntity) {
         var level = player.serverLevel();
         // Brush density is a property of the target location. Sample it once per cached

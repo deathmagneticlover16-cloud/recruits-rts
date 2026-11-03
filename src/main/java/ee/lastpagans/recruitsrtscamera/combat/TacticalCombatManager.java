@@ -17,6 +17,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.item.*;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -63,7 +64,7 @@ public final class TacticalCombatManager {
         if (lease == null || !ownsTarget(recruit)) return null;
         var target = lease.target;
         return target != null && target.isAlive() && !target.isRemoved() && target.level() == recruit.level()
-                && recruit.canAttack(target) && !recruit.isAlliedTo(target) ? target : null;
+                && target.isAttackable() && !recruit.isAlliedTo(target) ? target : null;
     }
     public static void cancelGroup(UUID group) {
         for (Lease lease : List.copyOf(LOCKS.values())) if (group.equals(lease.group)) remove(lease);
@@ -183,8 +184,11 @@ public final class TacticalCombatManager {
         if (!event.getLevel().isClientSide && event.getEntity() instanceof Projectile projectile
                 && projectile.getOwner() instanceof AbstractRecruitEntity shooter) {
             var s = settings(shooter);
-            if (s.holdFire() || s.combat() == TacticalSettings.CombatMode.MELEE && shooter instanceof IRangedRecruit)
+            if (s.holdFire() || s.combat() == TacticalSettings.CombatMode.MELEE && shooter instanceof IRangedRecruit) {
                 event.setCanceled(true);
+            } else if (projectile instanceof AbstractArrow arrow) {
+                RangedProjectileArc.apply(arrow, shooter, assignedTarget(shooter));
+            }
         }
     }
     @SubscribeEvent

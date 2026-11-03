@@ -66,6 +66,7 @@ public record RouteGroupsPacket(List<UUID> groupIds, List<BlockPos> waypoints) {
         if (!ServerPacketGuard.allow(sender) || packet.groupIds.isEmpty() || packet.waypoints.isEmpty()) {
             return;
         }
+        if (RTSGroupAttackManager.rejectMoveDuringCombatGrace(sender, packet.groupIds)) return;
         RTSGroupAttackManager.cancelOwned(sender, packet.groupIds);
         int max = RTSServerConfig.MAX_ROUTE_WAYPOINTS.get();
         if (packet.waypoints.size() > max) {

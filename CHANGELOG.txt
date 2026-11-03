@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.23.2-server.1
+Ranged attack orders, ballistic target distribution and restrained cavalry melee
+
+- Strategic-fire ground designation now uses terrain-only line of sight to a point above the clicked surface. Dense-brush entity concealment no longer falsely blocks a flat-plain bombardment coordinate.
+- Explicit attack and charge orders now clear previous routes, formation destinations, movement boosts and native move flags before installing the combat approach. A server-authoritative 16-tick/0.8-second grace rejects accidental move, frontage, route, custom-formation and translation packets immediately after combat orders.
+- Ranged-capable formations in any non-melee stance are classified before approach planning, stop at a 12-block edge gap, retain ranged mode and attack rather than inheriting the melee bumrush path.
+- Archers now receive stable targets distributed through both enemy frontage and depth. Spawned arrows use a gravity-aware ballistic solution for each assigned target, allowing volleys to arc into rear ranks; excess archers share targets when the enemy formation is smaller.
+- Fixed formation target-acquisition gates deactivating the cavalry combat controller after contact. Engaged horsemen now make a small, low-speed local reposition about once per second while continuing to face and attack their assigned opponent; no high-speed orbit or combat teleport was added.
+- Network protocol remains rts-camera-162 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.23.2-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.23.1-server.1
 Move-order regression hotfix
 

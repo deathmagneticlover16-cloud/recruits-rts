@@ -93,6 +93,9 @@ public record AttackGroupsPacket(List<UUID> groupIds, int targetEntityId, boolea
         RouteManager.cancel(sender, authorized);
         RTSGroupAttackManager.cancel(authorized);
         RTSMovementBoostManager.cancelForcedOrders(authorized);
+        for (var entry : groups.entrySet()) {
+            RTSGroupAttackManager.prepareAttackOrder(entry.getKey(), entry.getValue());
+        }
 
         UUID enemyGroupId = resolveEnemyGroupId(sender, clickedTarget);
         List<LivingEntity> enemyGroupTargets = resolveEnemyGroupTargets(sender, clickedTarget, enemyGroupId);

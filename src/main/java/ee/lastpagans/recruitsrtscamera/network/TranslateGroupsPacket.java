@@ -1,6 +1,7 @@
 package ee.lastpagans.recruitsrtscamera.network;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
+import ee.lastpagans.recruitsrtscamera.combat.RTSGroupAttackManager;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
@@ -53,6 +54,9 @@ public record TranslateGroupsPacket(List<UUID> groupIds, Vec3 delta) {
         if (!ServerPacketGuard.allow(sender) || packet.groupIds.isEmpty() || delta == null
                 || !Double.isFinite(delta.x) || !Double.isFinite(delta.y) || !Double.isFinite(delta.z)
                 || delta.lengthSqr() > 576.0D * 576.0D) return;
+        if (RTSGroupAttackManager.rejectMoveDuringCombatGrace(sender, packet.groupIds)) return;
+        RouteManager.cancel(sender, packet.groupIds);
+        RTSGroupAttackManager.cancelOwned(sender, packet.groupIds);
         Map<UUID, List<AbstractRecruitEntity>> groups = ServerGroupResolver.resolve(sender, packet.groupIds);
         for (Map.Entry<UUID, List<AbstractRecruitEntity>> entry : groups.entrySet()) {
             boolean moved = FormationRuntime.translateFormation(entry.getKey(), delta);

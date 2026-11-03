@@ -73,6 +73,7 @@ public record FrontageGroupsPacket(List<UUID> groupIds, Vec3 start, Vec3 end) {
         if (!ServerPacketGuard.allow(sender) || packet.groupIds.isEmpty()) {
             return;
         }
+        if (RTSGroupAttackManager.rejectMoveDuringCombatGrace(sender, packet.groupIds)) return;
         RouteManager.cancel(sender, packet.groupIds);
         RTSGroupAttackManager.cancelOwned(sender, packet.groupIds);
         if (!finite(packet.start) || !finite(packet.end)) {
