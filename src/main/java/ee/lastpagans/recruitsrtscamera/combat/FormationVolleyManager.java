@@ -77,7 +77,8 @@ public final class FormationVolleyManager {
 
     private static boolean eligible(AbstractRecruitEntity recruit) {
         return recruit != null && recruit.getGroup() != null && recruit.isAlive()
-                && !TacticalCombatManager.settings(recruit).holdFire();
+                && (!TacticalCombatManager.settings(recruit).holdFire()
+                || TacticalCombatManager.explicitFireOrder(recruit));
     }
 
     private static VolleyState state(UUID group, long now) {
@@ -93,7 +94,8 @@ public final class FormationVolleyManager {
         state.expectedCrossbows = Math.max(1, (int) RecruitSpatialIndex.group(level, group).stream()
                 .filter(recruit -> recruit instanceof CrossBowmanEntity && recruit.isAlive()
                         && recruit.getTarget() != null && recruit.getShouldRanged()
-                        && !TacticalCombatManager.settings(recruit).holdFire())
+                        && (!TacticalCombatManager.settings(recruit).holdFire()
+                        || TacticalCombatManager.explicitFireOrder(recruit)))
                 .count());
         return state.expectedCrossbows;
     }

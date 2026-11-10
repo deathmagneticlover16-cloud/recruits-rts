@@ -688,6 +688,8 @@ public final class RTSGroupAttackManager {
             return true;
         }
 
+        StrategicFireManager.clear(attacker);
+
         if (attacker instanceof SiegeEngineerEntity engineer
                 && SiegeWeaponsCompat.focusTarget(engineer, assigned)) {
             return true;
@@ -696,8 +698,7 @@ public final class RTSGroupAttackManager {
         if (attacker instanceof IStrategicFire strategic) {
             strategic.setShouldStrategicFire(false);
         }
-        if (explicitRanged(attacker)) attacker.setShouldRanged(
-                !TacticalCombatManager.settings(attacker).holdFire());
+        if (explicitRanged(attacker)) attacker.setShouldRanged(true);
 
         boolean preserveFormation = FormationRuntime.formationMemberCount(groupId) > 0;
         if (!preserveFormation) {
@@ -744,6 +745,7 @@ public final class RTSGroupAttackManager {
             CavalryTacticalController.activate(attacker, assigned, groupId);
             return true;
         }
+        StrategicFireManager.clear(attacker);
         if (attacker instanceof SiegeEngineerEntity engineer
                 && SiegeWeaponsCompat.focusTarget(engineer, assigned)) {
             return true;
@@ -755,8 +757,7 @@ public final class RTSGroupAttackManager {
         if (attacker instanceof IStrategicFire strategic) {
             strategic.setShouldStrategicFire(false);
         }
-        if (explicitRanged(attacker)) attacker.setShouldRanged(
-                !TacticalCombatManager.settings(attacker).holdFire());
+        if (explicitRanged(attacker)) attacker.setShouldRanged(true);
 
         boolean preserveFormation = FormationRuntime.formationMemberCount(groupId) > 0;
         if (!preserveFormation) {
@@ -834,8 +835,9 @@ public final class RTSGroupAttackManager {
      */
 
     private static boolean fireAtWill(ServerLevel level, UUID groupId) {
-        return level != null && groupId != null
-                && !RTSGroupTacticsSavedData.get(level).settings(groupId).holdFire();
+        // Every call site is already inside an explicit attack order. Fire At Will only
+        // governs passive acquisition, so it must not veto this ordered opening volley.
+        return level != null && groupId != null;
     }
 
     private static void throwOpeningMissiles(

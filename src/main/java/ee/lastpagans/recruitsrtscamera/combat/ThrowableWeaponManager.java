@@ -58,7 +58,8 @@ public final class ThrowableWeaponManager {
      * gives cinematic volleys a readable wind-up.
      */
     public static boolean tryThrow(AbstractRecruitEntity recruit, LivingEntity target) {
-        if (recruit != null && TacticalCombatManager.settings(recruit).holdFire()) return false;
+        if (recruit != null && TacticalCombatManager.settings(recruit).holdFire()
+                && !TacticalCombatManager.explicitFireOrder(recruit)) return false;
         if (recruit == null || target == null || !recruit.isAlive() || !target.isAlive()
                 || recruit.level().isClientSide || !hasThrowable(recruit)
                 || !(recruit.level() instanceof ServerLevel level)) {
@@ -99,6 +100,10 @@ public final class ThrowableWeaponManager {
         return true;
     }
 
+    public static void cancel(AbstractRecruitEntity recruit) {
+        if (recruit != null) PENDING.remove(recruit.getUUID());
+    }
+
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || PENDING.isEmpty()) return;
@@ -129,6 +134,7 @@ public final class ThrowableWeaponManager {
 
     private static void launchNow(ServerLevel level, AbstractRecruitEntity recruit, LivingEntity target) {
         if (TacticalCombatManager.settings(recruit).holdFire()
+                && !TacticalCombatManager.explicitFireOrder(recruit)
                 || ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager.isRouting(recruit)) return;
         ItemStack held = recruit.getMainHandItem();
         if (held == null || held.isEmpty() || !held.is(RTSTags.THROWABLE_WEAPONS)) return;

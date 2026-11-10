@@ -239,8 +239,10 @@ public final class TacticalWorldRenderer {
 
     private static SlotMesh buildSlotMesh(TacticalRenderScene.SlotDecal slot) {
         double radians = Math.toRadians(slot.yaw());
-        double half = slot.heavy() ? 0.68D : 0.42D;
-        Vec3 center = slot.position().add(0.0D, 0.055D, 0.0D);
+        double half = slot.halfSize();
+        // Keep decals above snow layers and shallow modded collision shapes instead of
+        // letting depth fighting erase them at normal Commander camera angles.
+        Vec3 center = slot.position().add(0.0D, 0.12D, 0.0D);
         Vec3 right = new Vec3(Math.cos(radians) * half, 0.0D, Math.sin(radians) * half);
         Vec3 forward = new Vec3(-Math.sin(radians) * half, 0.0D, Math.cos(radians) * half);
         return new SlotMesh(center.subtract(right).subtract(forward), center.subtract(right).add(forward),

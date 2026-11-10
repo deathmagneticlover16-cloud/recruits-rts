@@ -15,7 +15,7 @@ public record TacticalRenderScene(
     public static final TacticalRenderScene EMPTY = new TacticalRenderScene(List.of(), List.of(), List.of());
 
     public record RouteRibbon(List<Vec3> points, int color, float width, boolean flowing, float flowSpeed) { }
-    public record SlotDecal(Vec3 position, float yaw, int color, boolean heavy) { }
+    public record SlotDecal(Vec3 position, float yaw, int color, double halfSize) { }
     public record FacingArrow(Vec3 origin, float yaw, int color) { }
 
     public static final class Builder {
@@ -37,7 +37,14 @@ public record TacticalRenderScene(
         }
 
         public Builder slot(Vec3 position, float yaw, int color, boolean heavy) {
-            if (position != null) slots.add(new SlotDecal(position, yaw, color, heavy));
+            if (position != null) slots.add(new SlotDecal(position, yaw, color, heavy ? 0.68D : 0.42D));
+            return this;
+        }
+
+        public Builder circle(Vec3 position, double radius, int color) {
+            if (position != null && Double.isFinite(radius) && radius > 0.0D) {
+                slots.add(new SlotDecal(position, 0.0F, color, radius));
+            }
             return this;
         }
 

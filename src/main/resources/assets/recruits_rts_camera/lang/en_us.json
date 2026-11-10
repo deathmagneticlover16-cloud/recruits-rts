@@ -9,6 +9,7 @@
   "key.recruits_rts_camera.strategic_fire": "Designate Strategic Fire",
   "key.recruits_rts_camera.hold_fire": "Hold Fire",
   "key.recruits_rts_camera.fire_at_will": "Fire At Will",
+  "key.recruits_rts_camera.cease_fire": "Cease Fire",
   "key.recruits_rts_camera.route_mode": "Toggle Route Planning Mode",
   "key.recruits_rts_camera.commit_route": "Commit Planned Route",
   "key.recruits_rts_camera.reset_route": "Cancel Current Planning",

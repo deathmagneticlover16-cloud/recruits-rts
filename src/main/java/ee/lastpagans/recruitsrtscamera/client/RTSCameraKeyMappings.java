@@ -77,6 +77,13 @@ public final class RTSCameraKeyMappings {
             CATEGORY
     );
 
+    public static final KeyMapping CEASE_FIRE = new KeyMapping(
+            "key.recruits_rts_camera.cease_fire",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_K,
+            CATEGORY
+    );
+
 
     public static final KeyMapping ROUTE_MODE = new KeyMapping(
             "key.recruits_rts_camera.route_mode",
@@ -141,6 +148,7 @@ public final class RTSCameraKeyMappings {
         event.register(STRATEGIC_FIRE);
         event.register(HOLD_FIRE);
         event.register(FIRE_AT_WILL);
+        event.register(CEASE_FIRE);
         event.register(ROUTE_MODE);
         event.register(COMMIT_ROUTE);
         event.register(RESET_ROUTE);
@@ -161,6 +169,7 @@ public final class RTSCameraKeyMappings {
                 || STRATEGIC_FIRE.matches(key, scanCode)
                 || HOLD_FIRE.matches(key, scanCode)
                 || FIRE_AT_WILL.matches(key, scanCode)
+                || CEASE_FIRE.matches(key, scanCode)
                 || ROUTE_MODE.matches(key, scanCode)
                 || COMMIT_ROUTE.matches(key, scanCode)
                 || RESET_ROUTE.matches(key, scanCode)

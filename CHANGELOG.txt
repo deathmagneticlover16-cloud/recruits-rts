@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.24.0-server.1
+Accurate area bombardment and explicit cease fire
+
+- Strategic fire now treats the clicked terrain coordinate as the center of a deterministic six-block bombardment disk. Archers receive stable surface points inside that disk, and spawned arrows receive a gravity-aware solution to those exact points instead of inheriting the native approximate pitch that landed volleys unpredictably short or long.
+- Pressing Strategic Fire flashes a large red circle over the actual bombardment disk for 1.5 seconds. It reuses the formation-slot circle artwork, and world decals render higher above snow and shallow collision shapes to prevent depth clipping.
+- Fire At Will now governs passive ranged target acquisition only. Enabled ranged units accept the closest valid target in range; disabling it clears passive targets without blocking a strategic-fire order or a direct ranged formation attack.
+- Added a configurable Cease Fire key on K. It cancels passive fire, strategic fire, direct ranged attack state, prepared throws, drawn weapons and newly spawned shots for the selected ranged groups.
+- Explicit direct attacks authorize formation volleys and thrown opening missiles even while Fire At Will is disabled.
+- The removed Neutral/Aggressive troop-state control and distance-based Fog of War boundaries remain removed; terrain and dense-brush hiddenness remain active.
+- Network protocol is rts-camera-163 because FireControlPacket gained the Cease Fire command.
+- Source version and packaging references are 0.24.0-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.23.2-server.1
 Ranged attack orders, ballistic target distribution and restrained cavalry melee
 

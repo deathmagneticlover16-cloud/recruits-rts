@@ -5,6 +5,7 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.IStrategicFire;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
+import ee.lastpagans.recruitsrtscamera.combat.StrategicFireManager;
 import ee.lastpagans.recruitsrtscamera.server.ServerPacketGuard;
 import ee.lastpagans.recruitsrtscamera.server.RTSVision;
 import net.minecraft.core.BlockPos;
@@ -82,27 +83,34 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
         ee.lastpagans.recruitsrtscamera.combat.RTSGroupAttackManager.cancel(groups.keySet());
         int ranged = 0;
         int artillery = 0;
+        List<AbstractRecruitEntity> bombardiers = new ArrayList<>();
         for (List<AbstractRecruitEntity> recruits : groups.values()) {
             for (AbstractRecruitEntity recruit : recruits) {
                 if (!(recruit instanceof IStrategicFire strategic)) {
                     continue;
                 }
                 var settings = ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager.settings(recruit);
-                if (settings.holdFire() || settings.combat() == ee.lastpagans.recruitsrtscamera.combat.TacticalSettings.CombatMode.MELEE)
+                if (settings.combat() == ee.lastpagans.recruitsrtscamera.combat.TacticalSettings.CombatMode.MELEE)
                     continue;
                 if (recruit instanceof SiegeEngineerEntity engineer) {
                     if (SiegeWeaponsCompat.strategicFire(engineer, packet.target)) {
+                        StrategicFireManager.assignExact(recruit, packet.target.above());
                         artillery++;
                         ranged++;
                     }
                     continue;
                 }
-                recruit.setTarget(null);
-                recruit.setShouldRanged(true);
-                strategic.setStrategicFirePos(packet.target);
-                strategic.setShouldStrategicFire(true);
-                ranged++;
+                bombardiers.add(recruit);
             }
+        }
+        Map<UUID, BlockPos> aimPoints = StrategicFireManager.assign(sender.serverLevel(), bombardiers, packet.target);
+        for (AbstractRecruitEntity recruit : bombardiers) {
+            if (!(recruit instanceof IStrategicFire strategic)) continue;
+            recruit.setTarget(null);
+            recruit.setShouldRanged(true);
+            strategic.setStrategicFirePos(aimPoints.getOrDefault(recruit.getUUID(), packet.target));
+            strategic.setShouldStrategicFire(true);
+            ranged++;
         }
 
         if (ranged == 0) {

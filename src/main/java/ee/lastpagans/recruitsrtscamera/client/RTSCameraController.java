@@ -27,6 +27,7 @@ import ee.lastpagans.recruitsrtscamera.network.FormationSpacingPacket;
 import ee.lastpagans.recruitsrtscamera.network.HaltGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.RouteGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.StrategicFirePacket;
+import ee.lastpagans.recruitsrtscamera.combat.StrategicFireManager;
 import ee.lastpagans.recruitsrtscamera.network.FireControlPacket;
 import ee.lastpagans.recruitsrtscamera.network.MovementPacePacket;
 import ee.lastpagans.recruitsrtscamera.network.TranslateGroupsPacket;
@@ -126,6 +127,7 @@ public final class RTSCameraController {
     private static boolean routeMode;
     private static final List<BlockPos> ROUTE_POINTS = new ArrayList<>();
     private static final Set<CapturedCommand> CAPTURED_COMMANDS = EnumSet.noneOf(CapturedCommand.class);
+    private static StrategicFireFlash strategicFireFlash;
     private static boolean capturedRotateDown;
     private static boolean capturedCameraUpDown;
     private static boolean capturedCameraDownDown;
@@ -494,6 +496,7 @@ public final class RTSCameraController {
         else if (RTSCameraKeyMappings.STRATEGIC_FIRE.matches(key, scanCode)) command = CapturedCommand.STRATEGIC_FIRE;
         else if (RTSCameraKeyMappings.HOLD_FIRE.matches(key, scanCode)) command = CapturedCommand.HOLD_FIRE;
         else if (RTSCameraKeyMappings.FIRE_AT_WILL.matches(key, scanCode)) command = CapturedCommand.FIRE_AT_WILL;
+        else if (RTSCameraKeyMappings.CEASE_FIRE.matches(key, scanCode)) command = CapturedCommand.CEASE_FIRE;
         else if (RTSCameraKeyMappings.ROUTE_MODE.matches(key, scanCode)) command = CapturedCommand.ROUTE_MODE;
         else if (RTSCameraKeyMappings.COMMIT_ROUTE.matches(key, scanCode)) command = CapturedCommand.COMMIT_ROUTE;
         else if (RTSCameraKeyMappings.RESET_ROUTE.matches(key, scanCode)) command = CapturedCommand.RESET_ROUTE;
@@ -534,6 +537,7 @@ public final class RTSCameraController {
         if (commands.contains(CapturedCommand.STRATEGIC_FIRE)) designateStrategicFire();
         if (commands.contains(CapturedCommand.HOLD_FIRE)) sendFireControl(FireControlPacket.Mode.HOLD_FIRE);
         if (commands.contains(CapturedCommand.FIRE_AT_WILL)) sendFireControl(FireControlPacket.Mode.FIRE_AT_WILL);
+        if (commands.contains(CapturedCommand.CEASE_FIRE)) sendFireControl(FireControlPacket.Mode.CEASE_FIRE);
         if (commands.contains(CapturedCommand.ROUTE_MODE)) toggleRouteMode();
         if (commands.contains(CapturedCommand.COMMIT_ROUTE)) commitRoute();
         if (commands.contains(CapturedCommand.RESET_ROUTE)) commanderCancelPlanning();
@@ -579,6 +583,9 @@ public final class RTSCameraController {
         }
         while (RTSCameraKeyMappings.FIRE_AT_WILL.consumeClick()) {
             sendFireControl(FireControlPacket.Mode.FIRE_AT_WILL);
+        }
+        while (RTSCameraKeyMappings.CEASE_FIRE.consumeClick()) {
+            sendFireControl(FireControlPacket.Mode.CEASE_FIRE);
         }
         while (RTSCameraKeyMappings.ROUTE_MODE.consumeClick()) {
             toggleRouteMode();
@@ -1305,6 +1312,10 @@ public final class RTSCameraController {
         RTSCameraNetwork.CHANNEL.sendToServer(new StrategicFirePacket(
                 new ArrayList<>(SELECTED_GROUPS), target
         ));
+        strategicFireFlash = new StrategicFireFlash(
+                new Vec3(target.getX() + 0.5D, hit.location().y, target.getZ() + 0.5D),
+                System.currentTimeMillis() + 1500L);
+        tacticalSceneDirty = true;
         setStatus("Strategic fire designated at " + target.getX() + ", " + target.getY() + ", " + target.getZ() + ".");
     }
 
@@ -1328,7 +1339,11 @@ public final class RTSCameraController {
         } else {
             LOCAL_FIRE_AT_WILL_GROUPS.removeAll(targets);
         }
-        setStatus(mode == FireControlPacket.Mode.HOLD_FIRE ? "Hold fire order sent." : "Fire at will order sent.");
+        setStatus(switch (mode) {
+            case HOLD_FIRE -> "Fire at will disabled.";
+            case FIRE_AT_WILL -> "Fire at will enabled.";
+            case CEASE_FIRE -> "Cease fire order sent.";
+        });
     }
 
     private static void beginRotation() {
@@ -2482,6 +2497,7 @@ public final class RTSCameraController {
     /** Snapshot all battlefield-preview state for the batched world-space renderer. */
     static TacticalRenderScene tacticalRenderScene(float partialTick) {
         if (!active || !commandCursor || MC.level == null) return TacticalRenderScene.EMPTY;
+        if (strategicFireFlash != null) tacticalSceneDirty = true;
         if (!tacticalSceneDirty) return retainedTacticalScene;
         TacticalRenderScene.Builder scene = new TacticalRenderScene.Builder();
         // Retain tick endpoints; TacticalWorldRenderer interpolates the retained meshes
@@ -2501,6 +2517,13 @@ public final class RTSCameraController {
                     TACTICAL_CUSTOM_COLOR, 0.28F, true);
         }
         if (rotatingFormation) appendRotationScene(scene);
+        if (strategicFireFlash != null) {
+            if (System.currentTimeMillis() <= strategicFireFlash.untilMillis()) {
+                scene.circle(strategicFireFlash.center(), StrategicFireManager.BOMBARDMENT_RADIUS, 0xE8E53935);
+            } else {
+                strategicFireFlash = null;
+            }
+        }
         retainedTacticalScene = scene.build();
         tacticalSceneDirty = false;
         return retainedTacticalScene;
@@ -2573,7 +2596,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.23.2-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2614,7 +2637,8 @@ public final class RTSCameraController {
         y += lineHeight;
         drawHudLine(graphics, "Fire: " + keyName(RTSCameraKeyMappings.STRATEGIC_FIRE) + " strategic · "
                         + keyName(RTSCameraKeyMappings.HOLD_FIRE) + " hold · "
-                        + keyName(RTSCameraKeyMappings.FIRE_AT_WILL) + " fire at will",
+                        + keyName(RTSCameraKeyMappings.FIRE_AT_WILL) + " fire at will · "
+                        + keyName(RTSCameraKeyMappings.CEASE_FIRE) + " cease fire",
                 textX, y, textWidth, 0xFFB8B8B8);
         y += lineHeight;
         drawHudLine(graphics, "State: route=" + routeMode + " rotate=" + rotatingFormation
@@ -3481,6 +3505,7 @@ public final class RTSCameraController {
         STRATEGIC_FIRE,
         HOLD_FIRE,
         FIRE_AT_WILL,
+        CEASE_FIRE,
         ROUTE_MODE,
         COMMIT_ROUTE,
         RESET_ROUTE,
@@ -3495,6 +3520,8 @@ public final class RTSCameraController {
 
     private record GroundHit(BlockPos pos, Vec3 location, String source) {
     }
+
+    private record StrategicFireFlash(Vec3 center, long untilMillis) { }
 
     record AuraPreview(Vec3 center, double radius) {
     }

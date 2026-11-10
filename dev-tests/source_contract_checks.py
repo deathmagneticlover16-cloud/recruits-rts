@@ -44,6 +44,9 @@ face_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/NativeF
 movement = source("src/main/java/ee/lastpagans/recruitsrtscamera/movement/RTSMovementBoostManager.java")
 attack = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/RTSGroupAttackManager.java")
 tactical = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/TacticalCombatManager.java")
+strategic_fire = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/StrategicFireManager.java")
+strategic_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/StrategicFirePacket.java")
+fire_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/FireControlPacket.java")
 cavalry_combat = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/CavalryCombatManager.java")
 mode_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/RTSModeStatePacket.java")
 attack_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/AttackGroupsPacket.java")
@@ -666,7 +669,7 @@ require(cavalry_combat, "equippedMeleeDamage", "cavalry impact must include its 
 require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measured travel speed")
 require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
 require(stat_service, "movementPenalty /= 1.75D", "mounted carried weight impact must be 1.75x lower")
-require(network, 'PROTOCOL = "rts-camera-162"', "lance-pose synchronization requires protocol 162")
+require(network, 'PROTOCOL = "rts-camera-163"', "cease-fire packet compatibility requires protocol 163")
 require(pathfinder, "supportedRiseAhead", "mounted movement needs an early collision-backed rise probe")
 require(steering, "Math.max(current.y, 0.52D)",
         "local mounted steering must actively lift over a verified one-block rise")
@@ -792,11 +795,27 @@ require(overlay, "Math.sin(phase)", "wavering cards need a flashing translucent 
 require(overlay, "graphics.pose().scale(1.04F", "dragged cards must lift with smooth visual parallax")
 require(card_order, "RTSClientConfig.UNIT_CARD_ORDER.set", "rearranged card order must persist")
 for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE", "ARMY_PRESET",
-                "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "ROUTE_MODE", "COMMIT_ROUTE",
+                "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "CEASE_FIRE", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(source("gradle.properties"), "mod_version=0.23.2-server.1", "semantic version must be updated")
-require(controller, "0.23.2-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.23.2-server.1.jar", "build helper version must be updated")
+require(strategic_fire, "BOMBARDMENT_RADIUS = 6.0D", "strategic fire needs one authoritative area radius")
+require(strategic_fire, "BallisticArc.solve(", "strategic arrows must solve against their assigned ground point")
+require(strategic_fire, "Math.sqrt((index + 0.5D)", "bombardment points must fill a deterministic disk")
+forbid(strategic_packet, "settings.holdFire() ||", "Fire At Will off must not reject explicit strategic fire")
+require(tactical, "s.holdFire() && !explicitFireOrder(recruit)",
+        "Fire At Will off must still allow explicit ranged orders")
+require(tactical, "nearestAutomaticTarget", "Fire At Will must prefer the closest valid ranged target")
+require(fire_packet, "case CEASE_FIRE", "Cease Fire must be a distinct server-authoritative command")
+require(fire_packet, "ThrowableWeaponManager.cancel(recruit)", "Cease Fire must cancel prepared throws")
+require(controller, "System.currentTimeMillis() + 1500L", "the red bombardment disk must flash for 1.5 seconds")
+require(controller, "0xE8E53935", "the strategic-fire area marker must be red")
+require(render_scene, "Builder circle", "the unified renderer must expose scaled area circles")
+require(world_renderer, "slot.position().add(0.0D, 0.12D", "ground circles must remain visible above snow")
+require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
+        "distance fog must remain removed")
+forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive button must remain removed")
+require(source("gradle.properties"), "mod_version=0.24.0-server.1", "semantic version must be updated")
+require(controller, "0.24.0-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.0-server.1.jar", "build helper version must be updated")
 
-print("0.23.2-server.1 source contracts passed")
+print("0.24.0-server.1 source contracts passed")

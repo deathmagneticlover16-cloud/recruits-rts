@@ -47,7 +47,11 @@ public final class TacticalCombatManager {
     public static boolean ranged(AbstractRecruitEntity recruit) {
         return recruit instanceof IRangedRecruit && settings(recruit).combat() != TacticalSettings.CombatMode.MELEE
                 && (settings(recruit).combat() == TacticalSettings.CombatMode.RANGED
-                || settings(recruit).holdFire() || recruit.getShouldRanged());
+                || explicitFireOrder(recruit) || recruit.getShouldRanged());
+    }
+    public static boolean explicitFireOrder(AbstractRecruitEntity recruit) {
+        return StrategicFireManager.hasOrder(recruit)
+                || ownsTarget(recruit) && assignedTarget(recruit) != null;
     }
     public static void lock(AbstractRecruitEntity recruit, UUID group, LivingEntity target) {
         if (RoutedGroupManager.isRouting(recruit)) return;
@@ -95,7 +99,7 @@ public final class TacticalCombatManager {
             } else if (s.combat() == TacticalSettings.CombatMode.RANGED) {
                 recruit.setShouldRanged(true);
             }
-            if (s.holdFire()) {
+            if (s.holdFire() && !explicitFireOrder(recruit)) {
                 recruit.setShouldRanged(false);
                 if (recruit.isUsingItem() && ranged.getWeaponType().test(recruit.getUseItem())) recruit.stopUsingItem();
             }
@@ -174,9 +178,16 @@ public final class TacticalCombatManager {
     }
     @SubscribeEvent(priority = EventPriority.LOW)
     public static void onTarget(LivingChangeTargetEvent event) {
-        if (event.getEntity() instanceof AbstractRecruitEntity recruit && ownsTarget(recruit)) {
+        if (!(event.getEntity() instanceof AbstractRecruitEntity recruit)) return;
+        if (ownsTarget(recruit)) {
             // Routing's LOWEST target veto runs after this lease; no target can revive a routed unit.
             event.setNewTarget(assignedTarget(recruit));
+        } else if (recruit instanceof IRangedRecruit && settings(recruit).holdFire()) {
+            // Hold Fire controls automatic acquisition only. Explicit group attacks and
+            // strategic bombardments remain authorized through their own server orders.
+            event.setNewTarget(null);
+        } else if (recruit instanceof IRangedRecruit && event.getNewTarget() != null) {
+            event.setNewTarget(nearestAutomaticTarget(recruit, event.getNewTarget()));
         }
     }
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -184,12 +195,34 @@ public final class TacticalCombatManager {
         if (!event.getLevel().isClientSide && event.getEntity() instanceof Projectile projectile
                 && projectile.getOwner() instanceof AbstractRecruitEntity shooter) {
             var s = settings(shooter);
-            if (s.holdFire() || s.combat() == TacticalSettings.CombatMode.MELEE && shooter instanceof IRangedRecruit) {
+            if (s.combat() == TacticalSettings.CombatMode.MELEE && shooter instanceof IRangedRecruit
+                    || s.holdFire() && !explicitFireOrder(shooter)) {
                 event.setCanceled(true);
             } else if (projectile instanceof AbstractArrow arrow) {
-                RangedProjectileArc.apply(arrow, shooter, assignedTarget(shooter));
+                if (!StrategicFireManager.correctArrow(arrow, shooter)) {
+                    RangedProjectileArc.apply(arrow, shooter, assignedTarget(shooter));
+                }
             }
         }
+    }
+
+    private static LivingEntity nearestAutomaticTarget(AbstractRecruitEntity recruit, LivingEntity proposed) {
+        if (!(recruit.level() instanceof ServerLevel level) || proposed == null) return proposed;
+        double range = Math.max(8.0D, Math.min(48.0D, recruit.getAttributeValue(Attributes.FOLLOW_RANGE)));
+        LivingEntity nearest = null;
+        double nearestDistance = range * range;
+        for (LivingEntity candidate : level.getEntitiesOfClass(LivingEntity.class,
+                recruit.getBoundingBox().inflate(range, Math.min(12.0D, range), range), candidate ->
+                        candidate != recruit && candidate.isAlive() && !candidate.isRemoved()
+                                && candidate.isAttackable() && !recruit.isAlliedTo(candidate)
+                                && recruit.canAttack(candidate) && recruit.hasLineOfSight(candidate))) {
+            double distance = recruit.distanceToSqr(candidate);
+            if (distance < nearestDistance) {
+                nearestDistance = distance;
+                nearest = candidate;
+            }
+        }
+        return nearest;
     }
     @SubscribeEvent
     public static void onLivingTick(LivingEvent.LivingTickEvent event) {
