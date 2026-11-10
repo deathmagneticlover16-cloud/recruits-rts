@@ -1301,7 +1301,8 @@ public final class RTSCameraController {
             return;
         }
         BlockPos target = hit.pos();
-        if (Vec3.atCenterOf(target).distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
+        Vec3 exactTarget = hit.location();
+        if (exactTarget.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
             setStatus("That bombardment point is outside the tactical radius.");
             return;
         }
@@ -1310,10 +1311,10 @@ public final class RTSCameraController {
             return;
         }
         RTSCameraNetwork.CHANNEL.sendToServer(new StrategicFirePacket(
-                new ArrayList<>(SELECTED_GROUPS), target
+                new ArrayList<>(SELECTED_GROUPS), target, exactTarget
         ));
         strategicFireFlash = new StrategicFireFlash(
-                new Vec3(target.getX() + 0.5D, hit.location().y, target.getZ() + 0.5D),
+                exactTarget,
                 System.currentTimeMillis() + 1500L);
         tacticalSceneDirty = true;
         setStatus("Strategic fire designated at " + target.getX() + ", " + target.getY() + ", " + target.getZ() + ".");
@@ -2211,7 +2212,7 @@ public final class RTSCameraController {
     }
 
     private static ScreenProjection.CameraSpec cameraSpec() {
-        if (MC.level == null || MC.getWindow().getWidth() <= 0 || MC.getWindow().getHeight() <= 0) {
+        if (MC.level == null || MC.getWindow().getScreenWidth() <= 0 || MC.getWindow().getScreenHeight() <= 0) {
             return null;
         }
         Camera camera = MC.gameRenderer.getMainCamera();
@@ -2224,8 +2225,8 @@ public final class RTSCameraController {
                 camera.getYRot(),
                 camera.getXRot(),
                 fov,
-                MC.getWindow().getWidth(),
-                MC.getWindow().getHeight()
+                MC.getWindow().getScreenWidth(),
+                MC.getWindow().getScreenHeight()
         );
     }
 
@@ -2596,7 +2597,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.0-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.1-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -3468,19 +3469,19 @@ public final class RTSCameraController {
     }
 
     private static double toPhysicalX(double guiX) {
-        return guiX * MC.getWindow().getWidth() / Math.max(1.0D, MC.getWindow().getGuiScaledWidth());
+        return guiX * MC.getWindow().getScreenWidth() / Math.max(1.0D, MC.getWindow().getGuiScaledWidth());
     }
 
     private static double toPhysicalY(double guiY) {
-        return guiY * MC.getWindow().getHeight() / Math.max(1.0D, MC.getWindow().getGuiScaledHeight());
+        return guiY * MC.getWindow().getScreenHeight() / Math.max(1.0D, MC.getWindow().getGuiScaledHeight());
     }
 
     private static int toGuiX(double physicalX) {
-        return (int) Math.round(physicalX * MC.getWindow().getGuiScaledWidth() / MC.getWindow().getWidth());
+        return (int) Math.round(physicalX * MC.getWindow().getGuiScaledWidth() / MC.getWindow().getScreenWidth());
     }
 
     private static int toGuiY(double physicalY) {
-        return (int) Math.round(physicalY * MC.getWindow().getGuiScaledHeight() / MC.getWindow().getHeight());
+        return (int) Math.round(physicalY * MC.getWindow().getGuiScaledHeight() / MC.getWindow().getScreenHeight());
     }
 
     private static void setStatus(String text) {

@@ -10,7 +10,26 @@ public final class BallisticArcSelfTest {
         var diagonal = BallisticArc.solve(12.0D, 2.0D, 12.0D, 2.0D, 0.05D);
         require(Math.abs(Math.hypot(diagonal.x(), diagonal.z()) - 2.0D) < 0.0001D,
                 "diagonal firing must preserve horizontal speed");
-        System.out.println("BallisticArcSelfTest passed 4 checks.");
+        dragAwarePitchLandsAtCursor();
+        System.out.println("BallisticArcSelfTest passed 5 checks.");
+    }
+
+    private static void dragAwarePitchLandsAtCursor() {
+        double drag = 0.99D;
+        double gravity = 0.05D;
+        double horizontalSpeed = 2.4D;
+        int ticks = 40;
+        double horizontalDistance = horizontalSpeed * (1.0D - Math.pow(drag, ticks)) / (1.0D - drag);
+        double expectedY = -7.5D;
+        double vertical = BallisticArc.verticalWithDrag(
+                horizontalDistance, expectedY, horizontalSpeed, gravity, drag);
+        double actualY = 0.0D;
+        for (int tick = 0; tick < ticks; tick++) {
+            actualY += vertical;
+            vertical = vertical * drag - gravity;
+        }
+        require(Math.abs(actualY - expectedY) < 0.0001D,
+                "drag-aware strategic pitch must cross the cursor height at target range");
     }
 
     private static void require(boolean condition, String message) {

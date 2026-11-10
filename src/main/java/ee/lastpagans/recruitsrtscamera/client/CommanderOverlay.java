@@ -804,8 +804,8 @@ public final class CommanderOverlay {
         ScreenProjection.ProjectedPoint point = RTSCameraController.commanderProjectWorld(
                 worldX, worldY + 6.4D, worldZ);
         if (point == null || point.depth() <= 0.0D || point.depth() > 180.0D) return null;
-        int centerX = (int) Math.round(point.x() * virtualGuiWidth() / Math.max(1, MC.getWindow().getWidth()));
-        int centerY = (int) Math.round(point.y() * virtualGuiHeight() / Math.max(1, MC.getWindow().getHeight()));
+        int centerX = (int) Math.round(point.x() * virtualGuiWidth() / Math.max(1, MC.getWindow().getScreenWidth()));
+        int centerY = (int) Math.round(point.y() * virtualGuiHeight() / Math.max(1, MC.getWindow().getScreenHeight()));
         int x = centerX - BANNER_RENDER_WIDTH / 2;
         int y = centerY - BANNER_RENDER_HEIGHT / 2;
         if (x + BANNER_RENDER_WIDTH < 0 || x >= virtualGuiWidth() || y + BANNER_RENDER_HEIGHT < 0) return null;
@@ -1558,13 +1558,13 @@ public final class CommanderOverlay {
 
     private static int guiMouseX() {
         double normal = MC.mouseHandler.xpos() * MC.getWindow().getGuiScaledWidth()
-                / Math.max(1.0D, MC.getWindow().getWidth());
+                / Math.max(1.0D, MC.getWindow().getScreenWidth());
         return (int) Math.floor(normal / commanderScale());
     }
 
     private static int guiMouseY() {
         double normal = MC.mouseHandler.ypos() * MC.getWindow().getGuiScaledHeight()
-                / Math.max(1.0D, MC.getWindow().getHeight());
+                / Math.max(1.0D, MC.getWindow().getScreenHeight());
         return (int) Math.floor(normal / commanderScale());
     }
 

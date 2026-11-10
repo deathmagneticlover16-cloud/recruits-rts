@@ -608,7 +608,7 @@ require(visibility, "BRUSH_REVEAL_RADIUS", "brush concealment must break at clos
 require(visibility, "canDesignateGround(ServerPlayer player, BlockPos target)",
         "strategic-fire ground visibility must be separate from entity brush concealment")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/StrategicFirePacket.java"),
-        "RTSVision.canDesignateGround(sender, packet.target)",
+        "RTSVision.canDesignateGround(sender, packet.targetBlock)",
         "strategic fire must use terrain-only ground designation visibility")
 forbid(visibility, "withinVision(", "distance radii must not hide formations on an open plain")
 forbid(server_config, "FOG_PLAYER_VISION_RADIUS", "distance-based player vision must remain removed")
@@ -669,7 +669,7 @@ require(cavalry_combat, "equippedMeleeDamage", "cavalry impact must include its 
 require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measured travel speed")
 require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
 require(stat_service, "movementPenalty /= 1.75D", "mounted carried weight impact must be 1.75x lower")
-require(network, 'PROTOCOL = "rts-camera-163"', "cease-fire packet compatibility requires protocol 163")
+require(network, 'PROTOCOL = "rts-camera-164"', "exact strategic-fire cursor packets require protocol 164")
 require(pathfinder, "supportedRiseAhead", "mounted movement needs an early collision-backed rise probe")
 require(steering, "Math.max(current.y, 0.52D)",
         "local mounted steering must actively lift over a verified one-block rise")
@@ -799,8 +799,20 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
 require(strategic_fire, "BOMBARDMENT_RADIUS = 6.0D", "strategic fire needs one authoritative area radius")
-require(strategic_fire, "BallisticArc.solve(", "strategic arrows must solve against their assigned ground point")
-require(strategic_fire, "Math.sqrt((index + 0.5D)", "bombardment points must fill a deterministic disk")
+require(strategic_fire, "BallisticArc.verticalWithDrag(",
+        "strategic arrows must use drag-aware vertical pitch correction")
+require(strategic_fire, "arrow.setDeltaMovement(current.x, vertical, current.z)",
+        "strategic correction must preserve native horizontal shot distribution")
+forbid(strategic_fire, "Math.sqrt((index + 0.5D)",
+       "RTS must not distribute strategic arrows around an artificial disk")
+require(strategic_packet, "buffer.writeDouble(packet.target.x)",
+        "strategic fire must transmit the exact sub-block cursor intersection")
+require(strategic_packet, "strategic.setStrategicFirePos(packet.targetBlock)",
+        "native strategic fire must retain its original single target distribution")
+require(controller, "MC.getWindow().getScreenWidth()",
+        "cursor rays must use GLFW logical window width instead of framebuffer width")
+require(controller, "new ArrayList<>(SELECTED_GROUPS), target, exactTarget",
+        "strategic fire must send the same exact point shown by the cursor marker")
 forbid(strategic_packet, "settings.holdFire() ||", "Fire At Will off must not reject explicit strategic fire")
 require(tactical, "s.holdFire() && !explicitFireOrder(recruit)",
         "Fire At Will off must still allow explicit ranged orders")
@@ -814,8 +826,8 @@ require(world_renderer, "slot.position().add(0.0D, 0.12D", "ground circles must 
 require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
         "distance fog must remain removed")
 forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive button must remain removed")
-require(source("gradle.properties"), "mod_version=0.24.0-server.1", "semantic version must be updated")
-require(controller, "0.24.0-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.0-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.1-server.1", "semantic version must be updated")
+require(controller, "0.24.1-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.1-server.1.jar", "build helper version must be updated")
 
-print("0.24.0-server.1 source contracts passed")
+print("0.24.1-server.1 source contracts passed")

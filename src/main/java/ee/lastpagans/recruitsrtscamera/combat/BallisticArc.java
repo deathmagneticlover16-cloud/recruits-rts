@@ -20,5 +20,24 @@ public final class BallisticArc {
         return new Velocity(deltaX / horizontal * speed, vertical, deltaZ / horizontal * speed);
     }
 
+    /** Exact discrete-tick vertical launch speed for projectiles with drag and gravity. */
+    public static double verticalWithDrag(
+            double horizontalDistance,
+            double verticalDistance,
+            double horizontalSpeed,
+            double gravity,
+            double drag
+    ) {
+        double speed = Math.max(0.10D, horizontalSpeed);
+        double safeDrag = Math.max(0.01D, Math.min(0.999999D, drag));
+        double dragLoss = 1.0D - safeDrag;
+        double reachableFraction = horizontalDistance * dragLoss / speed;
+        double ticks = reachableFraction >= 0.999999D
+                ? Math.max(1.0D, horizontalDistance / speed)
+                : Math.max(1.0D, Math.log1p(-reachableFraction) / Math.log(safeDrag));
+        double travelSum = (1.0D - Math.pow(safeDrag, ticks)) / dragLoss;
+        return (verticalDistance + Math.max(0.0D, gravity) / dragLoss * (ticks - travelSum)) / travelSum;
+    }
+
     public record Velocity(double x, double y, double z) { }
 }

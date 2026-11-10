@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.24.1-server.1
+Strategic-fire cursor and arc correction
+
+- Removed 0.24.0's artificial per-archer bombardment-disk assignment. Strategic fire again retains Recruits' existing shot distribution; RTS no longer pushes individual arrows toward the red circle's rim.
+- Fixed screen-to-world command rays using framebuffer dimensions with GLFW mouse coordinates. On Windows display scaling and other high-DPI setups, the strategic-fire ray now uses logical window dimensions and passes through the visible cursor at every camera angle.
+- StrategicFirePacket now carries the exact terrain intersection in addition to the native target block. The red confirmation circle and server arrow aim therefore share the same sub-block cursor point instead of snapping independently to a block centre.
+- Strategic arrows retain their native horizontal dispersion. RTS corrects only vertical launch speed using Minecraft's per-tick arrow drag and gravity, centering the existing distribution on the cursor without replacing it.
+- Network protocol is rts-camera-164 because StrategicFirePacket now transmits the exact terrain intersection.
+- Source version and packaging references are 0.24.1-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.0-server.1
 Accurate area bombardment and explicit cease fire
 

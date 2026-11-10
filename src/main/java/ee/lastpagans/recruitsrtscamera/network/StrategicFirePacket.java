@@ -12,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.ArrayList;
@@ -21,13 +22,14 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 /** F: designate one strategic-fire/bombardment point for the selected groups. */
-public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
+public record StrategicFirePacket(List<UUID> groupIds, BlockPos targetBlock, Vec3 target) {
     private static final double MAX_TARGET_DISTANCE = 480.0D;
 
     public StrategicFirePacket {
         int size = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);
         groupIds = List.copyOf(groupIds.subList(0, size));
-        target = target.immutable();
+        targetBlock = targetBlock.immutable();
+        target = new Vec3(target.x, target.y, target.z);
     }
 
     public static void encode(StrategicFirePacket packet, FriendlyByteBuf buffer) {
@@ -35,7 +37,10 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
         for (UUID id : packet.groupIds) {
             buffer.writeUUID(id);
         }
-        buffer.writeBlockPos(packet.target);
+        buffer.writeBlockPos(packet.targetBlock);
+        buffer.writeDouble(packet.target.x);
+        buffer.writeDouble(packet.target.y);
+        buffer.writeDouble(packet.target.z);
     }
 
     public static StrategicFirePacket decode(FriendlyByteBuf buffer) {
@@ -47,7 +52,9 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
                 ids.add(id);
             }
         }
-        return new StrategicFirePacket(ids, buffer.readBlockPos());
+        BlockPos targetBlock = buffer.readBlockPos();
+        return new StrategicFirePacket(ids, targetBlock,
+                new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble()));
     }
 
     public static void handle(StrategicFirePacket packet, Supplier<NetworkEvent.Context> supplier) {
@@ -63,17 +70,24 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
         if (!ServerPacketGuard.allow(sender) || packet.groupIds.isEmpty()) {
             return;
         }
-        if (!sender.serverLevel().hasChunkAt(packet.target)) {
+        if (!Double.isFinite(packet.target.x) || !Double.isFinite(packet.target.y)
+                || !Double.isFinite(packet.target.z)) {
+            return;
+        }
+        if (packet.target.distanceToSqr(Vec3.atCenterOf(packet.targetBlock)) > 4.0D) {
+            return;
+        }
+        if (!sender.serverLevel().hasChunkAt(packet.targetBlock)) {
             sender.displayClientMessage(Component.literal("That bombardment point is not loaded."), true);
             return;
         }
-        if (sender.distanceToSqr(packet.target.getX() + 0.5D, packet.target.getY() + 0.5D, packet.target.getZ() + 0.5D)
+        if (sender.distanceToSqr(packet.target.x, packet.target.y, packet.target.z)
                 > MAX_TARGET_DISTANCE * MAX_TARGET_DISTANCE) {
             sender.displayClientMessage(Component.literal("That bombardment point is outside tactical range."), true);
             return;
         }
         if (RTSVision.hiddenTargetChecksEnabled()
-                && !RTSVision.canDesignateGround(sender, packet.target)) {
+                && !RTSVision.canDesignateGround(sender, packet.targetBlock)) {
             sender.displayClientMessage(Component.literal("Terrain blocks line of sight to that bombardment point."), true);
             return;
         }
@@ -93,8 +107,8 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
                 if (settings.combat() == ee.lastpagans.recruitsrtscamera.combat.TacticalSettings.CombatMode.MELEE)
                     continue;
                 if (recruit instanceof SiegeEngineerEntity engineer) {
-                    if (SiegeWeaponsCompat.strategicFire(engineer, packet.target)) {
-                        StrategicFireManager.assignExact(recruit, packet.target.above());
+                    if (SiegeWeaponsCompat.strategicFire(engineer, packet.targetBlock)) {
+                        StrategicFireManager.assignExact(recruit, packet.target);
                         artillery++;
                         ranged++;
                     }
@@ -103,12 +117,12 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos target) {
                 bombardiers.add(recruit);
             }
         }
-        Map<UUID, BlockPos> aimPoints = StrategicFireManager.assign(sender.serverLevel(), bombardiers, packet.target);
         for (AbstractRecruitEntity recruit : bombardiers) {
             if (!(recruit instanceof IStrategicFire strategic)) continue;
             recruit.setTarget(null);
             recruit.setShouldRanged(true);
-            strategic.setStrategicFirePos(aimPoints.getOrDefault(recruit.getUUID(), packet.target));
+            StrategicFireManager.assignExact(recruit, packet.target);
+            strategic.setStrategicFirePos(packet.targetBlock);
             strategic.setShouldStrategicFire(true);
             ranged++;
         }
