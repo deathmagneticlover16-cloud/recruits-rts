@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.24.2-server.1
+Compact bombardment area and persistent Fire At Will
+
+- Strategic fire now covers a compact 3.25-block circular area around the exact cursor point. One archer retains the centre while the rest receive stable, center-weighted points across the disk, preventing both a single impact line and the previous rim-heavy pattern.
+- Fire At Will is now maintained server-side instead of relying on a one-tick ranged flag. Stationary ranged recruits retain the nearest valid visible target, keep their ranged weapon drawn and reacquire once per second when their target dies or a closer threat enters range.
+- Added a separate passive-fire target lease. Formation discipline no longer deletes Fire At Will targets on the following tick, while movement orders still clear passive targets and retain full formation movement authority.
+- Stationary ranged formations turn toward their leased missile target at bow range; melee facing remains restricted to immediate engagement distance.
+- Network protocol remains rts-camera-164 because packet registration and wire formats are unchanged.
+- Source version and packaging references are 0.24.2-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.1-server.1
 Strategic-fire cursor and arc correction
 

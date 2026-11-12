@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class RecruitRoutingMixin {
     @Inject(method = "searchForTargets", at = @At("HEAD"), cancellable = true, remap = false)
     private void rts$keepFormationTarget(CallbackInfo ci) {
-        if (ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager.ownsTarget(
+        if (ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager.ownsControlledTarget(
                 (AbstractRecruitEntity) (Object) this)) ci.cancel();
     }
     @Inject(method = {"searchForTargets", "updateGroup", "applyMoralEffects", "doNoPaymentAction"},

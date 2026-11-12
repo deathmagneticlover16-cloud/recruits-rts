@@ -543,6 +543,7 @@ public final class RTSMovementBoostManager {
             // the initial command clears targets. During a deliberate RTS manoeuvre the
             // movement order wins; the underlying aggression state itself is untouched.
             for (AbstractRecruitEntity recruit : alive) {
+                TacticalCombatManager.clearAutomaticTarget(recruit);
                 if (recruit.getTarget() != null) {
                     recruit.setTarget(null);
                 }

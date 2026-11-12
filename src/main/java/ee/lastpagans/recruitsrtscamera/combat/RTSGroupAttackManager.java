@@ -179,6 +179,7 @@ public final class RTSGroupAttackManager {
         FormationRuntime.haltFormation(groupId);
         for (AbstractRecruitEntity recruit : recruits) {
             if (recruit == null || !recruit.isAlive()) continue;
+            TacticalCombatManager.clearAutomaticTarget(recruit);
             recruit.setTarget(null);
             recruit.setShouldMovePos(false);
             recruit.clearMovePos();

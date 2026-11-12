@@ -379,8 +379,8 @@ require(formation, "if (slotError > cohesionDistance * cohesionDistance) laggard
         "terrain elevation differences must not count as formation insubordination")
 require(formation, "elevations.get((elevations.size() - 1) / 2)",
         "new routes must start on an occupied median elevation rather than averaged air")
-require(formation, "!TacticalCombatManager.ownsTarget(recruit) && recruit.getTarget() != null",
-        "formation members must not swing at autonomous targets from locked slots")
+require(formation, "!TacticalCombatManager.ownsControlledTarget(recruit) && recruit.getTarget() != null",
+        "formation members must reject unmanaged targets while retaining leased Fire At Will targets")
 require(cavalry_combat, "MOUNT_HEALTH_BONUS = 0.75D", "managed recruited mounts need extra health")
 require(rumble, "riders * speed * emphasis / 15.0D", "rumble gain must use the reduced riders x speed scale")
 require(rumble, "(wedge ? 1.15D : 1.0D) * (charging ? 1.15D : 1.0D)",
@@ -540,8 +540,8 @@ require(formation, "TacticalPathfinder.nearestFormationStandable(level, represen
         "replacement route seeds must not fall through an averaged centre into a cave")
 require(formation, "state.cohesionScale = old.cohesionScale",
         "replacement orders must preserve their current eased formation pace")
-require(formation, "faceNearbyTarget = !travelling && TacticalCombatManager.ownsTarget(recruit)",
-        "stationary formation melee must turn into its explicit nearby target")
+require(formation, "faceNearbyTarget = !travelling && TacticalCombatManager.ownsControlledTarget(recruit)",
+        "stationary formations must turn into explicit melee and leased ranged targets")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/TranslateGroupsPacket.java"),
         "RTSMovementBoostManager.registerHastyMove", "Alt-drag translation must default to run")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/FrontageGroupsPacket.java"),
@@ -798,17 +798,20 @@ for mapping in ("TOGGLE", "CLEAR", "MOVEMENT_PACE", "SELECTION_GROUP", "ROTATE",
                 "STRATEGIC_FIRE", "HOLD_FIRE", "FIRE_AT_WILL", "CEASE_FIRE", "ROUTE_MODE", "COMMIT_ROUTE",
                 "RESET_ROUTE", "HALT", "CAMERA_UP", "CAMERA_DOWN", "SHOW_PLANNED_ORDERS"):
     require(keys, "event.register(" + mapping + ")", "every RTS hotkey must remain configurable: " + mapping)
-require(strategic_fire, "BOMBARDMENT_RADIUS = 6.0D", "strategic fire needs one authoritative area radius")
+require(strategic_fire, "BOMBARDMENT_RADIUS = 3.25D", "strategic fire needs one compact authoritative area radius")
 require(strategic_fire, "BallisticArc.verticalWithDrag(",
         "strategic arrows must use drag-aware vertical pitch correction")
 require(strategic_fire, "arrow.setDeltaMovement(current.x, vertical, current.z)",
         "strategic correction must preserve native horizontal shot distribution")
-forbid(strategic_fire, "Math.sqrt((index + 0.5D)",
-       "RTS must not distribute strategic arrows around an artificial disk")
+require(strategic_fire, "index == 0 ? center : diskPoint", "one strategic arrow must retain the cursor centre")
+require(strategic_fire, "unit(first) * BOMBARDMENT_RADIUS",
+        "strategic fire must use a center-weighted disk instead of a rim")
 require(strategic_packet, "buffer.writeDouble(packet.target.x)",
         "strategic fire must transmit the exact sub-block cursor intersection")
-require(strategic_packet, "strategic.setStrategicFirePos(packet.targetBlock)",
-        "native strategic fire must retain its original single target distribution")
+require(strategic_packet, "StrategicFireManager.assignArea(",
+        "strategic fire must assign its compact circular bombardment area")
+require(strategic_packet, "TacticalCombatManager.clearAutomaticTarget(recruit)",
+        "strategic fire must replace passive Fire At Will targeting")
 require(controller, "MC.getWindow().getScreenWidth()",
         "cursor rays must use GLFW logical window width instead of framebuffer width")
 require(controller, "new ArrayList<>(SELECTED_GROUPS), target, exactTarget",
@@ -817,6 +820,14 @@ forbid(strategic_packet, "settings.holdFire() ||", "Fire At Will off must not re
 require(tactical, "s.holdFire() && !explicitFireOrder(recruit)",
         "Fire At Will off must still allow explicit ranged orders")
 require(tactical, "nearestAutomaticTarget", "Fire At Will must prefer the closest valid ranged target")
+require(tactical, "AUTOMATIC_TARGETS", "Fire At Will targets need a persistent passive lease")
+require(tactical, "recruit.tickCount % 20", "Fire At Will must refresh targets once per second")
+require(attack, "TacticalCombatManager.clearAutomaticTarget(recruit)",
+        "direct attack orders must replace passive Fire At Will targeting")
+require(formation, "TacticalCombatManager.ownsControlledTarget(recruit)",
+        "formation discipline must retain passive Fire At Will targets")
+require(movement, "TacticalCombatManager.clearAutomaticTarget(recruit)",
+        "movement orders must clear passive ranged targets")
 require(fire_packet, "case CEASE_FIRE", "Cease Fire must be a distinct server-authoritative command")
 require(fire_packet, "ThrowableWeaponManager.cancel(recruit)", "Cease Fire must cancel prepared throws")
 require(controller, "System.currentTimeMillis() + 1500L", "the red bombardment disk must flash for 1.5 seconds")
@@ -826,8 +837,8 @@ require(world_renderer, "slot.position().add(0.0D, 0.12D", "ground circles must 
 require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
         "distance fog must remain removed")
 forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive button must remain removed")
-require(source("gradle.properties"), "mod_version=0.24.1-server.1", "semantic version must be updated")
-require(controller, "0.24.1-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.1-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.2-server.1", "semantic version must be updated")
+require(controller, "0.24.2-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.2-server.1.jar", "build helper version must be updated")
 
-print("0.24.1-server.1 source contracts passed")
+print("0.24.2-server.1 source contracts passed")

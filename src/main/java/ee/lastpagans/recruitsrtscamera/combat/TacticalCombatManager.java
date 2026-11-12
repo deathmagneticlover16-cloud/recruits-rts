@@ -34,11 +34,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID)
 public final class TacticalCombatManager {
     private static final Map<UUID, Lease> LOCKS = new ConcurrentHashMap<>();
+    private static final Map<UUID, AutomaticTarget> AUTOMATIC_TARGETS = new ConcurrentHashMap<>();
     private static final UUID CHARGE_SPEED = UUID.fromString("e238b2c5-1c46-4aef-83de-e2cf59a920ee");
     public static final int CHARGE_ORDER_TICKS = 20 * 30;
     private static final Map<UUID, ShockWindow> LAST_CHARGE_SHOCK = new HashMap<>();
     private TacticalCombatManager() {}
     private record Lease(AbstractRecruitEntity recruit, UUID group, LivingEntity target, long expires) {}
+    private record AutomaticTarget(LivingEntity target, long expires) {}
 
     public static TacticalSettings settings(AbstractRecruitEntity recruit) {
         return recruit.level() instanceof ServerLevel level && recruit.getGroup() != null
@@ -55,6 +57,7 @@ public final class TacticalCombatManager {
     }
     public static void lock(AbstractRecruitEntity recruit, UUID group, LivingEntity target) {
         if (RoutedGroupManager.isRouting(recruit)) return;
+        clearAutomaticTarget(recruit);
         LOCKS.put(recruit.getUUID(), new Lease(recruit, group, target, recruit.level().getGameTime() + 20));
         if (target != null && settings(recruit).skirmish() && ranged(recruit)
                 && !(recruit instanceof SiegeEngineerEntity)) SkirmishController.attach(recruit);
@@ -62,6 +65,27 @@ public final class TacticalCombatManager {
     public static boolean ownsTarget(AbstractRecruitEntity recruit) {
         Lease lease = LOCKS.get(recruit.getUUID());
         return lease != null && lease.expires >= recruit.level().getGameTime() && !RoutedGroupManager.isRouting(recruit);
+    }
+    public static boolean ownsControlledTarget(AbstractRecruitEntity recruit) {
+        return ownsTarget(recruit) || ownsAutomaticTarget(recruit);
+    }
+    public static boolean ownsAutomaticTarget(AbstractRecruitEntity recruit) {
+        return automaticTarget(recruit) != null;
+    }
+    public static void clearAutomaticTarget(AbstractRecruitEntity recruit) {
+        if (recruit != null) AUTOMATIC_TARGETS.remove(recruit.getUUID());
+    }
+    private static LivingEntity automaticTarget(AbstractRecruitEntity recruit) {
+        if (recruit == null) return null;
+        AutomaticTarget lease = AUTOMATIC_TARGETS.get(recruit.getUUID());
+        if (lease == null) return null;
+        LivingEntity target = lease.target;
+        if (lease.expires < recruit.level().getGameTime() || target == null || !target.isAlive()
+                || target.isRemoved() || target.level() != recruit.level() || recruit.isAlliedTo(target)) {
+            AUTOMATIC_TARGETS.remove(recruit.getUUID(), lease);
+            return null;
+        }
+        return target;
     }
     public static LivingEntity assignedTarget(AbstractRecruitEntity recruit) {
         Lease lease = LOCKS.get(recruit.getUUID());
@@ -96,12 +120,23 @@ public final class TacticalCombatManager {
                             || stack.getItem() instanceof AxeItem || stack.getItem() instanceof TridentItem
                             || stack.is(RTSTags.THROWABLE_WEAPONS));
                 }
-            } else if (s.combat() == TacticalSettings.CombatMode.RANGED) {
+            } else if (!s.holdFire()) {
                 recruit.setShouldRanged(true);
             }
             if (s.holdFire() && !explicitFireOrder(recruit)) {
                 recruit.setShouldRanged(false);
                 if (recruit.isUsingItem() && ranged.getWeaponType().test(recruit.getUseItem())) recruit.stopUsingItem();
+            }
+            boolean passiveFire = !s.holdFire() && s.combat() != TacticalSettings.CombatMode.MELEE
+                    && !ownsTarget(recruit) && !StrategicFireManager.hasOrder(recruit);
+            Vec3 formationVelocity = RecruitRuntimeRegistry.brain(recruit).desiredVelocity();
+            boolean stationary = formationVelocity == null
+                    || formationVelocity.x * formationVelocity.x + formationVelocity.z * formationVelocity.z < 0.0025D;
+            if (passiveFire && stationary
+                    && recruit.tickCount % 20 == Math.floorMod(recruit.getId(), 20)) {
+                maintainAutomaticTarget(recruit);
+            } else if (!passiveFire || !stationary) {
+                clearAutomaticTarget(recruit);
             }
         }
         var speed = recruit.getAttribute(Attributes.MOVEMENT_SPEED);
@@ -185,9 +220,17 @@ public final class TacticalCombatManager {
         } else if (recruit instanceof IRangedRecruit && settings(recruit).holdFire()) {
             // Hold Fire controls automatic acquisition only. Explicit group attacks and
             // strategic bombardments remain authorized through their own server orders.
+            clearAutomaticTarget(recruit);
             event.setNewTarget(null);
+        } else if (recruit instanceof IRangedRecruit && ownsAutomaticTarget(recruit)) {
+            event.setNewTarget(automaticTarget(recruit));
         } else if (recruit instanceof IRangedRecruit && event.getNewTarget() != null) {
-            event.setNewTarget(nearestAutomaticTarget(recruit, event.getNewTarget()));
+            LivingEntity nearest = nearestAutomaticTarget(recruit);
+            if (nearest != null) {
+                AUTOMATIC_TARGETS.put(recruit.getUUID(), new AutomaticTarget(
+                        nearest, recruit.level().getGameTime() + 30L));
+            }
+            event.setNewTarget(nearest);
         }
     }
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -206,8 +249,20 @@ public final class TacticalCombatManager {
         }
     }
 
-    private static LivingEntity nearestAutomaticTarget(AbstractRecruitEntity recruit, LivingEntity proposed) {
-        if (!(recruit.level() instanceof ServerLevel level) || proposed == null) return proposed;
+    private static void maintainAutomaticTarget(AbstractRecruitEntity recruit) {
+        LivingEntity nearest = nearestAutomaticTarget(recruit);
+        if (nearest == null) {
+            clearAutomaticTarget(recruit);
+            if (recruit.getTarget() != null) recruit.setTarget(null);
+            return;
+        }
+        AUTOMATIC_TARGETS.put(recruit.getUUID(), new AutomaticTarget(
+                nearest, recruit.level().getGameTime() + 30L));
+        if (recruit.getTarget() != nearest) recruit.setTarget(nearest);
+    }
+
+    private static LivingEntity nearestAutomaticTarget(AbstractRecruitEntity recruit) {
+        if (!(recruit.level() instanceof ServerLevel level)) return null;
         double range = Math.max(8.0D, Math.min(48.0D, recruit.getAttributeValue(Attributes.FOLLOW_RANGE)));
         LivingEntity nearest = null;
         double nearestDistance = range * range;
@@ -241,11 +296,13 @@ public final class TacticalCombatManager {
         if (!event.getLevel().isClientSide && event.getEntity() instanceof AbstractRecruitEntity recruit) {
             Lease lease = LOCKS.get(recruit.getUUID());
             if (lease != null) remove(lease);
+            clearAutomaticTarget(recruit);
         }
     }
     @SubscribeEvent
     public static void onStop(ServerStoppedEvent event) {
         LOCKS.clear();
+        AUTOMATIC_TARGETS.clear();
         LAST_CHARGE_SHOCK.clear();
         SkirmishController.clear();
     }

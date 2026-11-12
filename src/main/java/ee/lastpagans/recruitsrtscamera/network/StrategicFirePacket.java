@@ -117,12 +117,16 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos targetBlock, Vec
                 bombardiers.add(recruit);
             }
         }
+        Map<UUID, Vec3> aimPoints = StrategicFireManager.assignArea(
+                bombardiers, packet.target, sender.serverLevel().getGameTime());
         for (AbstractRecruitEntity recruit : bombardiers) {
             if (!(recruit instanceof IStrategicFire strategic)) continue;
+            ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager.clearAutomaticTarget(recruit);
             recruit.setTarget(null);
             recruit.setShouldRanged(true);
-            StrategicFireManager.assignExact(recruit, packet.target);
-            strategic.setStrategicFirePos(packet.targetBlock);
+            Vec3 aim = aimPoints.getOrDefault(recruit.getUUID(), packet.target);
+            strategic.setStrategicFirePos(new BlockPos(
+                    net.minecraft.util.Mth.floor(aim.x), packet.targetBlock.getY(), net.minecraft.util.Mth.floor(aim.z)));
             strategic.setShouldStrategicFire(true);
             ranged++;
         }

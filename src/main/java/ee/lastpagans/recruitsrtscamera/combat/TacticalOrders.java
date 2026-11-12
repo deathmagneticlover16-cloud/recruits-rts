@@ -109,6 +109,7 @@ public final class TacticalOrders {
         FormationRuntime.releaseForAttack(sender, id);
         FormationService.releaseCustomForAttack(sender, id, members);
         for (var recruit : members) {
+            TacticalCombatManager.clearAutomaticTarget(recruit);
             recruit.getNavigation().stop(); recruit.clearMovePos(); recruit.clearHoldPos();
             recruit.setShouldMovePos(false); recruit.setShouldHoldPos(false);
             recruit.setShouldFollow(false); recruit.setIsFollowing(false); recruit.setTarget(null);

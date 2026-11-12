@@ -515,7 +515,8 @@ public final class NativeFormationController {
             // goals are suppressed. Without an explicit RTS combat lease that produces a
             // stationary swing from the slot with formation-owned facing. Hold formation
             // discipline until the commander issues an attack order.
-            if (!TacticalCombatManager.ownsTarget(recruit) && recruit.getTarget() != null) {
+            if (travelling) TacticalCombatManager.clearAutomaticTarget(recruit);
+            if (!TacticalCombatManager.ownsControlledTarget(recruit) && recruit.getTarget() != null) {
                 recruit.setTarget(null);
             }
             Mob mover = controlledMob(recruit);
@@ -553,9 +554,10 @@ public final class NativeFormationController {
             // Every moving body follows the route tangent. The authored slot stencil stays
             // fixed, so a route bend cannot throw outside members across the formation.
             LivingEntity combatTarget = recruit.getTarget();
-            boolean faceNearbyTarget = !travelling && TacticalCombatManager.ownsTarget(recruit)
+            boolean faceNearbyTarget = !travelling && TacticalCombatManager.ownsControlledTarget(recruit)
                     && combatTarget != null && combatTarget.isAlive() && !combatTarget.isRemoved()
-                    && recruit.distanceToSqr(combatTarget) <= 4.5D * 4.5D;
+                    && recruit.distanceToSqr(combatTarget) <= (TacticalCombatManager.ranged(recruit)
+                    ? 48.0D * 48.0D : 4.5D * 4.5D);
             float controlledHeading;
             if (faceNearbyTarget) {
                 // Formation ownership must not leave an engaged recruit staring past an

@@ -104,6 +104,7 @@ public record FireControlPacket(List<UUID> groupIds, Mode mode) {
                     if (recruit instanceof IStrategicFire strategic) strategic.setShouldStrategicFire(false);
                     ee.lastpagans.recruitsrtscamera.combat.StrategicFireManager.clear(recruit);
                     ee.lastpagans.recruitsrtscamera.combat.ThrowableWeaponManager.cancel(recruit);
+                    TacticalCombatManager.clearAutomaticTarget(recruit);
                     recruit.setShouldRanged(false);
                     recruit.setTarget(null);
                     recruit.stopUsingItem();
@@ -111,6 +112,7 @@ public record FireControlPacket(List<UUID> groupIds, Mode mode) {
                     continue;
                 }
                 boolean explicit = TacticalCombatManager.explicitFireOrder(recruit);
+                if (packet.mode == Mode.HOLD_FIRE) TacticalCombatManager.clearAutomaticTarget(recruit);
                 if (!explicit && recruit instanceof IStrategicFire strategic) strategic.setShouldStrategicFire(false);
                 recruit.setShouldRanged(explicit || packet.mode == Mode.FIRE_AT_WILL
                         && data.settings(recruit.getGroup()).combat() != ee.lastpagans.recruitsrtscamera.combat.TacticalSettings.CombatMode.MELEE);
