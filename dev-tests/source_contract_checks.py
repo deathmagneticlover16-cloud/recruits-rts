@@ -850,8 +850,16 @@ require(strategic_packet, "TacticalCombatManager.clearAutomaticTarget(recruit)",
         "strategic fire must replace passive Fire At Will targeting")
 require(controller, "MC.getWindow().getScreenWidth()",
         "cursor rays must use GLFW logical window width instead of framebuffer width")
-require(controller, "MC.gameRenderer.getFov(camera, MC.getFrameTime(), true)",
+require(controller, "recruitsRts$invokeGetFov(camera, MC.getFrameTime(), true)",
         "cursor rays must use the renderer's effective FOV at every camera angle")
+forbid(controller, "MC.gameRenderer.getFov(",
+       "Minecraft 1.20.1 keeps GameRenderer.getFov private")
+game_renderer_access = source(
+    "src/main/java/ee/lastpagans/recruitsrtscamera/mixin/GameRendererAccess.java")
+require(game_renderer_access, '@Invoker("getFov")',
+        "Minecraft 1.20.1 exposes effective FOV to RTS through a client mixin invoker")
+require(source("src/main/resources/recruits_rts_camera.mixins.json"), '"GameRendererAccess"',
+        "the effective-FOV invoker must be registered as a client-only mixin")
 for packet_path in ("MoveGroupsPacket.java", "SlowMoveGroupsPacket.java", "HastyMoveGroupsPacket.java"):
     packet_source = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/" + packet_path)
     require(packet_source, "buffer.writeDouble(packet.target.x)",

@@ -24,6 +24,7 @@ import ee.lastpagans.recruitsrtscamera.network.CustomFormationPacket;
 import ee.lastpagans.recruitsrtscamera.network.FrontageGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.HastyMoveGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.SlowMoveGroupsPacket;
+import ee.lastpagans.recruitsrtscamera.mixin.GameRendererAccess;
 import ee.lastpagans.recruitsrtscamera.network.FormationSpacingPacket;
 import ee.lastpagans.recruitsrtscamera.network.HaltGroupsPacket;
 import ee.lastpagans.recruitsrtscamera.network.RouteGroupsPacket;
@@ -2233,7 +2234,8 @@ public final class RTSCameraController {
         // Use the effective renderer FOV (including sprint/zoom effects), not merely the
         // options slider. Projection and unprojection must share the same camera lens or
         // the world hit drifts forward from the visible cursor as pitch/FOV changes.
-        double fov = MC.gameRenderer.getFov(camera, MC.getFrameTime(), true);
+        double fov = ((GameRendererAccess) MC.gameRenderer)
+                .recruitsRts$invokeGetFov(camera, MC.getFrameTime(), true);
         return new ScreenProjection.CameraSpec(
                 position.x,
                 position.y,

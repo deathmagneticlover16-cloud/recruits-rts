@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_17",
   "mixins": ["MobGoalAccess", "RecruitRoutingMixin", "RecruitShieldMixin", "RecruitGoalGateMixin", "HorsemanGoalGateMixin", "NomadGoalGateMixin", "FormationUtilsMixin", "NativeOrderFormationReleaseMixin", "NativeFaceCommandMixin", "RTSMountEntityPushMixin", "BowVolleyMixin", "CrossbowVolleyMixin", "NomadVolleyMixin"],
   "client": [
+    "GameRendererAccess",
     "KeyMappingMixin",
     "KeyboardHandlerMixin",
     "EntityTeamColorMixin",
