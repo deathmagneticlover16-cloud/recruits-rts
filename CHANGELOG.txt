@@ -1,3 +1,20 @@
+Recruits: RTS Camera 0.24.3-server.1
+Combat orders, continuous manoeuvre and battlefield presentation
+
+- Fixed formation bow volleys so every Bowman reads the same release window; the first archer can no longer advance the shared clock before the rest fire. Directly ordered Bowmen and Crossbowmen hold their formation slots instead of walking into melee while their ranged target is valid.
+- Attack and charge clicks now commit on RMB press and terminate the terrain gesture immediately. A double-RMB sends attack then charge without either release emitting a nearby move order. Infantry now releases from its approach formation at contact and executes melee instead of stalling with target locks.
+- Ordinary replacement moves retain live slot assignments, member controllers, formation pace and safe momentum while the new obstacle-aware route is calculated. Hard turns use a smooth nonzero deceleration curve and faster body alignment, reducing sideways sliding without introducing a stopped animation frame.
+- Reduced Run/Hasty pace to 85% of its previous value. Laggards now receive only a small bounded catch-up allowance; mounted velocity math cannot amplify catch-up into a rubber-band surge.
+- Movement packets now preserve the exact sub-block terrain intersection instead of snapping the command to a block centre. Cursor unprojection uses Minecraft's effective rendered FOV, keeping orders under the visible cursor across camera angles and FOV effects.
+- Slot previews and normal hover/selection circles resolve all four corners against real collision surfaces, including snow layers, rather than using a fixed floating offset.
+- Replaced the flat smoke sprite with an irregular alpha-masked black-powder cloud. Smoke is darker and more opaque when stacked, while persistent clouds are capped at 256 and share a 480-particle-per-tick server/network budget. Colonial Cannons compatibility remains intact.
+- `/recruitsmoraleitem add <namespace:item>` now consumes the complete terminal resource location, fixing Brigadier's colon/trailing-data error. Recruit commanders are included in the Space+hover blue morale-radius preview.
+- Only `darkagesarmory:steel_javelin` can enter RTS throwing logic, even if another datapack extends the throwable tag. Antique spears are no longer treated as thrown ammunition.
+- Recruits may carry at most 38 food pieces; excess food is dropped safely instead of deleted. Food encumbrance now uses both nutrition and actual saturation, sampled in the existing staggered once-per-second inventory pass.
+- Cleared visibility caches at server shutdown, hard-capped visibility pairs at 8,192 and terrain revision memory at 65,536 regions per dimension, and bounded smoke cloud/particle work to prevent long-session memory and packet growth. Existing spatial indexes, path jobs, combat leases and troop-stat caches were reviewed for lifecycle cleanup.
+- Network protocol is rts-camera-165 because Walk, Run and Hasty movement packets now transmit exact Vec3 terrain intersections.
+- Source version and packaging references are 0.24.3-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.2-server.1
 Compact bombardment area and persistent Fire At Will
 

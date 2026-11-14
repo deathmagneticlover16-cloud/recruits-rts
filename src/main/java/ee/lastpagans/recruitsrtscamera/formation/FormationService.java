@@ -52,6 +52,14 @@ public final class FormationService {
             return CustomFormationExecutor.moveRemembered(sender, groupId, recruits, destination);
         }
 
+        // An ordinary replacement destination does not change formation geometry. Keep
+        // the live slot assignment, member controllers and travel momentum instead of
+        // releasing and rebuilding the entire runtime on every click.
+        long liveMembers = recruits == null ? 0L : recruits.stream()
+                .filter(recruit -> recruit != null && recruit.isAlive() && !recruit.isRemoved()).count();
+        if (FormationRuntime.formationMemberCount(groupId) == liveMembers
+                && FormationRuntime.retargetFormation(groupId, destination)) return true;
+
         RTSFormationSavedData.GroupState memory = state(level, groupId);
         FormationKind kind = memory != null ? memory.active() : activeKind(level, groupId);
         double spacing = memory != null ? memory.spacing() : 1.0D;

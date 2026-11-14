@@ -12,6 +12,9 @@ import ee.lastpagans.recruitsrtscamera.config.RTSClientConfig;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
@@ -94,16 +97,16 @@ public final class GroundSelectionMarkerRenderer {
             Entity controlled = recruit.getVehicle() != null ? recruit.getVehicle() : recruit;
             double x = controlled.getX();
             double z = controlled.getZ();
-            double y = controlled.getBoundingBox().minY + Y_OFFSET;
+            double referenceY = controlled.getBoundingBox().minY;
             float half = Math.max(HALF_SIZE, (float) controlled.getBbWidth() * 0.58F);
             float v0 = isSelected ? 0.5F : 0.0F;
             float v1 = isSelected ? 1.0F : 0.5F;
             int alpha = isSelected ? 205 : 225;
 
-            vertex(buffer, matrix, x - half, y, z - half, 0.0F, v0, alpha);
-            vertex(buffer, matrix, x - half, y, z + half, 0.0F, v1, alpha);
-            vertex(buffer, matrix, x + half, y, z + half, 1.0F, v1, alpha);
-            vertex(buffer, matrix, x + half, y, z - half, 1.0F, v0, alpha);
+            vertex(buffer, matrix, x - half, surfaceY(x - half, z - half, referenceY), z - half, 0.0F, v0, alpha);
+            vertex(buffer, matrix, x - half, surfaceY(x - half, z + half, referenceY), z + half, 0.0F, v1, alpha);
+            vertex(buffer, matrix, x + half, surfaceY(x + half, z + half, referenceY), z + half, 1.0F, v1, alpha);
+            vertex(buffer, matrix, x + half, surfaceY(x + half, z - half, referenceY), z - half, 1.0F, v0, alpha);
         }
 
         Tesselator.getInstance().end();
@@ -112,6 +115,21 @@ public final class GroundSelectionMarkerRenderer {
         RenderSystem.depthMask(true);
         RenderSystem.disableBlend();
         poseStack.popPose();
+    }
+
+    private static double surfaceY(double x, double z, double referenceY) {
+        int baseY = Mth.floor(referenceY);
+        double highest = Double.NEGATIVE_INFINITY;
+        for (int y = baseY + 1; y >= baseY - 2; y--) {
+            BlockPos pos = new BlockPos(Mth.floor(x), y, Mth.floor(z));
+            var shape = MC.level.getBlockState(pos).getCollisionShape(MC.level, pos);
+            if (shape.isEmpty()) continue;
+            double candidate = y + shape.max(Direction.Axis.Y);
+            if (candidate <= referenceY + 0.42D && candidate >= referenceY - 1.50D) {
+                highest = Math.max(highest, candidate);
+            }
+        }
+        return (Double.isFinite(highest) ? highest : referenceY) + Y_OFFSET;
     }
 
     private static void vertex(

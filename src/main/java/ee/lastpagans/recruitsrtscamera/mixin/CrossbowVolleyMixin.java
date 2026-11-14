@@ -3,6 +3,7 @@ package ee.lastpagans.recruitsrtscamera.mixin;
 import com.talhanation.recruits.entities.CrossBowmanEntity;
 import com.talhanation.recruits.entities.ai.RecruitRangedCrossbowAttackGoal;
 import ee.lastpagans.recruitsrtscamera.combat.FormationVolleyManager;
+import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
 import net.minecraft.world.item.CrossbowItem;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Final;
@@ -19,6 +20,18 @@ public abstract class CrossbowVolleyMixin {
     @Inject(method = "m_8037_()V", at = @At("HEAD"), cancellable = true, remap = false)
     private void rts$holdLoadedCrossbowForVolley(CallbackInfo info) {
         if (CrossbowItem.isCharged(crossBowman.getMainHandItem())
-                && !FormationVolleyManager.crossbowMayRelease(crossBowman)) info.cancel();
+                && !FormationVolleyManager.crossbowMayRelease(crossBowman)) {
+            if (crossBowman.holdFormation && TacticalCombatManager.ownsTarget(crossBowman)) {
+                crossBowman.getNavigation().stop();
+            }
+            info.cancel();
+        }
+    }
+
+    @Inject(method = "m_8037_()V", at = @At("TAIL"), remap = false)
+    private void rts$holdRangedFormationSlot(CallbackInfo info) {
+        if (crossBowman.holdFormation && TacticalCombatManager.ownsTarget(crossBowman)) {
+            crossBowman.getNavigation().stop();
+        }
     }
 }

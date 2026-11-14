@@ -7,6 +7,7 @@ import com.talhanation.recruits.entities.NomadEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.compat.TroopEquipmentCompat;
 import ee.lastpagans.recruitsrtscamera.combat.RangedWeaponEligibility;
+import ee.lastpagans.recruitsrtscamera.combat.ThrowableWeaponManager;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.formation.FormationKind;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
@@ -220,7 +221,7 @@ public final class TroopStatService {
         // Bowman equipment training includes bundled javelins. Ordinary infantry can
         // carry a few, but using every inventory slot as a pila cart rapidly overloads
         // them; a Bowman can sustain a real missile-unit ammunition reserve.
-        if (stack.is(RTSTags.THROWABLE_WEAPONS)) {
+        if (ThrowableWeaponManager.isSupportedThrowable(stack)) {
             return count * (recruit instanceof BowmanEntity ? 0.22D : 2.75D);
         }
         double integratedWeight = TroopEquipmentCompat.explicitEquipmentWeight(stack);
@@ -238,10 +239,12 @@ public final class TroopStatService {
         if (item instanceof ProjectileWeaponItem) return count * 4.0D;
         if (item instanceof PotionItem) return count * 0.8D;
         if (item.getFoodProperties() != null) {
-            // Food is campaign cargo, not weightless pocket inventory. Eight ordinary
-            // rations remain manageable, while one full stack of bread alone now exceeds
-            // comfortable foot capacity and strongly compounds armor/weapon encumbrance.
-            return count * (0.40D + item.getFoodProperties().getNutrition() * 0.06D);
+            double nutrition = item.getFoodProperties().getNutrition();
+            double saturation = nutrition * item.getFoodProperties().getSaturationModifier() * 2.0D;
+            // Weight nutritious, sustaining rations more heavily without performing any
+            // recipe lookup. Eight remain practical; the 38-piece hard carry limit is a
+            // substantial campaign load for bread and even heavier for cooked meat.
+            return count * (0.30D + nutrition * 0.055D + saturation * 0.045D);
         }
         if (item instanceof BlockItem) return count * 0.18D;
         return count * (stack.getMaxStackSize() <= 1 ? 1.25D : 0.05D);
@@ -249,7 +252,7 @@ public final class TroopStatService {
 
     private static boolean isAmmunition(ItemStack stack) {
         return stack.is(ItemTags.ARROWS) || isNamedAmmunition(stack)
-                || stack.is(RTSTags.THROWABLE_WEAPONS) || TroopEquipmentCompat.isMusketCartridge(stack);
+                || ThrowableWeaponManager.isSupportedThrowable(stack) || TroopEquipmentCompat.isMusketCartridge(stack);
     }
 
     private static boolean isNamedAmmunition(ItemStack stack) {

@@ -29,7 +29,8 @@ public final class BlackPowderSmokeManager {
     private static final String MUSKET_BULLET = "ewewukek.musketmod.BulletEntity";
     private static final String CANNONBALL = "com.camdenscottc.colonialcannons.projectile.CannonballEntity";
     private static final double SCALE = 0.85D;
-    private static final int MAX_CLOUDS = 512;
+    private static final int MAX_CLOUDS = 256;
+    private static final int MAX_PARTICLES_PER_SERVER_TICK = 480;
     private static final Map<String, ShotStamp> RECENT_SHOTS = new HashMap<>();
     private static final Map<java.util.UUID, Long> RECENT_IMPACTS = new HashMap<>();
     private static final List<Cloud> CLOUDS = new ArrayList<>();
@@ -85,6 +86,7 @@ public final class BlackPowderSmokeManager {
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || CLOUDS.isEmpty()) return;
+        int particleBudget = MAX_PARTICLES_PER_SERVER_TICK;
         for (int i = CLOUDS.size() - 1; i >= 0; i--) {
             Cloud cloud = CLOUDS.get(i);
             if (++cloud.age >= cloud.life || cloud.level.getServer() == null) {
@@ -107,9 +109,13 @@ public final class BlackPowderSmokeManager {
                 double remaining = Math.max(0.0D, 1.0D - (progress - 0.58D) / 0.42D);
                 count = Math.max(1, (int) Math.round(count * (0.45D + 0.55D * remaining)));
             }
-            lingering(cloud.level, cloud.position, count,
-                    cloud.spreadX + expansion, cloud.spreadY + expansion * 0.46D,
-                    cloud.spreadZ + expansion, 0.0035D + (1.0D - progress) * 0.0035D);
+            if (particleBudget > 0) {
+                int emitted = Math.min(count, particleBudget);
+                lingering(cloud.level, cloud.position, emitted,
+                        cloud.spreadX + expansion, cloud.spreadY + expansion * 0.46D,
+                        cloud.spreadZ + expansion, 0.0035D + (1.0D - progress) * 0.0035D);
+                particleBudget -= emitted;
+            }
         }
     }
 

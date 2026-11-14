@@ -11,6 +11,8 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
@@ -240,13 +242,30 @@ public final class TacticalWorldRenderer {
     private static SlotMesh buildSlotMesh(TacticalRenderScene.SlotDecal slot) {
         double radians = Math.toRadians(slot.yaw());
         double half = slot.halfSize();
-        // Keep decals above snow layers and shallow modded collision shapes instead of
-        // letting depth fighting erase them at normal Commander camera angles.
-        Vec3 center = slot.position().add(0.0D, 0.12D, 0.0D);
+        Vec3 center = slot.position();
         Vec3 right = new Vec3(Math.cos(radians) * half, 0.0D, Math.sin(radians) * half);
         Vec3 forward = new Vec3(-Math.sin(radians) * half, 0.0D, Math.cos(radians) * half);
-        return new SlotMesh(center.subtract(right).subtract(forward), center.subtract(right).add(forward),
-                center.add(right).add(forward), center.add(right).subtract(forward), slot.color());
+        return new SlotMesh(onSurface(center.subtract(right).subtract(forward), center.y),
+                onSurface(center.subtract(right).add(forward), center.y),
+                onSurface(center.add(right).add(forward), center.y),
+                onSurface(center.add(right).subtract(forward), center.y), slot.color());
+    }
+
+    private static Vec3 onSurface(Vec3 point, double referenceY) {
+        if (MC.level == null) return point.add(0.0D, 0.025D, 0.0D);
+        int baseY = Mth.floor(referenceY);
+        double highest = Double.NEGATIVE_INFINITY;
+        for (int y = baseY + 1; y >= baseY - 2; y--) {
+            BlockPos pos = new BlockPos(Mth.floor(point.x), y, Mth.floor(point.z));
+            var shape = MC.level.getBlockState(pos).getCollisionShape(MC.level, pos);
+            if (shape.isEmpty()) continue;
+            double candidate = y + shape.max(Direction.Axis.Y);
+            if (candidate <= referenceY + 0.42D && candidate >= referenceY - 1.50D) {
+                highest = Math.max(highest, candidate);
+            }
+        }
+        double y = Double.isFinite(highest) ? highest + 0.018D : referenceY + 0.025D;
+        return new Vec3(point.x, y, point.z);
     }
 
     private static void drawQuad(BufferBuilder buffer, Matrix4f matrix, Quad quad, int color) {

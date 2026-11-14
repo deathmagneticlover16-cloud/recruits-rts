@@ -53,6 +53,7 @@ public final class RTSMovementBoostManager {
     private static final double HASTY_CAVALRY_NAV_SPEED = 1.62D;
     private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 0.25D;
     private static final double MAX_CAVALRY_MOUNT_ATTRIBUTE_BONUS = 0.25D;
+    private static final double RUN_SPEED_SCALE = 0.85D;
 
     private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.15D;   // ~0.36 total
 
@@ -341,12 +342,14 @@ public final class RTSMovementBoostManager {
                         mountAttributeAmount = REGULAR_CAVALRY_MOUNT_MULTIPLIER;
                     }
                     case HASTY_INFANTRY -> {
-                        navigationSpeed = HASTY_INFANTRY_SPEED * state.runnerFactor;
-                        selfAttributeAmount = HASTY_INFANTRY_ATTRIBUTE_MULTIPLIER + (state.runnerFactor - 1.0D);
+                        navigationSpeed = HASTY_INFANTRY_SPEED * RUN_SPEED_SCALE * state.runnerFactor;
+                        selfAttributeAmount = (1.0D + HASTY_INFANTRY_ATTRIBUTE_MULTIPLIER
+                                + (state.runnerFactor - 1.0D)) * RUN_SPEED_SCALE - 1.0D;
                     }
                     case HASTY_CAVALRY -> {
-                        navigationSpeed = HASTY_CAVALRY_NAV_SPEED * state.runnerFactor;
-                        mountAttributeAmount = HASTY_CAVALRY_MOUNT_MULTIPLIER + (state.runnerFactor - 1.0D);
+                        navigationSpeed = HASTY_CAVALRY_NAV_SPEED * RUN_SPEED_SCALE * state.runnerFactor;
+                        mountAttributeAmount = (1.0D + HASTY_CAVALRY_MOUNT_MULTIPLIER
+                                + (state.runnerFactor - 1.0D)) * RUN_SPEED_SCALE - 1.0D;
                     }
                     case SLOW_MARCH -> {
                         if (isCavalry(recruit)) {
@@ -823,8 +826,8 @@ public final class RTSMovementBoostManager {
         double step = switch (state.mode) {
             case FORMATION_INFANTRY -> baseStep;
             case FORMATION_CAVALRY -> RTSServerConfig.CAVALRY_FORMATION_SPEED.get();
-            case HASTY_INFANTRY -> baseStep + GROUP_EXTRA_HASTY_INFANTRY;
-            case HASTY_CAVALRY -> RTSServerConfig.CAVALRY_HASTY_SPEED.get();
+            case HASTY_INFANTRY -> (baseStep + GROUP_EXTRA_HASTY_INFANTRY) * RUN_SPEED_SCALE;
+            case HASTY_CAVALRY -> RTSServerConfig.CAVALRY_HASTY_SPEED.get() * RUN_SPEED_SCALE;
             case SLOW_MARCH -> baseStep * SLOW_MARCH_FACTOR;
         };
         boolean cavalryWedge = (state.mode == GroupMode.FORMATION_CAVALRY || state.mode == GroupMode.HASTY_CAVALRY)

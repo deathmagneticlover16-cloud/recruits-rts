@@ -472,11 +472,10 @@ public final class RTSGroupAttackManager {
                     .min(Comparator.comparingDouble(attacker -> attacker.position().distanceToSqr(enemyCenter)))
                     .map(AbstractRecruitEntity::getUUID).orElse(null);
         }
-        if (state.charge && state.approachKind == ApproachKind.INFANTRY) {
-            // Infantry charges keep their ranks through first contact. Target locks are
-            // spread across the hostile frontage while the formation runtime owns both
-            // locomotion and the travel-facing-to-ordered-facing transition.
-        } else if (state.approachKind != ApproachKind.DIRECT) {
+        if (state.approachKind != ApproachKind.DIRECT) {
+            // Both infantry and cavalry keep ranks during the approach, then release at
+            // contact. Keeping an infantry charge formation-owned after arrival left its
+            // members with targets but no combat locomotion, so the charge never happened.
             releaseFormationForCombat(state.sender, state.sourceGroupId, attackers);
         } else {
             faceFormationToward(state.sourceGroupId, attackers, candidates);

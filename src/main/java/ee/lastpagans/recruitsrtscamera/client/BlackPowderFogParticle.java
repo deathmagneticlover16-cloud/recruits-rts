@@ -29,10 +29,12 @@ public final class BlackPowderFogParticle extends TextureSheetParticle {
         this.zd = zSpeed * 0.20D + (random.nextDouble() - 0.5D) * 0.006D;
         this.lifetime = 150 + random.nextInt(100);
         this.quadSize = 2.7F + random.nextFloat() * 2.4F;
-        this.startingAlpha = 0.20F + random.nextFloat() * 0.10F;
+        // Dark, alpha-masked smoke accumulates opacity under normal alpha blending.
+        // The former near-white square looked like a lens when several quads overlapped.
+        this.startingAlpha = 0.30F + random.nextFloat() * 0.14F;
         this.alpha = startingAlpha;
-        float shade = 0.76F + random.nextFloat() * 0.13F;
-        setColor(shade, shade, shade * 0.98F);
+        float shade = 0.50F + random.nextFloat() * 0.16F;
+        setColor(shade * 0.96F, shade * 0.95F, shade * 0.91F);
         this.friction = 0.992F;
         setSpriteFromAge(sprites);
     }

@@ -231,11 +231,11 @@ public final class NativeFormationController {
         State state = STATES.get(groupId);
         if (state == null || destination == null) return false;
         state.destination = destination;
-        // Keep following the already-safe route instead of resetting every member. Once
-        // its published segment is consumed, advanceAlongRoute requests the continuation.
-        if (state.route.points().isEmpty() || state.routeIndex >= state.route.points().size()) {
-            invalidateRoutes(state);
-        }
+        // Replace the route now, but retain the accepted travel tangent while the bounded
+        // search runs. Continuing the old route all the way to its former destination made
+        // replacement orders feel delayed; clearing it without continuity made every horse
+        // visibly stop for one or more ticks.
+        invalidateRoutes(state, true);
         return true;
     }
 
@@ -244,7 +244,7 @@ public final class NativeFormationController {
         State state = STATES.get(groupId);
         if (state == null || destination == null) return false;
         state.destination = destination;
-        invalidateRoutes(state);
+        invalidateRoutes(state, true);
         return true;
     }
 
@@ -471,8 +471,9 @@ public final class NativeFormationController {
             state.cohesionScale += clamp(cohesionTarget - state.cohesionScale, -0.04D, 0.04D);
             // Pace is applied before slots are calculated. Adjusting the centre after this
             // tick made every member chase a forward point and then snap back together.
+            double turnPace = turningPaceScale(state);
             advanceAlongRoute(state, RTSMovementBoostManager.formationCenterStep(state.groupId, CENTER_SPEED)
-                    * state.cohesionScale);
+                    * state.cohesionScale * turnPace);
         } else if (travelling && state.routePending && state.pendingRouteContinuity) {
             // A bounded route job may need several scheduler slices. Turning the shared
             // anchor into Vec3.ZERO during those slices stops every horse on the same
@@ -497,7 +498,7 @@ public final class NativeFormationController {
         if (travelling) {
             float desiredTravelHeading = movementHeading(state);
             if (Math.abs(angleDifference(state.travelHeading, desiredTravelHeading)) > 0.75F) {
-                state.travelHeading = approachHeading(state.travelHeading, desiredTravelHeading, 4.5F);
+                state.travelHeading = approachHeading(state.travelHeading, desiredTravelHeading, 10.0F);
             }
         }
         updateSlotHeading(state);
@@ -536,10 +537,10 @@ public final class NativeFormationController {
             // Cohesion and catch-up are horizontal responsibilities; terrain traversal
             // handles height independently and must not mark an entire group insubordinate.
             double catchUpScale = mountedMember
-                    ? slotError > 4.0D * 4.0D ? 1.06D
-                    : slotError > 0.85D * 0.85D ? 1.03D : 1.0D
-                    : slotError > 4.0D * 4.0D ? 1.12D
-                    : slotError > 1.55D * 1.55D ? 1.07D : 1.0D;
+                    ? slotError > 4.0D * 4.0D ? 1.025D
+                    : slotError > 0.85D * 0.85D ? 1.015D : 1.0D
+                    : slotError > 4.0D * 4.0D ? 1.05D
+                    : slotError > 1.55D * 1.55D ? 1.025D : 1.0D;
             recruit.setHoldPos(desired);
             RecruitRuntimeRegistry.claimFormation(recruit, desired, state.velocity);
             boolean arrived = drive(level, recruit, mover, desired, agent, columnTransit,
@@ -639,6 +640,17 @@ public final class NativeFormationController {
         }
         if (direction.x * direction.x + direction.z * direction.z < 1.0E-6D) return state.heading;
         return (float) Math.toDegrees(Math.atan2(-direction.x, direction.z));
+    }
+
+    /**
+     * Real bodies decelerate into a turn instead of translating sideways at full pace.
+     * This curve never reaches zero, so replacement orders do not trigger a stop frame.
+     */
+    private static double turningPaceScale(State state) {
+        if (state.route.points().isEmpty() || state.routeIndex >= state.route.points().size()) return 1.0D;
+        double error = Math.abs(angleDifference(state.travelHeading, movementHeading(state)));
+        double curve = Math.cos(Math.toRadians(Math.min(180.0D, error)) * 0.5D);
+        return 0.45D + 0.55D * Math.max(0.0D, curve);
     }
 
     private static void updateSlotHeading(State state) {

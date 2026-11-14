@@ -3,6 +3,7 @@ package ee.lastpagans.recruitsrtscamera.mixin;
 import com.talhanation.recruits.entities.BowmanEntity;
 import com.talhanation.recruits.entities.ai.RecruitRangedBowAttackGoal;
 import ee.lastpagans.recruitsrtscamera.combat.FormationVolleyManager;
+import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
@@ -20,5 +21,12 @@ public abstract class BowVolleyMixin {
     private void rts$shareBowVolleyClock(CallbackInfo info) {
         int synchronizedTime = FormationVolleyManager.bowAttackTime(recruit);
         if (synchronizedTime != Integer.MIN_VALUE) attackTime = synchronizedTime;
+    }
+
+    @Inject(method = "m_8037_()V", at = @At("TAIL"), remap = false)
+    private void rts$holdRangedFormationSlot(CallbackInfo info) {
+        if (recruit.holdFormation && TacticalCombatManager.ownsTarget(recruit)) {
+            recruit.getNavigation().stop();
+        }
     }
 }

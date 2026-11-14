@@ -59,6 +59,7 @@ public final class BattlefieldVisibilityManager {
     @SubscribeEvent
     public static void onStop(ServerStoppedEvent event) {
         LAST_SENT.clear();
+        RTSVision.clearCache();
         ticks = 0;
     }
 }

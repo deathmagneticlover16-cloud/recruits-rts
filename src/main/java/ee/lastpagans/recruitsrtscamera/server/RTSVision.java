@@ -13,7 +13,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,12 +21,20 @@ import java.util.UUID;
 public final class RTSVision {
     private static final double BRUSH_REVEAL_RADIUS = 14.0D;
     private static final int BRUSH_THRESHOLD = 7;
-    private static final Map<VisibilityKey, VisibilitySample> ENTITY_CACHE = new HashMap<>();
+    private static final int MAX_VISIBILITY_CACHE_ENTRIES = 8_192;
+    private static final Map<VisibilityKey, VisibilitySample> ENTITY_CACHE =
+            new LinkedHashMap<>(512, 0.75F, true);
+    private static long lastPruneBucket = Long.MIN_VALUE;
     private RTSVision() {
     }
 
     public static boolean hiddenTargetChecksEnabled() {
         return RTSServerConfig.HIDDENNESS_BLOCK_TARGETING.get();
+    }
+
+    static void clearCache() {
+        ENTITY_CACHE.clear();
+        lastPruneBucket = Long.MIN_VALUE;
     }
 
     public static boolean canSee(ServerPlayer player, Entity target) {
@@ -35,9 +43,21 @@ public final class RTSVision {
         VisibilityKey key = new VisibilityKey(player.getUUID(), target.getUUID());
         VisibilitySample cached = ENTITY_CACHE.get(key);
         if (cached != null && cached.bucket == bucket) return cached.visible;
-        if (ENTITY_CACHE.size() > 4096) ENTITY_CACHE.entrySet().removeIf(entry -> entry.getValue().bucket < bucket - 2L);
+        // Pruning thousands of pairs on every LOS query made visibility increasingly
+        // expensive once a large battle crossed 4,096 cached pairs. One pass per
+        // five-tick bucket is sufficient; the LRU ceiling below handles bursts.
+        if (ENTITY_CACHE.size() > 4_096 && lastPruneBucket != bucket) {
+            lastPruneBucket = bucket;
+            ENTITY_CACHE.entrySet().removeIf(entry -> entry.getValue().bucket < bucket - 2L);
+        }
         boolean visible = canSeeInternal(player, target.getEyePosition(), target);
         ENTITY_CACHE.put(key, new VisibilitySample(bucket, visible));
+        while (ENTITY_CACHE.size() > MAX_VISIBILITY_CACHE_ENTRIES) {
+            var iterator = ENTITY_CACHE.keySet().iterator();
+            if (!iterator.hasNext()) break;
+            iterator.next();
+            iterator.remove();
+        }
         return visible;
     }
 

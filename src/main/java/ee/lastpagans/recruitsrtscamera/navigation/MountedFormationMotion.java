@@ -27,7 +27,8 @@ public final class MountedFormationMotion {
             currentZ *= retainedLimit / currentSpeed;
         }
         double slotDistance = Math.hypot(errorX, errorZ);
-        double safeScale = clamp(catchUpScale, 1.0D, 1.25D);
+        // Catch-up is a small pace allowance, never a rubber-band launch.
+        double safeScale = clamp(catchUpScale, 1.0D, 1.06D);
         double requestedX;
         double requestedZ;
         if (formationSpeed > 1.0E-5D) {

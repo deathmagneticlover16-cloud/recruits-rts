@@ -3,6 +3,7 @@ package ee.lastpagans.recruitsrtscamera.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.talhanation.recruits.client.ClientManager;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
+import com.talhanation.recruits.entities.CommanderEntity;
 import com.talhanation.recruits.entities.CaptainEntity;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import com.talhanation.recruits.world.RecruitsGroup;
@@ -254,6 +255,8 @@ public final class RTSCameraController {
                 || !(capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown())) return null;
         double radius;
         if (hoveredAuraEntity == MC.player) {
+            radius = ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager.COMMANDER_AURA_RADIUS;
+        } else if (hoveredAuraEntity instanceof CommanderEntity) {
             radius = ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager.COMMANDER_AURA_RADIUS;
         } else if (hoveredAuraEntity instanceof AbstractRecruitEntity recruit
                 && (ClientMoraleItemState.matches(recruit.getMainHandItem())
@@ -992,10 +995,14 @@ public final class RTSCameraController {
                     frontageStartGround = raycastGroundHit(cursorX, cursorY);
                     LivingEntity pressedTarget = raycastAttackTarget(cursorX, cursorY);
                     if (isAttackableTarget(pressedTarget)) {
-                        // Capture the target on press. Requiring the release ray to hit the
-                        // same moving body turned valid attack/charge clicks into terrain
-                        // moves whenever a horse or cursor shifted by a few pixels.
-                        pendingContextAttackEntityId = pressedTarget.getId();
+                        // Commit combat on press and end the terrain gesture immediately.
+                        // A double-RMB can therefore produce exactly two combat packets
+                        // (attack, then charge) and can never fall through into a nearby
+                        // move packet on either release.
+                        commanderAttackEntity(pressedTarget.getId());
+                        pendingContextAttackEntityId = -1;
+                        draggingFrontage = false;
+                        frontageStartGround = null;
                     } else {
                         pendingContextAttackEntityId = -1;
                     }
@@ -1749,13 +1756,14 @@ public final class RTSCameraController {
         }
         long now = System.currentTimeMillis();
         boolean hasty = isHastyDoubleClick(targetPos, now);
+        Vec3 exactTarget = groundHit.location();
         if (hasty) {
             LOCAL_RUNNING_GROUPS.addAll(SELECTED_GROUPS);
             RTSCameraNetwork.CHANNEL.sendToServer(new HastyMoveGroupsPacket(
                     new ArrayList<>(SELECTED_GROUPS),
-                    targetPos
+                    exactTarget
             ));
-            rememberMoveOrderPreview(new Vec3(targetPos.getX() + 0.5D, groundHit.location().y, targetPos.getZ() + 0.5D));
+            rememberMoveOrderPreview(exactTarget);
             lastTerrainOrderMillis = 0L;
             lastTerrainOrderTarget = null;
             setStatus("Hasty move sent to " + SELECTED_GROUPS.size() + " group(s): "
@@ -1765,15 +1773,15 @@ public final class RTSCameraController {
             if (!running) {
                 RTSCameraNetwork.CHANNEL.sendToServer(new SlowMoveGroupsPacket(
                         new ArrayList<>(SELECTED_GROUPS),
-                        targetPos
+                        exactTarget
                 ));
             } else {
                 RTSCameraNetwork.CHANNEL.sendToServer(new HastyMoveGroupsPacket(
                         new ArrayList<>(SELECTED_GROUPS),
-                        targetPos
+                        exactTarget
                 ));
             }
-            rememberMoveOrderPreview(new Vec3(targetPos.getX() + 0.5D, groundHit.location().y, targetPos.getZ() + 0.5D));
+            rememberMoveOrderPreview(exactTarget);
             lastTerrainOrderMillis = now;
             lastTerrainOrderTarget = targetPos;
             setStatus((running ? "Run" : "Walk") + " order sent to " + SELECTED_GROUPS.size() + " group(s): "
@@ -1976,6 +1984,11 @@ public final class RTSCameraController {
         for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
             if (ClientMoraleItemState.matches(recruit.getMainHandItem())
                     || ClientMoraleItemState.matches(recruit.getOffhandItem())) candidates.add(recruit);
+        }
+        for (LivingEntity living : clientBattlefieldSnapshot().livingEntities()) {
+            if (living instanceof CommanderEntity commander && commander.getOwner() == MC.player) {
+                candidates.add(commander);
+            }
         }
         for (LivingEntity candidate : candidates) {
             ScreenProjection.ProjectedPoint point = commanderProjectWorld(candidate.getX(),
@@ -2217,7 +2230,10 @@ public final class RTSCameraController {
         }
         Camera camera = MC.gameRenderer.getMainCamera();
         Vec3 position = camera.getPosition();
-        double fov = MC.options.fov().get();
+        // Use the effective renderer FOV (including sprint/zoom effects), not merely the
+        // options slider. Projection and unprojection must share the same camera lens or
+        // the world hit drifts forward from the visible cursor as pitch/FOV changes.
+        double fov = MC.gameRenderer.getFov(camera, MC.getFrameTime(), true);
         return new ScreenProjection.CameraSpec(
                 position.x,
                 position.y,
@@ -2597,7 +2613,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.2-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.3-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()
@@ -2803,8 +2819,7 @@ public final class RTSCameraController {
         GroundHit ground = raycastGroundHit(cursorX, cursorY);
         Vec3 oldCenter = selectedArmyCenterInterpolated(partialTick);
         if (ground == null || oldCenter == null) return;
-        Vec3 destination = new Vec3(ground.pos().getX() + 0.5D, ground.location().y,
-                ground.pos().getZ() + 0.5D);
+        Vec3 destination = ground.location();
         if (destination.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) return;
         appendTranslatedStencil(scene, destination, partialTick, 256);
         scene.route(List.of(oldCenter, destination), TACTICAL_ROUTE_COLOR, 0.32F, true,
@@ -3164,11 +3179,7 @@ public final class RTSCameraController {
         if (ground == null) {
             return "Move preview: no valid terrain under cursor";
         }
-        Vec3 destination = new Vec3(
-                ground.pos().getX() + 0.5D,
-                ground.location().y,
-                ground.pos().getZ() + 0.5D
-        );
+        Vec3 destination = ground.location();
         if (destination.distanceToSqr(anchor) > ORDER_RADIUS * ORDER_RADIUS) {
             return "Move preview: destination outside tactical radius";
         }

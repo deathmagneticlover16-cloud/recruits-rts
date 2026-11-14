@@ -40,10 +40,9 @@ public final class MoraleItemCommand {
     }
 
     private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, String> itemArgument() {
-        // Brigadier's word() reader stops at the namespace colon and reports the
-        // remainder as trailing data. string() still consumes one argument, but accepts
-        // the complete unquoted resource location (for example minecraft:banner).
-        return Commands.argument("item", StringArgumentType.string())
+        // word() and string() both stop their unquoted reader at the namespace colon.
+        // This is the terminal argument, so consume the complete namespaced id.
+        return Commands.argument("item", StringArgumentType.greedyString())
                 .suggests((context, builder) -> SharedSuggestionProvider.suggestResource(
                         BuiltInRegistries.ITEM.keySet(), builder));
     }

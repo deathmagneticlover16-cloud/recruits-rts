@@ -74,6 +74,7 @@ scheduler = source("src/main/java/ee/lastpagans/recruitsrtscamera/runtime/Recrui
 stats = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatistic.java")
 stat_registry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatRegistry.java")
 stat_service = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/TroopStatService.java")
+food_carry = source("src/main/java/ee/lastpagans/recruitsrtscamera/troops/RecruitFoodCarryManager.java")
 equipment_compat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TroopEquipmentCompat.java")
 battle = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/BattleMechanicsManager.java")
 routing = source("src/main/java/ee/lastpagans/recruitsrtscamera/battle/RoutedGroupManager.java")
@@ -161,8 +162,10 @@ require(formation, "desiredTravelHeading = movementHeading(state)",
         "formation travel yaw must come from the shared route tangent")
 require(formation, "angleDifference(state.travelHeading, desiredTravelHeading)",
         "shared travel yaw needs a deadband that rejects tiny route noise")
-require(formation, "approachHeading(state.travelHeading, desiredTravelHeading, 4.5F)",
+require(formation, "approachHeading(state.travelHeading, desiredTravelHeading, 10.0F)",
         "the group-owned travel yaw must turn smoothly through angled orders")
+require(formation, "turningPaceScale(state)",
+        "hard route turns must slow smoothly without injecting a stopped tick")
 forbid(formation, "mountedTravelHeading(",
        "per-member mounted yaw smoothing must not split rider/mount pairs across the formation")
 require(formation, "controlledHeading = state.travelHeading;",
@@ -215,12 +218,20 @@ require(scheduler, "TASK_SLICE_NANOS = 1_500_000L", "individual AI jobs need a h
 require(scheduler, "SERVER_TICK_WORK_BUDGET_NANOS = 8_000_000L", "queued AI needs a global tick budget")
 require(terrain_cache, "cache.surfaces", "terrain collision shapes must be shared within a server tick")
 require(terrain_cache, "cache.fluids", "fluid safety samples must be shared within a server tick")
+terrain_revisions = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/TacticalTerrainRevisions.java")
+require(terrain_revisions, "MAX_TRACKED_REGIONS_PER_DIMENSION = 65_536",
+        "long-running servers need a hard bound on remembered terrain-change regions")
 require(pathfinder, "cancelForTerrainChange", "resumed searches must reject terrain edited between slices")
 require(controller, "ClientBattlefieldSnapshot", "hover, vision and card systems need one client snapshot")
 require(mounted_facing_client, "commanderLoadedLivingEntities()",
         "mounted render alignment must reuse the client battlefield snapshot")
 require(controller, "retainedTacticalScene", "tactical scene data must be retained between render frames")
 require(world_renderer, "retainedRoutes", "route geometry must be retained until scene data changes")
+require(world_renderer, "shape.max(Direction.Axis.Y)",
+        "planned formation slots must follow snow and shallow collision surfaces")
+ground_markers = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/GroundSelectionMarkerRenderer.java")
+require(ground_markers, "shape.max(Direction.Axis.Y)",
+        "hover and selection circles must follow snow and shallow collision surfaces")
 
 require(keys, "GLFW.GLFW_KEY_E", "E must move the camera up")
 require(keys, "GLFW.GLFW_KEY_Q", "Q must move the camera down")
@@ -313,8 +324,8 @@ require(cavalry_combat, "TacticalCombatManager.rearImpact(rider, victim) ? 2.0D 
         "mounted rear impacts must apply double morale shock")
 require(attack, "FormationRuntime.retargetFormationImmediately",
         "attack approaches must replace an obsolete route while preserving formation slots")
-require(attack, "state.charge && state.approachKind == ApproachKind.INFANTRY",
-        "melee charges must retain formation through first contact")
+require(attack, "if (state.approachKind != ApproachKind.DIRECT)",
+        "infantry and cavalry must release from approach formation when melee contact begins")
 require(mode_packet, "FormationStateSyncPacket.forPlayer(sender)",
         "entering RTS mode must restore saved loose-spacing state")
 require(attack_packet, "import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;",
@@ -371,7 +382,7 @@ require(formation_packet, "packet.kind == FormationKind.CAVALRY_WEDGE || packet.
         "wedge and its square toggle must use one native formation controller")
 require(formation, "mover != recruit && (travelling || !arrived)",
         "mounted bodies must retain the route tangent through slow arrival cohesion")
-require(formation, "? slotError > 4.0D * 4.0D ? 1.06D",
+require(formation, "? slotError > 4.0D * 4.0D ? 1.025D",
         "mounted laggards need bounded catch-up instead of teleport-like surges")
 require(formation, "cohesionDistance = mountedMember ? 0.85D : 1.55D",
         "mounted cohesion must tighten before the virtual centre resumes full pace")
@@ -439,12 +450,15 @@ require(stat_registry, "replace(Map<UUID, TroopStatProfile>",
 require(stat_service, "for (int slot = 0; slot < inventory.getContainerSize(); slot++)",
         "encumbrance must include equipped items and every recruit cargo slot")
 require(stat_service, "count * 0.04D", "ordinary ammunition must remain light per projectile")
-require(stat_service, "item.getFoodProperties().getNutrition() * 0.06D",
-        "large food stores must contribute nutrition-scaled weight")
+require(stat_service, "getSaturationModifier() * 2.0D",
+        "food encumbrance must include actual saturation as well as nutrition")
 require(stat_service, "ENCUMBRANCE_RANGED_CAPACITY", "ranged troops need their lower carrying capacity")
 require(stat_service, '"RTS inventory encumbrance"', "overload must apply a dedicated movement modifier")
 require(stat_service, "fatigueGainMultiplier", "carried load must increase fatigue growth")
 require(stat_service, "fatigueRecoveryMultiplier", "carried load must slow fatigue recovery")
+require(food_carry, "MAX_FOOD_PIECES = 38", "recruits must have the requested 38-piece food ceiling")
+require(food_carry, "recruit.spawnAtLocation(dropped",
+        "food beyond the carry ceiling must be returned to the world rather than deleted")
 require(stat_service, "LivingAttackEvent", "melee skill and defence must resolve real melee hit chances")
 require(stat_service, "projectile.setDeltaMovement", "accuracy must affect real recruit projectiles")
 require(stat_service, "double base = 110.0D", "unarmored foot formations must have 110 speed")
@@ -540,6 +554,10 @@ require(formation, "TacticalPathfinder.nearestFormationStandable(level, represen
         "replacement route seeds must not fall through an averaged centre into a cave")
 require(formation, "state.cohesionScale = old.cohesionScale",
         "replacement orders must preserve their current eased formation pace")
+require(formation_service, "FormationRuntime.retargetFormation(groupId, destination)",
+        "ordinary replacement moves must keep live slots and member controllers")
+require(formation, "invalidateRoutes(state, true);",
+        "replacement routes must retain safe momentum while planning")
 require(formation, "faceNearbyTarget = !travelling && TacticalCombatManager.ownsControlledTarget(recruit)",
         "stationary formations must turn into explicit melee and leased ranged targets")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/TranslateGroupsPacket.java"),
@@ -605,6 +623,8 @@ client_visibility = source("src/main/java/ee/lastpagans/recruitsrtscamera/client
 require(visibility, "ClipContext.Block.COLLIDER", "terrain must occlude hostile formation sight")
 require(visibility, "BlockTags.LEAVES", "dense brush must conceal hostile formations")
 require(visibility, "BRUSH_REVEAL_RADIUS", "brush concealment must break at close identification range")
+require(visibility, "MAX_VISIBILITY_CACHE_ENTRIES = 8_192",
+        "visibility pair caching must remain hard-bounded on large servers")
 require(visibility, "canDesignateGround(ServerPlayer player, BlockPos target)",
         "strategic-fire ground visibility must be separate from entity brush concealment")
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/network/StrategicFirePacket.java"),
@@ -618,10 +638,10 @@ require(server_config, "HIDDENNESS_BLOCK_TARGETING",
 require(visibility_sync, "Map<UUID, Boolean>", "the server must synchronize per-formation visibility")
 require(client_visibility, "FADE_OUT_PER_TICK", "lost contacts must fade instead of popping out")
 require(overlay, "ClientEnemyVisibilityState.targetable", "hidden enemy banners must not remain targetable")
-require(controller, "pendingContextAttackEntityId = pressedTarget.getId()",
-        "battlefield attacks must capture the target on mouse press")
-require(controller, "targetEntityId < 0 || !commanderAttackEntity(targetEntityId)",
-        "a captured attack must fall back safely when its target disappears")
+require(controller, "commanderAttackEntity(pressedTarget.getId());",
+        "battlefield attacks must commit on mouse press")
+require(controller, "draggingFrontage = false;\n                        frontageStartGround = null;",
+        "a combat press must terminate its terrain gesture before release")
 require(controller, "ATTACK_SCREEN_ASSIST_PX = 18.0D",
         "projected attack targets need a forgiving RTS-sized screen hit area")
 require(controller, "ScreenProjection.assistedBodyDistanceSquared(",
@@ -669,7 +689,7 @@ require(cavalry_combat, "equippedMeleeDamage", "cavalry impact must include its 
 require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measured travel speed")
 require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
 require(stat_service, "movementPenalty /= 1.75D", "mounted carried weight impact must be 1.75x lower")
-require(network, 'PROTOCOL = "rts-camera-164"', "exact strategic-fire cursor packets require protocol 164")
+require(network, 'PROTOCOL = "rts-camera-165"', "exact movement cursor packets require protocol 165")
 require(pathfinder, "supportedRiseAhead", "mounted movement needs an early collision-backed rise probe")
 require(steering, "Math.max(current.y, 0.52D)",
         "local mounted steering must actively lift over a verified one-block rise")
@@ -687,7 +707,7 @@ require(pathfinder, "canyonDepth * canyonDepth * 12.0D",
         "level-endpoint routes must strongly prefer a safe rim detour over a canyon descent")
 require(formation, "Math.max(0.68D, 1.0D - laggardShare * 0.55D)",
         "laggards must not reduce the main formation to a crawl")
-require(formation, "slotError > 4.0D * 4.0D ? 1.12D",
+require(formation, "slotError > 4.0D * 4.0D ? 1.05D",
         "foot laggards need a bounded human catch-up pace")
 require(formation, "agent.steeringTarget", "laggards must face their personal route tangent")
 require(formation, "Vec3 pathGoal = desired;",
@@ -695,8 +715,8 @@ require(formation, "Vec3 pathGoal = desired;",
 forbid(formation, "Vec3 recoveryGoal",
        "a persistent centre recovery target must not collapse outer ranks into a moshpit")
 require(steering, "error.x * 0.22D", "final slot correction must be damped instead of magnetic")
-require(stat_service, "0.40D + item.getFoodProperties().getNutrition() * 0.06D",
-        "a full food stack must strongly encumber its carrier")
+require(stat_service, "nutrition * 0.055D + saturation * 0.045D",
+        "food weight must scale from nutrition and actual saturation")
 forbid(client_events, "FogOfWarWorldRenderer.render(event)",
        "the visual fog bank must be removed without disabling server visibility")
 require(smoke, "SCALE = 0.85D", "absorbed black-powder smoke must use the requested smaller spread")
@@ -705,13 +725,18 @@ require(smoke, "com.camdenscottc.colonialcannons.projectile.CannonballEntity",
         "absorbed smoke must retain Colonial Cannons projectile compatibility")
 require(smoke, 'invokeBoolean(projectile, "isExplosive")',
         "Colonial Cannons explosive and solid impacts must remain distinct")
-require(smoke, "MAX_CLOUDS = 512", "absorbed smoke must bound persistent cloud cost")
+require(smoke, "MAX_CLOUDS = 256", "absorbed smoke must bound persistent cloud cost")
+require(smoke, "MAX_PARTICLES_PER_SERVER_TICK = 480",
+        "persistent smoke must have a global per-tick network budget")
 require(smoke, "closest.density = Math.min(32, closest.density + 1)",
         "repeated musketry must accumulate battlefield-obscuring smoke density")
 require(smoke, "cloud.particles + cloud.density / 2",
         "dense smoke must emit more fog than isolated shots")
 require(smoke, "RTSParticles.BLACK_POWDER_FOG.get()",
         "absorbed firearm effects must use RTS-owned translucent fog")
+smoke_particle = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/BlackPowderFogParticle.java")
+require(smoke_particle, "startingAlpha = 0.30F", "overlapping smoke must accumulate useful opacity")
+require(smoke_particle, "shade = 0.50F", "black-powder smoke must not regress to a pale lens texture")
 forbid(smoke, "CAMPFIRE_COSY_SMOKE",
        "black-powder fog must not regress to vanilla campfire puffs")
 require(source("src/main/resources/META-INF/mods.toml"), 'modId="colonialcannons"',
@@ -755,7 +780,7 @@ require(overlay, "graphics.drawString(MC.font, key, drawX, y, GOLD",
         "every angle-bracketed key segment must render yellow")
 require(morale_command, 'Commands.literal("recruitsmoraleitem")', "operators need live morale-item commands")
 require(morale_command, "source.hasPermission(2)", "live morale-item changes must be operator-only")
-require(morale_command, "StringArgumentType.string()",
+require(morale_command, "StringArgumentType.greedyString()",
         "morale-item commands must accept namespace:item resource locations")
 require(morale_data, 'DATA_NAME = "recruits_rts_camera_morale_items"',
         "runtime morale items must persist with the world")
@@ -763,6 +788,8 @@ require(morale_registry, "stack.is(RTSTags.MORALE_ITEMS)",
         "runtime morale items must extend rather than replace datapack standards")
 require(aura_renderer, "TRIANGLE_FAN", "hovered morale auras need a translucent filled blue circle")
 require(aura_renderer, "MOTION_BLOCKING_NO_LEAVES", "morale auras must follow terrain instead of being buried")
+require(controller, "hoveredAuraEntity instanceof CommanderEntity",
+        "hovered recruit commanders must expose their morale radius")
 require(controller,
         "capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown()",
         "aura radii must only appear while Space is held")
@@ -779,9 +806,14 @@ if (ROOT / "src/main/java/ee/lastpagans/recruitsrtscamera/movement/TroopRoadEros
     raise AssertionError("troop road erosion runtime must remain removed")
 forbid(server_config, "TROOP_ROAD_EROSION", "troop road erosion config must remain removed")
 forbid(server_config, "footfallsToPath", "troop road footfall config must remain removed")
-require(volley, "nextBowDraw", "bow formations need one shared draw and reload clock")
+require(volley, "nextBowRelease", "bow formations need one shared release and reload clock")
+require(volley, "now > state.nextBowRelease",
+        "one Bowman must not advance the release window before the rest of the formation reads it")
 require(volley, "crossbowReady.size() >= expected", "loaded crossbows must wait for formation readiness")
 require(volley, "javelinRelease", "javelin formations need one shared release tick")
+require(volley, "MAX_GROUP_CLOCKS = 1_024", "long battles must hard-bound formation volley clocks")
+require(volley, "lastCleanupAt != now",
+        "volley clock expiry must not scan the whole cache once per soldier")
 require(bow_volley, "attackTime = synchronizedTime", "native Bowman timers must consume the formation volley clock")
 require(crossbow_volley, "CrossbowItem.isCharged", "loaded Crossbowmen must be held for their volley")
 require(nomad_volley, "FormationVolleyManager.bowAttackTime(nomad)",
@@ -790,6 +822,10 @@ require(stat_service, "recruit instanceof BowmanEntity ? 0.22D : 2.75D",
         "Bowmen must carry many javelins while ordinary recruits overload after a few")
 require(source("src/main/resources/data/recruits_rts_camera/tags/items/throwable_weapons.json"),
         '"darkagesarmory:steel_javelin"', "Epic Knights Dark Ages javelins must enter RTS throwing logic")
+forbid(source("src/main/resources/data/recruits_rts_camera/tags/items/throwable_weapons.json"),
+       'antiquelegacy:', "ordinary Epic Knights spears must not enter RTS throwing logic")
+require(source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ThrowableWeaponManager.java"),
+        'STEEL_JAVELIN.equals', "throwing must enforce the exact supported javelin even if tags are extended")
 require(overlay, "view.moraleState() >= 2", "routing cards must reject interaction and retain a white overlay")
 require(overlay, "Math.sin(phase)", "wavering cards need a flashing translucent overlay")
 require(overlay, "graphics.pose().scale(1.04F", "dragged cards must lift with smooth visual parallax")
@@ -814,6 +850,14 @@ require(strategic_packet, "TacticalCombatManager.clearAutomaticTarget(recruit)",
         "strategic fire must replace passive Fire At Will targeting")
 require(controller, "MC.getWindow().getScreenWidth()",
         "cursor rays must use GLFW logical window width instead of framebuffer width")
+require(controller, "MC.gameRenderer.getFov(camera, MC.getFrameTime(), true)",
+        "cursor rays must use the renderer's effective FOV at every camera angle")
+for packet_path in ("MoveGroupsPacket.java", "SlowMoveGroupsPacket.java", "HastyMoveGroupsPacket.java"):
+    packet_source = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/" + packet_path)
+    require(packet_source, "buffer.writeDouble(packet.target.x)",
+            "movement packets must preserve exact sub-block cursor X: " + packet_path)
+    require(packet_source, "new Vec3(packet.target.x, armySurface.getY(), packet.target.z)",
+            "movement execution must preserve exact cursor X/Z: " + packet_path)
 require(controller, "new ArrayList<>(SELECTED_GROUPS), target, exactTarget",
         "strategic fire must send the same exact point shown by the cursor marker")
 forbid(strategic_packet, "settings.holdFire() ||", "Fire At Will off must not reject explicit strategic fire")
@@ -833,12 +877,15 @@ require(fire_packet, "ThrowableWeaponManager.cancel(recruit)", "Cease Fire must 
 require(controller, "System.currentTimeMillis() + 1500L", "the red bombardment disk must flash for 1.5 seconds")
 require(controller, "0xE8E53935", "the strategic-fire area marker must be red")
 require(render_scene, "Builder circle", "the unified renderer must expose scaled area circles")
-require(world_renderer, "slot.position().add(0.0D, 0.12D", "ground circles must remain visible above snow")
+require(world_renderer, "onSurface(center.subtract(right)",
+        "ground circles must resolve each corner onto snow and shallow collision surfaces")
+require(visibility, "lastPruneBucket != bucket",
+        "visibility expiry must not scan thousands of LOS pairs on every query")
 require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
         "distance fog must remain removed")
 forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive button must remain removed")
-require(source("gradle.properties"), "mod_version=0.24.2-server.1", "semantic version must be updated")
-require(controller, "0.24.2-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.2-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.3-server.1", "semantic version must be updated")
+require(controller, "0.24.3-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.3-server.1.jar", "build helper version must be updated")
 
-print("0.24.2-server.1 source contracts passed")
+print("0.24.3-server.1 source contracts passed")

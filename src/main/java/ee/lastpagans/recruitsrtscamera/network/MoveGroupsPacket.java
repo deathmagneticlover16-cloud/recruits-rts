@@ -28,13 +28,17 @@ import java.util.function.Supplier;
  * Normal RMB is a translation order, not a reform order. The selected groups keep
  * their current relative X/Z spacing and each group keeps its own current formation.
  */
-public record MoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
+public record MoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
     private static final double MAX_TARGET_DISTANCE = 336.0D;
 
     public MoveGroupsPacket {
         int size = Math.min(groupIds.size(), ServerGroupResolver.MAX_GROUPS_PER_ORDER);
         groupIds = List.copyOf(groupIds.subList(0, size));
-        target = target.immutable();
+        target = target == null ? Vec3.ZERO : target;
+    }
+
+    public MoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
+        this(groupIds, Vec3.atBottomCenterOf(target));
     }
 
     public static void encode(MoveGroupsPacket packet, FriendlyByteBuf buffer) {
@@ -42,7 +46,9 @@ public record MoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
         for (UUID groupId : packet.groupIds) {
             buffer.writeUUID(groupId);
         }
-        buffer.writeBlockPos(packet.target);
+        buffer.writeDouble(packet.target.x);
+        buffer.writeDouble(packet.target.y);
+        buffer.writeDouble(packet.target.z);
     }
 
     public static MoveGroupsPacket decode(FriendlyByteBuf buffer) {
@@ -54,7 +60,7 @@ public record MoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
                 groups.add(id);
             }
         }
-        return new MoveGroupsPacket(groups, buffer.readBlockPos());
+        return new MoveGroupsPacket(groups, new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble()));
     }
 
     public static void handle(MoveGroupsPacket packet, Supplier<NetworkEvent.Context> contextSupplier) {
@@ -83,14 +89,16 @@ public record MoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
             RouteManager.cancel(sender, packet.groupIds);
             RTSGroupAttackManager.cancelOwned(sender, packet.groupIds);
         }
-        if (!sender.serverLevel().hasChunkAt(packet.target)) {
+        if (!Double.isFinite(packet.target.x) || !Double.isFinite(packet.target.y) || !Double.isFinite(packet.target.z)) {
+            return;
+        }
+        BlockPos targetBlock = BlockPos.containing(packet.target);
+        if (!sender.serverLevel().hasChunkAt(targetBlock)) {
             sender.displayClientMessage(Component.literal("That destination is not loaded."), true);
             return;
         }
         if (sender.distanceToSqr(
-                packet.target.getX() + 0.5D,
-                packet.target.getY() + 0.5D,
-                packet.target.getZ() + 0.5D
+                packet.target.x, packet.target.y, packet.target.z
         ) > MAX_TARGET_DISTANCE * MAX_TARGET_DISTANCE) {
             sender.displayClientMessage(Component.literal("That destination is outside tactical range."), true);
             return;
@@ -102,8 +110,8 @@ public record MoveGroupsPacket(List<UUID> groupIds, BlockPos target) {
             return;
         }
 
-        BlockPos armySurface = FormationUtils.getPositionOrSurface(sender.serverLevel(), packet.target);
-        Vec3 armyTarget = Vec3.atBottomCenterOf(armySurface);
+        BlockPos armySurface = FormationUtils.getPositionOrSurface(sender.serverLevel(), targetBlock);
+        Vec3 armyTarget = new Vec3(packet.target.x, armySurface.getY(), packet.target.z);
 
         List<UUID> ids = new ArrayList<>(groups.keySet());
         List<FormationPreservationMath.Point> currentCenters = new ArrayList<>(ids.size());

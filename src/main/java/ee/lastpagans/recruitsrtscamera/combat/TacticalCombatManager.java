@@ -8,7 +8,6 @@ import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager;
 import ee.lastpagans.recruitsrtscamera.persistence.RTSGroupTacticsSavedData;
-import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeBrain;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatService;
@@ -118,7 +117,7 @@ public final class TacticalCombatManager {
                     recruit.stopUsingItem();
                     recruit.switchMainHandItem(stack -> stack.getItem() instanceof SwordItem
                             || stack.getItem() instanceof AxeItem || stack.getItem() instanceof TridentItem
-                            || stack.is(RTSTags.THROWABLE_WEAPONS));
+                            || ThrowableWeaponManager.isSupportedThrowable(stack));
                 }
             } else if (!s.holdFire()) {
                 recruit.setShouldRanged(true);

@@ -20,6 +20,7 @@ import java.util.Map;
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class TacticalTerrainRevisions {
     private static final int REGION_SHIFT = 4;
+    private static final int MAX_TRACKED_REGIONS_PER_DIMENSION = 65_536;
     private static final Map<ResourceKey<Level>, Map<Long, Long>> REVISIONS = new HashMap<>();
     private static final Map<ResourceKey<Level>, Long> EPOCHS = new HashMap<>();
 
@@ -89,7 +90,8 @@ public final class TacticalTerrainRevisions {
 
     private static void bump(ServerLevel level, BlockPos position) {
         EPOCHS.put(level.dimension(), EPOCHS.getOrDefault(level.dimension(), 0L) + 1L);
-        Map<Long, Long> revisions = REVISIONS.computeIfAbsent(level.dimension(), ignored -> new HashMap<>());
+        Map<Long, Long> revisions = REVISIONS.computeIfAbsent(level.dimension(),
+                ignored -> new LinkedHashMap<>(256, 0.75F, true));
         int rx = position.getX() >> REGION_SHIFT;
         int rz = position.getZ() >> REGION_SHIFT;
         for (int dx = -1; dx <= 1; dx++) {
@@ -97,6 +99,12 @@ public final class TacticalTerrainRevisions {
                 long key = region(rx + dx, rz + dz);
                 revisions.put(key, revisions.getOrDefault(key, 0L) + 1L);
             }
+        }
+        while (revisions.size() > MAX_TRACKED_REGIONS_PER_DIMENSION) {
+            var iterator = revisions.keySet().iterator();
+            if (!iterator.hasNext()) break;
+            iterator.next();
+            iterator.remove();
         }
     }
 

@@ -5,8 +5,9 @@ import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.compat.SeriousAnimationsCompat;
 import ee.lastpagans.recruitsrtscamera.projectile.ThrownRecruitWeaponEntity;
-import ee.lastpagans.recruitsrtscamera.registry.RTSTags;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -32,6 +33,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ThrowableWeaponManager {
+    private static final ResourceLocation STEEL_JAVELIN = new ResourceLocation(
+            "darkagesarmory", "steel_javelin");
     public static final double MIN_THROW_RANGE = 5.0D;
     public static final double MAX_THROW_RANGE = 18.0D;
 
@@ -44,8 +47,13 @@ public final class ThrowableWeaponManager {
 
     public static boolean hasThrowable(AbstractRecruitEntity recruit) {
         if (recruit == null) return false;
-        ItemStack stack = recruit.getMainHandItem();
-        return stack != null && !stack.isEmpty() && stack.is(RTSTags.THROWABLE_WEAPONS);
+        return isSupportedThrowable(recruit.getMainHandItem());
+    }
+
+    /** Deliberately narrow integration: no spear or tag extension becomes throwable. */
+    public static boolean isSupportedThrowable(ItemStack stack) {
+        return stack != null && !stack.isEmpty()
+                && STEEL_JAVELIN.equals(BuiltInRegistries.ITEM.getKey(stack.getItem()));
     }
 
     public static boolean isPreparingThrow(AbstractRecruitEntity recruit) {
@@ -137,7 +145,7 @@ public final class ThrowableWeaponManager {
                 && !TacticalCombatManager.explicitFireOrder(recruit)
                 || ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager.isRouting(recruit)) return;
         ItemStack held = recruit.getMainHandItem();
-        if (held == null || held.isEmpty() || !held.is(RTSTags.THROWABLE_WEAPONS)) return;
+        if (!isSupportedThrowable(held)) return;
 
         ItemStack projectileStack = held.copyWithCount(1);
         float damage = Math.max(5.0F, Math.min(10.0F, recruit.getAttackDamage() * 0.85F));
