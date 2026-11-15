@@ -57,6 +57,16 @@ public final class TroopStatService {
 
     private TroopStatService() { }
 
+    /** Current RTS inventory multiplier for formation-anchor pacing (1 = unencumbered). */
+    public static double encumbranceSpeedScale(LivingEntity carrier) {
+        if (carrier == null) return 1.0D;
+        AttributeInstance speed = carrier.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speed == null) return 1.0D;
+        AttributeModifier modifier = speed.getModifier(ENCUMBRANCE_SPEED_ID);
+        if (modifier == null || modifier.getOperation() != AttributeModifier.Operation.MULTIPLY_TOTAL) return 1.0D;
+        return Math.max(0.01D, Math.min(1.0D, 1.0D + modifier.getAmount()));
+    }
+
     public static SoldierStats sample(AbstractRecruitEntity recruit, double fatigue) {
         if (recruit == null || !recruit.isAlive()) return SoldierStats.EMPTY;
         Load load = calculateLoad(recruit);

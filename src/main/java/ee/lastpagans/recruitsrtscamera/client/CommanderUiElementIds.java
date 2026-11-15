@@ -34,6 +34,7 @@ public final class CommanderUiElementIds {
     public static final String SETTINGS_BUTTON = "settings.button";
     public static final String SETTINGS_PANEL = "settings.panel";
     public static final String SETTINGS_UNIT_STATISTICS = "settings.unit_statistics";
+    public static final String SETTINGS_SMOKE_RESOLUTION = "settings.smoke_resolution";
 
     private CommanderUiElementIds() {
     }

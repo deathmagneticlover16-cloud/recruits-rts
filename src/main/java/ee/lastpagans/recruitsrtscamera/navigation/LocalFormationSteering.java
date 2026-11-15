@@ -3,6 +3,7 @@ package ee.lastpagans.recruitsrtscamera.navigation;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitSpatialIndex;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeMetrics;
+import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
@@ -35,6 +36,7 @@ public final class LocalFormationSteering {
             return steerMounted(level, mover, desired, position, error, current,
                     formationVelocity, safeScale);
         }
+        double moveControlPace = RTSMovementBoostManager.isHastyActive(recruit.getGroup()) ? 1.0D : 0.78D;
         Vec3 requested = new Vec3(error.x * 0.22D, 0.0D, error.z * 0.22D)
                 .add(formationVelocity)
                 .subtract(new Vec3(current.x * 0.12D, 0.0D, current.z * 0.12D))
@@ -49,7 +51,7 @@ public final class LocalFormationSteering {
         // preferable to letting MoveControl step into newly unsupported space.
         if (safe == null) {
             if (desired.y > mover.getY() + 0.45D) mover.getJumpControl().jump();
-            mover.getNavigation().moveTo(desired.x, desired.y, desired.z, 0.78D * safeScale);
+            mover.getNavigation().moveTo(desired.x, desired.y, desired.z, moveControlPace * safeScale);
             return false;
         }
         // The probe only proves the next part of the route. A farther look-ahead keeps
@@ -64,7 +66,7 @@ public final class LocalFormationSteering {
             mover.getJumpControl().jump();
         }
         mover.getMoveControl().setWantedPosition(target.x, target.y, target.z,
-                0.78D * safeScale);
+                moveControlPace * safeScale);
         return true;
     }
 

@@ -10,6 +10,7 @@ import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.formation.NativeFormationController;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
+import ee.lastpagans.recruitsrtscamera.troops.TroopStatService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -48,14 +49,12 @@ public final class RTSMovementBoostManager {
     private static final double REGULAR_INFANTRY_NAV_SPEED = 1.17D;
     private static final double REGULAR_CAVALRY_NAV_SPEED = 1.50D;
     private static final double REGULAR_CAVALRY_MOUNT_MULTIPLIER = 0.25D;
-    private static final double HASTY_INFANTRY_SPEED = 1.62D;
-    private static final double HASTY_INFANTRY_ATTRIBUTE_MULTIPLIER = 0.08D;
+    /** Vanilla player's measured sprint ground speed (5.612 blocks/second). */
+    private static final double PLAYER_SPRINT_BLOCKS_PER_TICK = 0.2806D;
     private static final double HASTY_CAVALRY_NAV_SPEED = 1.62D;
     private static final double HASTY_CAVALRY_MOUNT_MULTIPLIER = 0.25D;
     private static final double MAX_CAVALRY_MOUNT_ATTRIBUTE_BONUS = 0.25D;
     private static final double RUN_SPEED_SCALE = 0.85D;
-
-    private static final double GROUP_EXTRA_HASTY_INFANTRY = 0.15D;   // ~0.36 total
 
     private static final double HASTY_VARIATION = 0.06D;
     private static final double SLOW_MARCH_FACTOR = 0.55D;
@@ -342,9 +341,11 @@ public final class RTSMovementBoostManager {
                         mountAttributeAmount = REGULAR_CAVALRY_MOUNT_MULTIPLIER;
                     }
                     case HASTY_INFANTRY -> {
-                        navigationSpeed = HASTY_INFANTRY_SPEED * RUN_SPEED_SCALE * state.runnerFactor;
-                        selfAttributeAmount = (1.0D + HASTY_INFANTRY_ATTRIBUTE_MULTIPLIER
-                                + (state.runnerFactor - 1.0D)) * RUN_SPEED_SCALE - 1.0D;
+                        // Match an unencumbered vanilla player's sprint baseline. Armor
+                        // Weight, RTS inventory encumbrance and fatigue remain independent
+                        // MULTIPLY_TOTAL modifiers and therefore reduce this naturally.
+                        navigationSpeed = 1.0D;
+                        selfAttributeAmount = playerSprintModifier(recruit);
                     }
                     case HASTY_CAVALRY -> {
                         navigationSpeed = HASTY_CAVALRY_NAV_SPEED * RUN_SPEED_SCALE * state.runnerFactor;
@@ -634,7 +635,9 @@ public final class RTSMovementBoostManager {
             }
             Entity controlled = controlledEntity(recruit);
             if (controlled != null) {
-                total += armorWeightScale(recruit, controlled);
+                double inventoryScale = controlled instanceof LivingEntity carrier
+                        ? TroopStatService.encumbranceSpeedScale(carrier) : 1.0D;
+                total += armorWeightScale(recruit, controlled) * inventoryScale;
                 count++;
             }
         }
@@ -659,6 +662,16 @@ public final class RTSMovementBoostManager {
             return Math.max(0.01D, Math.min(1.0D, 1.0D - penalty));
         }
         return 1.0D;
+    }
+
+    private static double playerSprintModifier(AbstractRecruitEntity recruit) {
+        AttributeInstance movement = recruit.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (movement == null || movement.getBaseValue() <= 1.0E-6D) return 0.0D;
+        // Mob MoveControl consumes MOVEMENT_SPEED as blocks/tick, unlike Player's input
+        // pipeline. Target the measured player sprint displacement, then let all weight
+        // and fatigue MULTIPLY_TOTAL modifiers compose afterward.
+        return Math.max(-0.90D, Math.min(3.0D,
+                PLAYER_SPRINT_BLOCKS_PER_TICK / movement.getBaseValue() - 1.0D));
     }
 
 
@@ -826,7 +839,7 @@ public final class RTSMovementBoostManager {
         double step = switch (state.mode) {
             case FORMATION_INFANTRY -> baseStep;
             case FORMATION_CAVALRY -> RTSServerConfig.CAVALRY_FORMATION_SPEED.get();
-            case HASTY_INFANTRY -> (baseStep + GROUP_EXTRA_HASTY_INFANTRY) * RUN_SPEED_SCALE;
+            case HASTY_INFANTRY -> PLAYER_SPRINT_BLOCKS_PER_TICK;
             case HASTY_CAVALRY -> RTSServerConfig.CAVALRY_HASTY_SPEED.get() * RUN_SPEED_SCALE;
             case SLOW_MARCH -> baseStep * SLOW_MARCH_FACTOR;
         };

@@ -1983,11 +1983,16 @@ public final class RTSCameraController {
         List<LivingEntity> candidates = new ArrayList<>();
         candidates.add(MC.player);
         for (AbstractRecruitEntity recruit : loadedOwnedRecruits()) {
-            if (ClientMoraleItemState.matches(recruit.getMainHandItem())
+            if (recruit instanceof CommanderEntity
+                    || ClientMoraleItemState.matches(recruit.getMainHandItem())
                     || ClientMoraleItemState.matches(recruit.getOffhandItem())) candidates.add(recruit);
         }
         for (LivingEntity living : clientBattlefieldSnapshot().livingEntities()) {
-            if (living instanceof CommanderEntity commander && commander.getOwner() == MC.player) {
+            // Client owner entity references are not guaranteed to resolve. The synced
+            // owner UUID is authoritative and also catches Commanders with no card group.
+            if (living instanceof CommanderEntity commander
+                    && MC.player.getUUID().equals(commander.getOwnerUUID())
+                    && !candidates.contains(commander)) {
                 candidates.add(commander);
             }
         }
@@ -2615,7 +2620,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.3-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.4-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

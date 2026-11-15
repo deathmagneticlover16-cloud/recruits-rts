@@ -1,5 +1,8 @@
 {
   "textures": [
+    "recruits_rts_camera:black_powder_fog_low",
+    "recruits_rts_camera:black_powder_fog_medium",
+    "recruits_rts_camera:black_powder_fog_high",
     "recruits_rts_camera:black_powder_fog"
   ]
 }

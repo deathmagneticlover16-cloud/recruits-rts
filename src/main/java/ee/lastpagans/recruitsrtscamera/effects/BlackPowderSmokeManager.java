@@ -1,9 +1,11 @@
 package ee.lastpagans.recruitsrtscamera.effects;
 
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
+import ee.lastpagans.recruitsrtscamera.compat.LivingWindCompat;
 import ee.lastpagans.recruitsrtscamera.registry.RTSParticles;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -93,7 +95,12 @@ public final class BlackPowderSmokeManager {
                 CLOUDS.remove(i);
                 continue;
             }
-            cloud.position = cloud.position.add(cloud.velocity);
+            if ((cloud.age + cloud.windPhase) % 20 == 0) {
+                cloud.wind = LivingWindCompat.windAt(cloud.level, cloud.position);
+            }
+            // The cloud emitter follows Living Wind as well as its individual client
+            // particles, so later residual puffs continue along the same air mass.
+            cloud.position = cloud.position.add(cloud.velocity).add(cloud.wind.scale(0.025D));
             cloud.velocity = new Vec3(cloud.velocity.x * 0.992D,
                     cloud.velocity.y * 0.998D + (cloud.kind == Kind.CANNON ? 0.000004D : 0.000003D),
                     cloud.velocity.z * 0.992D);
@@ -101,10 +108,10 @@ public final class BlackPowderSmokeManager {
             double expansion = cloud.expansionPerTick * cloud.age;
             if (--cloud.untilPulse > 0) continue;
             int minimumInterval = 2;
-            double densityRate = 1.0D + Math.min(4.0D, cloud.density * 0.32D);
+            double densityRate = 1.0D + Math.min(1.4D, cloud.density * 0.08D);
             cloud.untilPulse = Math.max(minimumInterval, (int) Math.round(
                     cloud.interval * (1.0D + progress * progress * 2.25D) / densityRate));
-            int count = Math.min(24, cloud.particles + cloud.density / 2);
+            int count = Math.min(12, cloud.particles + cloud.density / 4);
             if (progress > 0.58D) {
                 double remaining = Math.max(0.0D, 1.0D - (progress - 0.58D) / 0.42D);
                 count = Math.max(1, (int) Math.round(count * (0.45D + 0.55D * remaining)));
@@ -129,7 +136,9 @@ public final class BlackPowderSmokeManager {
 
     private static void musket(ServerLevel level, Entity projectile) {
         Vec3 direction = direction(projectile.getDeltaMovement());
-        Vec3 muzzle = projectile.position().add(direction.scale(1.0D));
+        // Put the cloud beyond the muzzle. Large camera-facing quads centered on the
+        // projectile origin used to engulf the firing rank instead of blowing outward.
+        Vec3 muzzle = projectile.position().add(direction.scale(1.45D));
         long now = level.getGameTime();
         String key = level.dimension().location() + ":" + Math.round(projectile.getX() * 10.0D)
                 + ":" + Math.round(projectile.getY() * 10.0D) + ":" + Math.round(projectile.getZ() * 10.0D);
@@ -138,19 +147,19 @@ public final class BlackPowderSmokeManager {
             stamp.tick = now;
             if (++stamp.pellets == 2) {
                 Vec3 bonus = muzzle.add(direction.scale(0.34D));
-                initial(level, bonus, 12, 0.754D, 0.360D, 0.754D, 0.018D);
+                initial(level, bonus, 4, 0.40D, 0.20D, 0.40D, 0.012D);
                 residual(level, bonus.add(0.0D, 0.08D, 0.0D),
                         direction.scale(0.0207D).add(0.0D, 0.0045D, 0.0D),
-                        20 * 30, 9, 2, 0.418D, 0.197D, 0.418D,
+                        20 * 30, 12, 1, 0.36D, 0.18D, 0.36D,
                         0.075D, 0.9D, true, Kind.MUSKET);
             }
             return;
         }
         RECENT_SHOTS.put(key, new ShotStamp(now));
-        initial(level, muzzle, 18, 0.58D, 0.302D, 0.58D, 0.020D);
+        initial(level, muzzle, 7, 0.38D, 0.20D, 0.38D, 0.012D);
         residual(level, muzzle.add(0.0D, 0.06D, 0.0D),
                 direction.scale(0.018D).add(0.0D, 0.0045D, 0.0D),
-                20 * 24, 9, 1, 0.360D, 0.174D, 0.360D,
+                20 * 30, 12, 1, 0.34D, 0.17D, 0.34D,
                 0.055D, 0.9D, true, Kind.MUSKET);
         cleanup(now);
     }
@@ -185,18 +194,18 @@ public final class BlackPowderSmokeManager {
             }
         }
         if (closest != null) {
-            closest.density = Math.min(32, closest.density + 1);
+            closest.density = Math.min(16, closest.density + 1);
             int maximumLife = kind == Kind.MUSKET ? 20 * 60 : 20 * 120;
             closest.life = Math.min(maximumLife,
                     Math.max(closest.life, closest.age + life / 2 + closest.density * 8));
-            closest.particles = Math.min(kind == Kind.MUSKET ? 18 : 24,
+            closest.particles = Math.min(kind == Kind.MUSKET ? 8 : 16,
                     closest.particles + Math.max(1, particles));
             closest.spreadX = Math.max(closest.spreadX, spreadX * SCALE);
             closest.spreadY = Math.max(closest.spreadY, spreadY * SCALE);
             closest.spreadZ = Math.max(closest.spreadZ, spreadZ * SCALE);
             closest.position = closest.position.add(position).scale(0.5D);
             closest.velocity = closest.velocity.add(velocity).scale(0.5D);
-            closest.untilPulse = Math.min(closest.untilPulse, 2);
+            closest.untilPulse = Math.min(closest.untilPulse, 4);
             return;
         }
         if (CLOUDS.size() >= MAX_CLOUDS) CLOUDS.remove(0);
@@ -219,8 +228,24 @@ public final class BlackPowderSmokeManager {
 
     private static void send(ServerLevel level, ParticleOptions particle, Vec3 position, int count,
                              double spreadX, double spreadY, double spreadZ, double speed) {
-        if (particle != null && count > 0) level.sendParticles(particle, position.x, position.y, position.z,
-                count, spreadX, spreadY, spreadZ, speed);
+        if (particle == null || count <= 0) return;
+        // The vanilla broadcast overload drops ordinary particles around 32 blocks.
+        // Long-distance packets keep smoke visible beyond simulation distance; client
+        // resolution/LOD then bounds its render cost by camera distance.
+        for (ServerPlayer player : level.players()) {
+            double dx = player.getX() - position.x;
+            double dy = player.getY() - position.y;
+            double dz = player.getZ() - position.z;
+            double distanceSq = dx * dx + dy * dy + dz * dz;
+            if (distanceSq > 512.0D * 512.0D) continue;
+            double lod = distanceSq <= 32.0D * 32.0D ? 1.0D
+                    : distanceSq <= 64.0D * 64.0D ? 0.72D
+                    : distanceSq <= 128.0D * 128.0D ? 0.46D
+                    : distanceSq <= 256.0D * 256.0D ? 0.25D : 0.12D;
+            int lodCount = Math.max(1, (int) Math.round(count * lod));
+            level.sendParticles(player, particle, true, position.x, position.y, position.z,
+                    lodCount, spreadX, spreadY, spreadZ, speed);
+        }
     }
 
     private static boolean invokeBoolean(Object target, String name) {
@@ -262,6 +287,7 @@ public final class BlackPowderSmokeManager {
         final Kind kind;
         Vec3 position;
         Vec3 velocity;
+        Vec3 wind = Vec3.ZERO;
         int age;
         int life;
         int untilPulse = 2;
@@ -271,12 +297,14 @@ public final class BlackPowderSmokeManager {
         double spreadZ;
         double expansionPerTick;
         int density = 1;
+        final int windPhase;
 
         Cloud(ServerLevel level, Vec3 position, Vec3 velocity, int life, int interval, int particles,
               double spreadX, double spreadY, double spreadZ, double expansionPerTick, Kind kind) {
             this.level = level;
             this.position = position;
             this.velocity = velocity;
+            this.windPhase = Math.floorMod(position.hashCode(), 20);
             this.life = life;
             this.interval = Math.max(1, interval);
             this.particles = particles;

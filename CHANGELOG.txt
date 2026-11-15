@@ -1,3 +1,16 @@
+Recruits: RTS Camera 0.24.4-server.1
+Snow decals, scalable black-powder smoke and infantry sprint calibration
+
+- Ground selection and planned-slot circles now sample each block's visible outline shape instead of its collision shape. One-layer snow therefore places the decal on the visible snow surface rather than underneath it.
+- Commander aura hover detection now includes owned CommanderEntity recruits directly and uses their synchronized owner UUID instead of an unreliable client owner-object identity. The blue morale radius remains a Space+hover preview.
+- Reworked musket smoke into lighter, smaller black-powder puffs which begin beyond the muzzle and accumulate gradually across repeated volleys. Density no longer jumps to a battlefield-filling cloud after the first few shots, while sustained fire can still obscure the field.
+- Added LOW, MEDIUM, HIGH and ULTRA smoke detail settings to both client config and Commander settings. ULTRA retains a 256px sprite tier; the default MEDIUM tier is deliberately more pixelated. Distance LOD lowers texture resolution and particle count independently of the selected maximum.
+- Smoke packets use long-distance delivery up to 512 blocks with server-side count LOD, keeping clouds visible beyond simulation distance without sending full nearby density to distant clients.
+- Added optional Living Wind integration using its public server WindApi.getAt reading through a cached, failure-safe compatibility bridge. Persistent cloud emitters drift with the synchronized wind; RTS remains functional when Living Wind is absent.
+- Foot Run/Hasty movement now targets the vanilla player's measured sprint baseline of 0.2806 blocks/tick. Mob movement attributes and controls are calibrated to that displacement, while Armor Weight, inventory encumbrance and fatigue remain multiplicative penalties on top.
+- Network protocol remains rts-camera-165; no packet registration or wire format changed.
+- Source version and packaging references are 0.24.4-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.3-server.1
 Combat orders, continuous manoeuvre and battlefield presentation
 

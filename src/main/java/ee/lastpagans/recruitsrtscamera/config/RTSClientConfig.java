@@ -17,6 +17,7 @@ public final class RTSClientConfig {
     public static final ForgeConfigSpec.EnumValue<GroundMarkerShape> GROUND_MARKER_SHAPE;
     public static final ForgeConfigSpec.BooleanValue CAVALRY_CAMERA_SHAKE;
     public static final ForgeConfigSpec.DoubleValue CAVALRY_CAMERA_SHAKE_INTENSITY;
+    public static final ForgeConfigSpec.EnumValue<SmokeResolution> BLACK_POWDER_SMOKE_RESOLUTION;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> UNIT_CARD_ORDER;
     public static final ForgeConfigSpec CLIENT;
 
@@ -56,6 +57,12 @@ public final class RTSClientConfig {
         CAVALRY_CAMERA_SHAKE_INTENSITY = BUILDER
                 .comment("Strength of cavalry camera shake. 1.0 makes a nearby 17-rider formation clearly visible.")
                 .defineInRange("cavalryCameraShakeIntensity", 1.0D, 0.0D, 3.0D);
+        BLACK_POWDER_SMOKE_RESOLUTION = BUILDER
+                .comment(
+                        "Maximum black-powder smoke texture resolution and particle density.",
+                        "Distant smoke automatically uses lower LODs. ULTRA retains the original 256px sprite tier."
+                )
+                .defineEnum("blackPowderSmokeResolution", SmokeResolution.MEDIUM);
         UNIT_CARD_ORDER = BUILDER
                 .comment("Persistent Commander unit-card order. Managed by dragging cards in the command bar.")
                 .defineList("unitCardOrder", List.of(), value -> value instanceof String);
@@ -84,6 +91,29 @@ public final class RTSClientConfig {
     public enum GroundMarkerShape {
         CIRCLE,
         SQUARE
+    }
+
+    public enum SmokeResolution {
+        LOW(0, 0.40F),
+        MEDIUM(1, 0.62F),
+        HIGH(2, 0.82F),
+        ULTRA(3, 1.0F);
+
+        private final int spriteTier;
+        private final float density;
+
+        SmokeResolution(int spriteTier, float density) {
+            this.spriteTier = spriteTier;
+            this.density = density;
+        }
+
+        public int spriteTier() { return spriteTier; }
+        public float density() { return density; }
+
+        public SmokeResolution next() {
+            SmokeResolution[] values = values();
+            return values[(ordinal() + 1) % values.length];
+        }
     }
 
     private RTSClientConfig() {

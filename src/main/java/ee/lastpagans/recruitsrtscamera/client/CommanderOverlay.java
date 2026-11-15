@@ -166,6 +166,10 @@ public final class CommanderOverlay {
             if (rows.get(0).contains(mouseX, mouseY)) toggleEnemyBanners();
             else if (rows.get(1).contains(mouseX, mouseY)) AdvisorClient.toggleEnabled();
             else if (rows.get(2).contains(mouseX, mouseY)) toggleUnitStatistics();
+            else if (rows.get(3).contains(mouseX, mouseY)) {
+                RTSClientConfig.BLACK_POWDER_SMOKE_RESOLUTION.set(
+                        RTSClientConfig.BLACK_POWDER_SMOKE_RESOLUTION.get().next());
+            }
             return true;
         }
 
@@ -911,7 +915,7 @@ public final class CommanderOverlay {
 
     private static Bounds settingsPopupBounds() {
         Bounds button = settingsButtonBounds();
-        return new Bounds(button.x2() - 132, button.y2() + 2, button.x2(), button.y2() + 63);
+        return new Bounds(button.x2() - 154, button.y2() + 2, button.x2(), button.y2() + 82);
     }
 
     private static List<Bounds> settingsChoiceBounds() {
@@ -919,7 +923,8 @@ public final class CommanderOverlay {
         return List.of(
                 new Bounds(popup.x1() + 2, popup.y1() + 2, popup.x2() - 2, popup.y1() + 20),
                 new Bounds(popup.x1() + 2, popup.y1() + 21, popup.x2() - 2, popup.y1() + 39),
-                new Bounds(popup.x1() + 2, popup.y1() + 40, popup.x2() - 2, popup.y2() - 2)
+                new Bounds(popup.x1() + 2, popup.y1() + 40, popup.x2() - 2, popup.y1() + 58),
+                new Bounds(popup.x1() + 2, popup.y1() + 59, popup.x2() - 2, popup.y2() - 2)
         );
     }
 
@@ -952,6 +957,12 @@ public final class CommanderOverlay {
         String statistics = "Unit Statistics: " + (unitStatisticsVisible() ? "ON" : "OFF");
         graphics.drawString(MC.font, statistics, statisticsRow.x1() + 3, statisticsRow.y1() + 5,
                 unitStatisticsVisible() ? GOLD : MUTED, false);
+        Bounds smokeRow = rows.get(3);
+        CommanderUiRegistry.record(CommanderUiElementIds.SETTINGS_SMOKE_RESOLUTION,
+                smokeRow.x1(), smokeRow.y1(), smokeRow.width(), smokeRow.height());
+        graphics.drawString(MC.font,
+                "Smoke Detail: " + RTSClientConfig.BLACK_POWDER_SMOKE_RESOLUTION.get().name(),
+                smokeRow.x1() + 3, smokeRow.y1() + 5, GOLD, false);
     }
 
     private static void renderFormationMenu(GuiGraphics graphics, Layout layout) {

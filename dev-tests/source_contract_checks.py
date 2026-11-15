@@ -229,9 +229,17 @@ require(controller, "retainedTacticalScene", "tactical scene data must be retain
 require(world_renderer, "retainedRoutes", "route geometry must be retained until scene data changes")
 require(world_renderer, "shape.max(Direction.Axis.Y)",
         "planned formation slots must follow snow and shallow collision surfaces")
+require(world_renderer, "getShape(MC.level, pos)",
+        "planned slots must use snow's visible outline rather than its empty first-layer collision")
+forbid(world_renderer, "getCollisionShape(MC.level, pos)",
+       "planned slots must not sink beneath non-colliding snow layers")
 ground_markers = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/GroundSelectionMarkerRenderer.java")
 require(ground_markers, "shape.max(Direction.Axis.Y)",
         "hover and selection circles must follow snow and shallow collision surfaces")
+require(ground_markers, "getShape(MC.level, pos)",
+        "selection circles must use the visible snow surface")
+forbid(ground_markers, "getCollisionShape(MC.level, pos)",
+       "selection circles must not remain under one-layer snow")
 
 require(keys, "GLFW.GLFW_KEY_E", "E must move the camera up")
 require(keys, "GLFW.GLFW_KEY_Q", "Q must move the camera down")
@@ -302,7 +310,14 @@ require(source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/NativeOrderF
 require(formation, "CENTER_SPEED = 0.21D", "foot formation travel must be 1.5x faster")
 require(formation, "FOOT_NAV_SPEED = 1.17D", "foot slot movement and rotation must be 1.5x faster")
 require(movement, "REGULAR_INFANTRY_NAV_SPEED = 1.17D", "regular foot navigation must be 1.5x faster")
-require(movement, "HASTY_INFANTRY_SPEED = 1.62D", "running foot navigation must be 1.5x faster")
+require(movement, "PLAYER_SPRINT_BLOCKS_PER_TICK = 0.2806D",
+        "the formation anchor must match vanilla player sprint ground speed")
+require(movement, "PLAYER_SPRINT_BLOCKS_PER_TICK / movement.getBaseValue()",
+        "foot movement attributes must target measured player sprint displacement")
+require(movement, "TroopStatService.encumbranceSpeedScale",
+        "armor and inventory weight must still reduce the player sprint baseline")
+require(steering, "isHastyActive(recruit.getGroup()) ? 1.0D : 0.78D",
+        "hasty foot MoveControl must use the calibrated player-sprint pace")
 require(movement, "SLOW_MARCH_CAVALRY_NAV_SPEED = 0.68D", "cavalry slow pace must remain unchanged")
 require(movement, "REGULAR_CAVALRY_MOUNT_MULTIPLIER = 0.25D",
         "ordinary formation cavalry must cap its temporary attribute boost at 1.25x")
@@ -728,15 +743,37 @@ require(smoke, 'invokeBoolean(projectile, "isExplosive")',
 require(smoke, "MAX_CLOUDS = 256", "absorbed smoke must bound persistent cloud cost")
 require(smoke, "MAX_PARTICLES_PER_SERVER_TICK = 480",
         "persistent smoke must have a global per-tick network budget")
-require(smoke, "closest.density = Math.min(32, closest.density + 1)",
+require(smoke, "closest.density = Math.min(16, closest.density + 1)",
         "repeated musketry must accumulate battlefield-obscuring smoke density")
-require(smoke, "cloud.particles + cloud.density / 2",
+require(smoke, "cloud.particles + cloud.density / 4",
         "dense smoke must emit more fog than isolated shots")
 require(smoke, "RTSParticles.BLACK_POWDER_FOG.get()",
         "absorbed firearm effects must use RTS-owned translucent fog")
+require(smoke, "level.sendParticles(player, particle, true",
+        "smoke must use long-distance delivery beyond simulation range")
+require(smoke, "distanceSq <= 128.0D * 128.0D ? 0.46D",
+        "long-distance smoke packets must use server-side count LOD")
+require(smoke, "LivingWindCompat.windAt",
+        "persistent smoke emitters must follow optional Living Wind readings")
 smoke_particle = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/BlackPowderFogParticle.java")
-require(smoke_particle, "startingAlpha = 0.30F", "overlapping smoke must accumulate useful opacity")
-require(smoke_particle, "shade = 0.50F", "black-powder smoke must not regress to a pale lens texture")
+require(smoke_particle, "startingAlpha = 0.18F", "the first volleys must remain a partial haze")
+require(smoke_particle, "shade = 0.78F", "black-powder smoke must use the requested lighter color")
+require(smoke_particle, "Math.min(quality.spriteTier(), distanceTier)",
+        "distant smoke must select a lower-resolution texture LOD")
+client_config = source("src/main/java/ee/lastpagans/recruitsrtscamera/config/RTSClientConfig.java")
+require(client_config, "BLACK_POWDER_SMOKE_RESOLUTION",
+        "clients need configurable LOW through ULTRA smoke detail")
+require(client_config, "ULTRA(3, 1.0F)", "ULTRA must retain the full original resolution tier")
+require(overlay, "Smoke Detail: \" + RTSClientConfig.BLACK_POWDER_SMOKE_RESOLUTION",
+        "Commander settings must expose the smoke detail selector")
+require(ui_ids, 'SETTINGS_SMOKE_RESOLUTION = "settings.smoke_resolution"',
+        "the smoke setting needs a stable UI-editor identifier")
+living_wind = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/LivingWindCompat.java")
+require(living_wind, 'getMethod("getAt", ServerLevel.class, BlockPos.class)',
+        "Living Wind integration must use its public position-aware server API")
+require(living_wind, "Class.forName", "Living Wind must remain an optional runtime integration")
+require(source("src/main/resources/META-INF/mods.toml"), 'modId="livingwind"',
+        "Living Wind must receive optional load ordering without becoming mandatory")
 forbid(smoke, "CAMPFIRE_COSY_SMOKE",
        "black-powder fog must not regress to vanilla campfire puffs")
 require(source("src/main/resources/META-INF/mods.toml"), 'modId="colonialcannons"',
@@ -790,6 +827,8 @@ require(aura_renderer, "TRIANGLE_FAN", "hovered morale auras need a translucent 
 require(aura_renderer, "MOTION_BLOCKING_NO_LEAVES", "morale auras must follow terrain instead of being buried")
 require(controller, "hoveredAuraEntity instanceof CommanderEntity",
         "hovered recruit commanders must expose their morale radius")
+require(controller, "MC.player.getUUID().equals(commander.getOwnerUUID())",
+        "Commander hover ownership must use synchronized UUIDs, not client entity identity")
 require(controller,
         "capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown()",
         "aura radii must only appear while Space is held")
@@ -892,8 +931,8 @@ require(visibility, "lastPruneBucket != bucket",
 require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
         "distance fog must remain removed")
 forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive button must remain removed")
-require(source("gradle.properties"), "mod_version=0.24.3-server.1", "semantic version must be updated")
-require(controller, "0.24.3-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.3-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.4-server.1", "semantic version must be updated")
+require(controller, "0.24.4-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.4-server.1.jar", "build helper version must be updated")
 
-print("0.24.3-server.1 source contracts passed")
+print("0.24.4-server.1 source contracts passed")

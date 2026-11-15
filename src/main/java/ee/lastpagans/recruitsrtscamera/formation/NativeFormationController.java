@@ -1219,7 +1219,8 @@ public final class NativeFormationController {
     }
 
     private static double navigationSpeed(AbstractRecruitEntity recruit) {
-        return recruit.getVehicle() == null ? FOOT_NAV_SPEED : MOUNTED_NAV_SPEED;
+        if (recruit.getVehicle() != null) return MOUNTED_NAV_SPEED;
+        return RTSMovementBoostManager.isHastyActive(recruit.getGroup()) ? 1.0D : FOOT_NAV_SPEED;
     }
 
     private static boolean carriesMoraleItem(AbstractRecruitEntity recruit) {

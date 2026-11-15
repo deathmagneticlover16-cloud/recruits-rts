@@ -122,7 +122,9 @@ public final class GroundSelectionMarkerRenderer {
         double highest = Double.NEGATIVE_INFINITY;
         for (int y = baseY + 1; y >= baseY - 2; y--) {
             BlockPos pos = new BlockPos(Mth.floor(x), y, Mth.floor(z));
-            var shape = MC.level.getBlockState(pos).getCollisionShape(MC.level, pos);
+            // Snow's first visible layer may have no collision height. Decals must follow
+            // the rendered outline surface or they remain on the block floor under snow.
+            var shape = MC.level.getBlockState(pos).getShape(MC.level, pos);
             if (shape.isEmpty()) continue;
             double candidate = y + shape.max(Direction.Axis.Y);
             if (candidate <= referenceY + 0.42D && candidate >= referenceY - 1.50D) {
