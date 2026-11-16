@@ -6,6 +6,7 @@ import com.talhanation.recruits.entities.IStrategicFire;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.combat.StrategicFireManager;
+import ee.lastpagans.recruitsrtscamera.combat.ThrowableWeaponManager;
 import ee.lastpagans.recruitsrtscamera.server.ServerPacketGuard;
 import ee.lastpagans.recruitsrtscamera.server.RTSVision;
 import net.minecraft.core.BlockPos;
@@ -125,6 +126,18 @@ public record StrategicFirePacket(List<UUID> groupIds, BlockPos targetBlock, Vec
             recruit.setTarget(null);
             recruit.setShouldRanged(true);
             Vec3 aim = aimPoints.getOrDefault(recruit.getUUID(), packet.target);
+            if (ThrowableWeaponManager.hasThrowable(recruit)) {
+                // Javelins use RTS' real projectile/release-frame path. Feeding them to
+                // Recruits' bow goal only plays a throw-looking animation without spawning
+                // anything, because a javelin is neither a bow nor a crossbow projectile.
+                strategic.setShouldStrategicFire(false);
+                if (ThrowableWeaponManager.designateStrategicFire(recruit, aim)) {
+                    ranged++;
+                } else {
+                    StrategicFireManager.clear(recruit);
+                }
+                continue;
+            }
             strategic.setStrategicFirePos(new BlockPos(
                     net.minecraft.util.Mth.floor(aim.x), packet.targetBlock.getY(), net.minecraft.util.Mth.floor(aim.z)));
             strategic.setShouldStrategicFire(true);

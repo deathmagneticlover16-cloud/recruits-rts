@@ -755,9 +755,19 @@ require(smoke, "distanceSq <= 128.0D * 128.0D ? 0.46D",
         "long-distance smoke packets must use server-side count LOD")
 require(smoke, "LivingWindCompat.windAt",
         "persistent smoke emitters must follow optional Living Wind readings")
+require(smoke, "closest.age + life",
+        "a refreshed discharge may emit only for one short incoming-puff window")
+forbid(smoke, "20 * 75",
+       "cannon muzzle emitters must not manufacture smoke for seventy-five seconds")
+forbid(smoke, "20 * 30",
+       "musket emitters must not manufacture smoke for thirty seconds")
+require(smoke, "MUSKET_POWDER_FOG.get()",
+        "musket puffs need an independently scalable particle type")
 smoke_particle = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/BlackPowderFogParticle.java")
 require(smoke_particle, "startingAlpha = 0.18F", "the first volleys must remain a partial haze")
-require(smoke_particle, "shade = 0.78F", "black-powder smoke must use the requested lighter color")
+require(smoke_particle, "shade = 0.86F", "black-powder smoke must use the requested white-grey color")
+require(smoke_particle, "new Provider(sprites, 0.58F)",
+        "musket smoke must be substantially smaller than cannon smoke")
 require(smoke_particle, "Math.min(quality.spriteTier(), distanceTier)",
         "distant smoke must select a lower-resolution texture LOD")
 client_config = source("src/main/java/ee/lastpagans/recruitsrtscamera/config/RTSClientConfig.java")
@@ -863,8 +873,27 @@ require(source("src/main/resources/data/recruits_rts_camera/tags/items/throwable
         '"darkagesarmory:steel_javelin"', "Epic Knights Dark Ages javelins must enter RTS throwing logic")
 forbid(source("src/main/resources/data/recruits_rts_camera/tags/items/throwable_weapons.json"),
        'antiquelegacy:', "ordinary Epic Knights spears must not enter RTS throwing logic")
-require(source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ThrowableWeaponManager.java"),
-        'STEEL_JAVELIN.equals', "throwing must enforce the exact supported javelin even if tags are extended")
+throwable = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ThrowableWeaponManager.java")
+require(throwable, 'STEEL_JAVELIN.equals',
+        "throwing must enforce the exact supported javelin even if tags are extended")
+require(throwable, "GROUND_ORDERS", "strategic javelin fire needs a persistent ground-order cycle")
+require(throwable, "new ThrownRecruitWeaponEntity(",
+        "javelin release animations must spawn a real projectile")
+require(throwable, "held.shrink(1)", "each real javelin launch must consume ammunition")
+require(throwable, "PENDING.isEmpty() && GROUND_ORDERS.isEmpty()",
+        "ground orders must keep ticking between synchronized javelin release windows")
+require(strategic_packet, "ThrowableWeaponManager.designateStrategicFire(recruit, aim)",
+        "F strategic fire must route equipped javelins through the real throw system")
+ranged_javelin_mixin = source(
+    "src/main/java/ee/lastpagans/recruitsrtscamera/mixin/RangedJavelinEquipmentMixin.java")
+require(ranged_javelin_mixin, "ThrowableWeaponManager.isSupportedThrowable(stack)",
+        "Bowman and Crossbowman main-hand slots must accept the supported javelin")
+require(source("src/main/resources/recruits_rts_camera.mixins.json"),
+        '"RangedJavelinEquipmentMixin"', "the ranged javelin equipment mixin must be registered")
+require(bow_volley, "ThrowableWeaponManager.ownsThrowCycle(recruit)",
+        "native Bowman bow ticks must not replace a real RTS javelin throw")
+require(crossbow_volley, "ThrowableWeaponManager.ownsThrowCycle(crossBowman)",
+        "native Crossbowman ticks must not replace a real RTS javelin throw")
 require(overlay, "view.moraleState() >= 2", "routing cards must reject interaction and retain a white overlay")
 require(overlay, "Math.sin(phase)", "wavering cards need a flashing translucent overlay")
 require(overlay, "graphics.pose().scale(1.04F", "dragged cards must lift with smooth visual parallax")
@@ -931,8 +960,8 @@ require(visibility, "lastPruneBucket != bucket",
 require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
         "distance fog must remain removed")
 forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive button must remain removed")
-require(source("gradle.properties"), "mod_version=0.24.4-server.1", "semantic version must be updated")
-require(controller, "0.24.4-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.4-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.5-server.1", "semantic version must be updated")
+require(controller, "0.24.5-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.5-server.1.jar", "build helper version must be updated")
 
-print("0.24.4-server.1 source contracts passed")
+print("0.24.5-server.1 source contracts passed")

@@ -63,7 +63,7 @@ public final class BlackPowderSmokeManager {
         boolean explosive = invokeBoolean(projectile, "isExplosive");
         if (explosive) {
             initial(level, position.add(0.0D, 0.35D, 0.0D), 58,
-                    1.70D * 1.15D, 1.70D * 0.65D, 1.70D * 1.15D, 0.020D);
+                    1.70D * 1.15D, 1.70D * 0.65D, 1.70D * 1.15D, 0.020D, Kind.CANNON);
             for (int i = 0; i < 4; i++) {
                 double angle = Math.PI * 2.0D * i / 4.0D;
                 Vec3 velocity = new Vec3(Math.cos(angle) * 0.01D,
@@ -71,16 +71,16 @@ public final class BlackPowderSmokeManager {
                         .add(direction.scale(0.006D));
                 residual(level, position.add(Math.cos(angle) * 0.32D,
                                 0.35D + (i % 2) * 0.16D, Math.sin(angle) * 0.32D),
-                        velocity, 20 * 95, 7, 2,
+                        velocity, 40, 5, 2,
                         1.70D * 0.62D, 1.70D * 0.34D, 1.70D * 0.62D,
                         0.088D, 1.6D, false, Kind.CANNON);
             }
         } else {
             initial(level, position.add(0.0D, 0.18D, 0.0D), 22,
-                    0.95D, 0.42D, 0.95D, 0.016D);
+                    0.95D, 0.42D, 0.95D, 0.016D, Kind.CANNON);
             residual(level, position.add(0.0D, 0.25D, 0.0D),
                     direction.scale(0.006D).add(0.0D, 0.004D, 0.0D),
-                    20 * 38, 9, 1, 0.75D, 0.32D, 0.75D,
+                    18, 5, 1, 0.75D, 0.32D, 0.75D,
                     0.060D, 1.6D, true, Kind.CANNON);
         }
     }
@@ -98,8 +98,8 @@ public final class BlackPowderSmokeManager {
             if ((cloud.age + cloud.windPhase) % 20 == 0) {
                 cloud.wind = LivingWindCompat.windAt(cloud.level, cloud.position);
             }
-            // The cloud emitter follows Living Wind as well as its individual client
-            // particles, so later residual puffs continue along the same air mass.
+            // The brief emitter follows Living Wind while it releases its finite puff.
+            // Once removed, already-spawned particles keep their own drift and fade.
             cloud.position = cloud.position.add(cloud.velocity).add(cloud.wind.scale(0.025D));
             cloud.velocity = new Vec3(cloud.velocity.x * 0.992D,
                     cloud.velocity.y * 0.998D + (cloud.kind == Kind.CANNON ? 0.000004D : 0.000003D),
@@ -120,7 +120,8 @@ public final class BlackPowderSmokeManager {
                 int emitted = Math.min(count, particleBudget);
                 lingering(cloud.level, cloud.position, emitted,
                         cloud.spreadX + expansion, cloud.spreadY + expansion * 0.46D,
-                        cloud.spreadZ + expansion, 0.0035D + (1.0D - progress) * 0.0035D);
+                        cloud.spreadZ + expansion, 0.0035D + (1.0D - progress) * 0.0035D,
+                        cloud.kind);
                 particleBudget -= emitted;
             }
         }
@@ -147,19 +148,19 @@ public final class BlackPowderSmokeManager {
             stamp.tick = now;
             if (++stamp.pellets == 2) {
                 Vec3 bonus = muzzle.add(direction.scale(0.34D));
-                initial(level, bonus, 4, 0.40D, 0.20D, 0.40D, 0.012D);
+                initial(level, bonus, 3, 0.27D, 0.14D, 0.27D, 0.010D, Kind.MUSKET);
                 residual(level, bonus.add(0.0D, 0.08D, 0.0D),
                         direction.scale(0.0207D).add(0.0D, 0.0045D, 0.0D),
-                        20 * 30, 12, 1, 0.36D, 0.18D, 0.36D,
+                        10, 4, 1, 0.25D, 0.13D, 0.25D,
                         0.075D, 0.9D, true, Kind.MUSKET);
             }
             return;
         }
         RECENT_SHOTS.put(key, new ShotStamp(now));
-        initial(level, muzzle, 7, 0.38D, 0.20D, 0.38D, 0.012D);
+        initial(level, muzzle, 5, 0.28D, 0.15D, 0.28D, 0.010D, Kind.MUSKET);
         residual(level, muzzle.add(0.0D, 0.06D, 0.0D),
                 direction.scale(0.018D).add(0.0D, 0.0045D, 0.0D),
-                20 * 30, 12, 1, 0.34D, 0.17D, 0.34D,
+                12, 4, 1, 0.24D, 0.12D, 0.24D,
                 0.055D, 0.9D, true, Kind.MUSKET);
         cleanup(now);
     }
@@ -167,14 +168,14 @@ public final class BlackPowderSmokeManager {
     private static void cannon(ServerLevel level, Entity projectile) {
         Vec3 direction = direction(projectile.getDeltaMovement());
         Vec3 origin = projectile.position().add(direction.scale(0.9D));
-        initial(level, origin, 52, 1.35D, 0.81D, 1.35D, 0.025D);
+        initial(level, origin, 42, 1.35D, 0.81D, 1.35D, 0.025D, Kind.CANNON);
         Vec3 side = new Vec3(-direction.z, 0.0D, direction.x).normalize();
         for (int i = 0; i < 3; i++) {
             double lane = i - 1.0D;
             residual(level, origin.add(side.scale(lane * 0.30D)).add(0.0D, Math.abs(lane) * 0.08D, 0.0D),
                     direction.scale(0.03D * (1.0D - Math.min(0.3D, Math.abs(lane) * 0.1D)))
                             .add(side.scale(lane * 0.0025D)).add(0.0D, 0.005D * (1.0D + Math.abs(lane) * 0.12D), 0.0D),
-                    20 * 75, 7, 2, 0.81D, 0.405D, 0.81D,
+                    30, 4, 2, 0.81D, 0.405D, 0.81D,
                     0.080D, 1.6D, false, Kind.CANNON);
         }
     }
@@ -195,9 +196,10 @@ public final class BlackPowderSmokeManager {
         }
         if (closest != null) {
             closest.density = Math.min(16, closest.density + 1);
-            int maximumLife = kind == Kind.MUSKET ? 20 * 60 : 20 * 120;
-            closest.life = Math.min(maximumLife,
-                    Math.max(closest.life, closest.age + life / 2 + closest.density * 8));
+            // A new discharge may refresh an emitter, but only for the incoming puff's
+            // short emission window. Once firing stops, no emitter remains to manufacture
+            // smoke; particles already in the world continue drifting and fading client-side.
+            closest.life = Math.max(closest.life, closest.age + life);
             closest.particles = Math.min(kind == Kind.MUSKET ? 8 : 16,
                     closest.particles + Math.max(1, particles));
             closest.spreadX = Math.max(closest.spreadX, spreadX * SCALE);
@@ -215,15 +217,23 @@ public final class BlackPowderSmokeManager {
     }
 
     private static void initial(ServerLevel level, Vec3 position, int count,
-                                double spreadX, double spreadY, double spreadZ, double speed) {
-        send(level, RTSParticles.BLACK_POWDER_FOG.get(), position, count,
+                                double spreadX, double spreadY, double spreadZ, double speed,
+                                Kind kind) {
+        send(level, particle(kind), position, count,
                 spreadX * SCALE, spreadY * SCALE, spreadZ * SCALE, speed);
     }
 
     private static void lingering(ServerLevel level, Vec3 position, int count,
-                                  double spreadX, double spreadY, double spreadZ, double speed) {
-        send(level, RTSParticles.BLACK_POWDER_FOG.get(), position, count,
+                                  double spreadX, double spreadY, double spreadZ, double speed,
+                                  Kind kind) {
+        send(level, particle(kind), position, count,
                 spreadX, spreadY, spreadZ, speed);
+    }
+
+    private static ParticleOptions particle(Kind kind) {
+        return kind == Kind.MUSKET
+                ? RTSParticles.MUSKET_POWDER_FOG.get()
+                : RTSParticles.BLACK_POWDER_FOG.get();
     }
 
     private static void send(ServerLevel level, ParticleOptions particle, Vec3 position, int count,
@@ -304,6 +314,7 @@ public final class BlackPowderSmokeManager {
             this.level = level;
             this.position = position;
             this.velocity = velocity;
+            this.wind = LivingWindCompat.windAt(level, position);
             this.windPhase = Math.floorMod(position.hashCode(), 20);
             this.life = life;
             this.interval = Math.max(1, interval);

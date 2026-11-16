@@ -24,19 +24,19 @@ public final class BlackPowderFogParticle extends TextureSheetParticle {
 
     private BlackPowderFogParticle(ClientLevel level, double x, double y, double z,
                                    double xSpeed, double ySpeed, double zSpeed,
-                                   SpriteSet sprites, int spriteTier) {
+                                   SpriteSet sprites, int spriteTier, float sizeScale) {
         super(level, x, y, z, xSpeed, ySpeed, zSpeed);
         this.xd = xSpeed * 0.20D + (random.nextDouble() - 0.5D) * 0.006D;
         this.yd = ySpeed * 0.20D + 0.0015D + random.nextDouble() * 0.002D;
         this.zd = zSpeed * 0.20D + (random.nextDouble() - 0.5D) * 0.006D;
         this.lifetime = 150 + random.nextInt(100);
-        this.quadSize = 1.8F + random.nextFloat() * 1.4F;
+        this.quadSize = (1.8F + random.nextFloat() * 1.4F) * sizeScale;
         // Light black-powder haze remains translucent after one volley while ordinary
         // alpha compositing makes repeated volleys progressively more opaque.
         this.startingAlpha = 0.18F + random.nextFloat() * 0.08F;
         this.alpha = startingAlpha;
-        float shade = 0.78F + random.nextFloat() * 0.14F;
-        setColor(shade, shade * 0.985F, shade * 0.955F);
+        float shade = 0.86F + random.nextFloat() * 0.12F;
+        setColor(shade, shade, shade);
         this.friction = 0.992F;
         setSprite(sprites.get(Mth.clamp(spriteTier, 0, 3), 3));
     }
@@ -58,9 +58,11 @@ public final class BlackPowderFogParticle extends TextureSheetParticle {
 
     public static final class Provider implements ParticleProvider<SimpleParticleType> {
         private final SpriteSet sprites;
+        private final float sizeScale;
 
-        public Provider(SpriteSet sprites) {
+        public Provider(SpriteSet sprites, float sizeScale) {
             this.sprites = sprites;
+            this.sizeScale = sizeScale;
         }
 
         @Override
@@ -76,7 +78,7 @@ public final class BlackPowderFogParticle extends TextureSheetParticle {
             if (level.random.nextFloat() > quality.density() * lodDensity) return null;
             int spriteTier = Math.min(quality.spriteTier(), distanceTier);
             return new BlackPowderFogParticle(level, x, y, z, xSpeed, ySpeed, zSpeed,
-                    sprites, spriteTier);
+                    sprites, spriteTier, sizeScale);
         }
     }
 
@@ -87,7 +89,10 @@ public final class BlackPowderFogParticle extends TextureSheetParticle {
 
         @SubscribeEvent
         public static void registerProviders(RegisterParticleProvidersEvent event) {
-            event.registerSpriteSet(RTSParticles.BLACK_POWDER_FOG.get(), Provider::new);
+            event.registerSpriteSet(RTSParticles.BLACK_POWDER_FOG.get(),
+                    sprites -> new Provider(sprites, 1.0F));
+            event.registerSpriteSet(RTSParticles.MUSKET_POWDER_FOG.get(),
+                    sprites -> new Provider(sprites, 0.58F));
         }
     }
 }

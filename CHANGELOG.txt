@@ -1,3 +1,16 @@
+Recruits: RTS Camera 0.24.5-server.1
+Finite powder smoke and functional javelin bombardment
+
+- Replaced the dense impact-cloud smoke artwork with a thin, irregular white-grey black-powder haze and regenerated all four texture LODs from that source.
+- Split musket smoke into its own particle type at 58% of the cannon sprite scale, with smaller muzzle spread and fewer initial puffs. Cannon discharge and impact smoke retain their full scale.
+- Smoke emitters are now finite discharge events: about half a second for muskets and one to two seconds for cannon muzzle/impact clouds. Once emission ends, existing smoke continues drifting and dissipating without a moving source generating new clouds indefinitely.
+- Living Wind is sampled as soon as an emitter is created, preserving wind response even for the new short-lived emission windows.
+- Bowmen and Crossbowmen now accept `darkagesarmory:steel_javelin` in their main-hand inventory slot and can draw replacement javelins from their carried inventory.
+- Strategic fire with equipped javelins now uses synchronized real throw cycles aimed across the designated bombardment disk. Each animation releases and consumes an actual `ThrownRecruitWeaponEntity`; native bow/crossbow goals are suspended during RTS-owned throws so they cannot produce animation-only fake throws or swap the weapon away mid-windup.
+- Cease Fire, routing, movement/attack order replacement and server shutdown clean up both pending and persistent javelin ground orders.
+- Network protocol remains rts-camera-165; no custom packet registration or wire format changed.
+- Source version and packaging references are 0.24.5-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.4-server.1
 Snow decals, scalable black-powder smoke and infantry sprint calibration
 

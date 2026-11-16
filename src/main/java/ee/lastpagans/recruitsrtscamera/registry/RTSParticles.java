@@ -14,6 +14,8 @@ public final class RTSParticles {
 
     public static final RegistryObject<SimpleParticleType> BLACK_POWDER_FOG =
             PARTICLES.register("black_powder_fog", () -> new SimpleParticleType(false));
+    public static final RegistryObject<SimpleParticleType> MUSKET_POWDER_FOG =
+            PARTICLES.register("musket_powder_fog", () -> new SimpleParticleType(false));
 
     private RTSParticles() { }
 
