@@ -4,11 +4,14 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.battle.RoutedGroupManager;
 import ee.lastpagans.recruitsrtscamera.projectile.ThrownRecruitWeaponEntity;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeBrain;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.item.ShieldItem;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.ToolActions;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
@@ -31,11 +34,14 @@ public final class ShieldTactics {
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void tick(LivingEvent.LivingTickEvent event) {
         if (!(event.getEntity() instanceof AbstractRecruitEntity recruit) || recruit.level().isClientSide) return;
+        ThrowableWeaponManager.relocateOffhandJavelin(recruit);
         boolean controls = controls(recruit);
         if (!controls || !recruit.canBlock()) { release(recruit); return; }
-        if (!recruit.getOffhandItem().canPerformAction(ToolActions.SHIELD_BLOCK)) {
-            if (recruit.tickCount % 20 == 0) recruit.switchOffHandItem(s -> s.canPerformAction(ToolActions.SHIELD_BLOCK));
-            if (!recruit.getOffhandItem().canPerformAction(ToolActions.SHIELD_BLOCK)) { release(recruit); return; }
+        if (!hasActualShield(recruit)) {
+            if (recruit.tickCount % 20 == 0) {
+                recruit.switchOffHandItem(stack -> stack.getItem() instanceof ShieldItem);
+            }
+            if (!hasActualShield(recruit)) { release(recruit); return; }
         }
         ProjectileAwarenessManager.Threat threat = ProjectileAwarenessManager.threat(recruit);
         var mode = TacticalCombatManager.settings(recruit).shield();
@@ -48,9 +54,15 @@ public final class ShieldTactics {
         // Leave food, potions, bows, and throw animations in charge of their own item use.
         if (recruit.isUsingItem() && recruit.getUsedItemHand() != InteractionHand.OFF_HAND) raise = false;
         if (!raise) { release(recruit); return; }
-        if (threat != null && !threat.overhead()) {
+        RecruitRuntimeBrain brain = RecruitRuntimeRegistry.brain(recruit);
+        // Native formation movement owns body yaw in one place. Its controller handles the
+        // stationary shield-facing below; asking LookControl to turn as well caused panic-like
+        // walking and alternating rotation while ranks were still moving into their slots.
+        if (threat != null && !threat.overhead()
+                && brain.authority() != RecruitRuntimeBrain.MovementAuthority.RTS_FORMATION) {
             recruit.getLookControl().setLookAt(threat.source().x, recruit.getEyeY(), threat.source().z, 45, 35);
-        } else if (!up && target != null) {
+        } else if (!up && target != null
+                && brain.authority() != RecruitRuntimeBrain.MovementAuthority.RTS_FORMATION) {
             recruit.getLookControl().setLookAt(target, 30, 30);
         }
         if (!recruit.isUsingItem()) recruit.startUsingItem(InteractionHand.OFF_HAND);
@@ -62,6 +74,9 @@ public final class ShieldTactics {
                 && recruit.getUsedItemHand() == InteractionHand.OFF_HAND
                 && recruit.getUseItem().canPerformAction(ToolActions.SHIELD_BLOCK)) recruit.stopUsingItem();
         recruit.getPersistentData().remove(USING); recruit.getPersistentData().remove(UP);
+    }
+    public static boolean hasActualShield(AbstractRecruitEntity recruit) {
+        return recruit != null && recruit.getOffhandItem().getItem() instanceof ShieldItem;
     }
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void overhead(LivingAttackEvent event) {

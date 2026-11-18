@@ -1,3 +1,16 @@
+Recruits: RTS Camera 0.24.6-server.1
+Javelin grounding, rapid throw cycles and disciplined shield response
+
+- Recruit-thrown javelins now remain embedded in terrain for up to one minute instead of disappearing on block impact. Their shaft preserves its impact angle, embedded state survives save/load and the entity safely expires to avoid permanent projectile buildup.
+- Added two supplied ground-strike variants under one positional sound event. Every impact randomly selects a variant and applies bounded pitch variation.
+- Shortened the synchronized javelin wind-up to six ticks and reload cadence to 28 ticks. Recruits still perform the optional SPA throw animation, consume real carried javelins and synchronize formation volleys.
+- Javelins are forcibly relocated out of a recruit's off hand without item loss, including when another addon bypasses Recruits' native shield-only inventory slot.
+- Shield AI now recognizes actual ShieldItem instances only; block-capable melee and javelin items can no longer trigger the defensive goal.
+- Projectile awareness rejects both spawned and already-impacting allied projectiles, so a formation does not shield-up against its own volley.
+- Tactical shield facing now respects formation rotation ownership. Moving ranks retain their travel direction; settled ranks turn smoothly toward an incoming projectile's origin without native LookControl competing or inducing panic movement.
+- Network protocol remains rts-camera-165; no custom packet registration or wire format changed.
+- Source version and packaging references are 0.24.6-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.5-server.1
 Finite powder smoke and functional javelin bombardment
 

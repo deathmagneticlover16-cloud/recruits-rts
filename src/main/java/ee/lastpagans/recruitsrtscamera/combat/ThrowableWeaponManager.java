@@ -30,10 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Total War-style recruit-thrown weapon support for tagged weapons.
  *
- * <p>0.10.5 makes throwing a two-stage action: first the Recruit begins the authored
- * Serious Animations spear throw, then the projectile is released on that animation's
- * public release tick (11 in SPA 0.8.1). The animation addon remains completely optional;
- * without it Commander retains the same wind-up delay so the gameplay timing is stable.</p>
+ * <p>Throwing is a two-stage action: the Recruit begins the optional authored Serious
+ * Animations spear throw, then Commander releases the projectile on a deliberately short,
+ * formation-synchronized snap-throw frame. The animation addon remains optional.</p>
  */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ThrowableWeaponManager {
@@ -42,7 +41,9 @@ public final class ThrowableWeaponManager {
     public static final double MIN_THROW_RANGE = 5.0D;
     public static final double MAX_THROW_RANGE = 18.0D;
 
-    private static final int THROW_COOLDOWN_TICKS = 50;
+    /** A readable snap-throw followed by an actual reload, rather than one long wind-up. */
+    private static final int THROW_WINDUP_TICKS = 6;
+    private static final int THROW_COOLDOWN_TICKS = 28;
     private static final Map<UUID, Long> LAST_THROW = new ConcurrentHashMap<>();
     private static final Map<UUID, PendingThrow> PENDING = new ConcurrentHashMap<>();
     private static final Map<UUID, GroundOrder> GROUND_ORDERS = new ConcurrentHashMap<>();
@@ -76,8 +77,8 @@ public final class ThrowableWeaponManager {
 
     /**
      * Starts a throw if the Recruit is in range. The actual weapon does not leave the hand
-     * until the animation release frame. This prevents the old instant projectile pop and
-     * gives cinematic volleys a readable wind-up.
+     * until the short release frame. This prevents an instant projectile pop without making
+     * a javelin rank spend most of its combat cycle winding up.
      */
     public static boolean tryThrow(AbstractRecruitEntity recruit, LivingEntity target) {
         if (recruit != null && TacticalCombatManager.settings(recruit).holdFire()
@@ -125,8 +126,9 @@ public final class ThrowableWeaponManager {
             return false;
         }
 
-        int releaseDelay = SeriousAnimationsCompat.spearThrowReleaseTick();
-        int duration = SeriousAnimationsCompat.spearThrowDurationTicks();
+        int releaseDelay = Math.min(THROW_WINDUP_TICKS,
+                SeriousAnimationsCompat.spearThrowReleaseTick());
+        int duration = Math.min(20, SeriousAnimationsCompat.spearThrowDurationTicks());
         long sharedRelease = FormationVolleyManager.reserveJavelinRelease(
                 recruit, releaseDelay, THROW_COOLDOWN_TICKS);
         if (sharedRelease < 0L) return false;
@@ -267,6 +269,23 @@ public final class ThrowableWeaponManager {
         if (isSupportedThrowable(recruit.getMainHandItem())) return true;
         recruit.switchMainHandItem(ThrowableWeaponManager::isSupportedThrowable);
         return !findThrowable(recruit).stack().isEmpty();
+    }
+
+    /**
+     * Keeps the supported javelin out of the defensive hand even if another addon bypasses
+     * Recruits' shield-only inventory slot. No item is deleted when both hands are occupied.
+     */
+    public static void relocateOffhandJavelin(AbstractRecruitEntity recruit) {
+        if (recruit == null || !isSupportedThrowable(recruit.getOffhandItem())) return;
+        ItemStack javelin = recruit.getOffhandItem().copy();
+        recruit.setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY);
+        if (recruit.getMainHandItem().isEmpty()) {
+            recruit.setItemInHand(InteractionHand.MAIN_HAND, javelin);
+            return;
+        }
+        ItemStack remainder = recruit.getInventory().addItem(javelin);
+        recruit.getInventory().setChanged();
+        if (!remainder.isEmpty()) recruit.spawnAtLocation(remainder);
     }
 
     private static ItemSource findThrowable(AbstractRecruitEntity recruit) {

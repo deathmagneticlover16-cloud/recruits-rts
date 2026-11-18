@@ -6,6 +6,8 @@ import ee.lastpagans.recruitsrtscamera.animation.CommanderAnimationHints;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.compat.TerrainSurfaceResolver;
 import ee.lastpagans.recruitsrtscamera.combat.TacticalCombatManager;
+import ee.lastpagans.recruitsrtscamera.combat.ProjectileAwarenessManager;
+import ee.lastpagans.recruitsrtscamera.combat.ShieldTactics;
 import ee.lastpagans.recruitsrtscamera.mixin.MobGoalAccess;
 import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
 import ee.lastpagans.recruitsrtscamera.navigation.LocalFormationSteering;
@@ -559,8 +561,17 @@ public final class NativeFormationController {
                     && combatTarget != null && combatTarget.isAlive() && !combatTarget.isRemoved()
                     && recruit.distanceToSqr(combatTarget) <= (TacticalCombatManager.ranged(recruit)
                     ? 48.0D * 48.0D : 4.5D * 4.5D);
+            ProjectileAwarenessManager.Threat shieldThreat = !travelling && arrived
+                    && ShieldTactics.hasActualShield(recruit)
+                    ? ProjectileAwarenessManager.threat(recruit) : null;
             float controlledHeading;
-            if (faceNearbyTarget) {
+            if (shieldThreat != null && !shieldThreat.overhead()) {
+                // Formation movement remains the sole yaw writer. Once the member has settled,
+                // turn the whole body (and therefore its raised shield) toward the incoming
+                // shot source with a bounded human turn instead of a one-frame snap.
+                float shieldHeading = headingTo(mover.position(), shieldThreat.source(), memberHeading);
+                controlledHeading = approachHeading(mover.getYRot(), shieldHeading, 12.0F);
+            } else if (faceNearbyTarget) {
                 // Formation ownership must not leave an engaged recruit staring past an
                 // enemy behind him. Keep the slot fixed, but turn the body and weapon into
                 // the leased melee target while it is within the immediate engagement area.

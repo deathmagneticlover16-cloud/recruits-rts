@@ -9,8 +9,8 @@ import java.lang.reflect.Method;
  * Optional bridge to Recruits: Serious Animations.
  *
  * <p>The animation addon deliberately remains optional. When 0.8.1+ is installed we use
- * its public spear-throw synchronization API and its authored release tick. Without it,
- * Commander keeps the exact same delayed projectile timing and simply omits the animation.</p>
+ * its public spear-throw synchronization API. Commander owns gameplay release timing, so an
+ * animation-pack update cannot silently turn the javelin wind-up into a multi-second delay.</p>
  */
 public final class SeriousAnimationsCompat {
     private static final String MOD_ID = "recruits_serious_animations";

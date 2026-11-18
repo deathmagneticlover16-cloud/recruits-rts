@@ -9,5 +9,6 @@
   "advisor_enemy_unit_rout": {"sounds": ["recruits_rts_camera:advisor/latin/latin_15"]},
   "advisor_artillery_attacked": {"sounds": ["recruits_rts_camera:advisor/latin/latin_18"]},
   "cavalry_rumble": {"sounds": [{"name": "recruits_rts_camera:cavalry/horse_run_rumble", "stream": true, "attenuation_distance": 192}]},
-  "cavalry_rumble_distant": {"sounds": [{"name": "recruits_rts_camera:cavalry/horse_run_rumble_distant", "stream": true, "attenuation_distance": 192}]}
+  "cavalry_rumble_distant": {"sounds": [{"name": "recruits_rts_camera:cavalry/horse_run_rumble_distant", "stream": true, "attenuation_distance": 192}]},
+  "javelin_ground_hit": {"sounds": ["recruits_rts_camera:javelin/javelin_hit_1", "recruits_rts_camera:javelin/javelin_hit_2"]}
 }

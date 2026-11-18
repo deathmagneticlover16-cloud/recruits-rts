@@ -37,6 +37,8 @@ public final class ProjectileAwarenessManager {
                 || recruit.getGroup() == null || !(event.getSource().getDirectEntity() instanceof Projectile projectile)) {
             return;
         }
+        Entity owner = projectile.getOwner();
+        if (owner == recruit || owner != null && recruit.isAlliedTo(owner)) return;
         remember(recruit, projectile);
     }
 

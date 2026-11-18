@@ -86,6 +86,12 @@ doctrine = source("src/main/java/ee/lastpagans/recruitsrtscamera/formation/Forma
 terrain_cache = source("src/main/java/ee/lastpagans/recruitsrtscamera/navigation/TacticalTerrainCache.java")
 server_config = source("src/main/java/ee/lastpagans/recruitsrtscamera/config/RTSServerConfig.java")
 language = source("src/main/resources/assets/recruits_rts_camera/lang/en_us.json")
+thrown_weapon = source("src/main/java/ee/lastpagans/recruitsrtscamera/projectile/ThrownRecruitWeaponEntity.java")
+throw_manager = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ThrowableWeaponManager.java")
+shield_tactics = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ShieldTactics.java")
+shield_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/RecruitShieldMixin.java")
+projectile_awareness = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ProjectileAwarenessManager.java")
+sounds = source("src/main/resources/assets/recruits_rts_camera/sounds.json")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -960,8 +966,32 @@ require(visibility, "lastPruneBucket != bucket",
 require(controller, "public static List<FogVisionSource> fogVisionSources() {\n        return List.of();",
         "distance fog must remain removed")
 forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive button must remain removed")
-require(source("gradle.properties"), "mod_version=0.24.5-server.1", "semantic version must be updated")
-require(controller, "0.24.5-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.5-server.1.jar", "build helper version must be updated")
+require(thrown_weapon, "entityData.define(EMBEDDED, false)",
+        "javelins need a synchronized embedded state")
+require(thrown_weapon, "EMBEDDED_LIFETIME_TICKS = 20 * 60",
+        "embedded javelins need a bounded server lifetime")
+require(thrown_weapon, "RTSSounds.JAVELIN_GROUND_HIT.get()",
+        "terrain impacts must play the supplied javelin sound event")
+require(thrown_weapon, "0.84F + random.nextFloat() * 0.32F",
+        "javelin ground impacts need bounded pitch variation")
+require(throw_manager, "THROW_WINDUP_TICKS = 6",
+        "javelin throws need a short wind-up")
+require(throw_manager, "THROW_COOLDOWN_TICKS = 28",
+        "javelin throws need a separate bounded reload")
+require(throw_manager, "relocateOffhandJavelin",
+        "supported javelins must be removed safely from the defensive hand")
+require(shield_tactics, "stack.getItem() instanceof ShieldItem",
+        "tactical shield selection must accept actual shields only")
+require(shield_mixin, "instanceof ShieldItem",
+        "native blocking must reject block-capable non-shield weapons")
+require(projectile_awareness, "owner != null && recruit.isAlliedTo(owner)",
+        "allied projectile impacts must not trigger shield panic")
+require(formation, "shieldThreat != null && !shieldThreat.overhead()",
+        "settled shield ranks must face incoming horizontal projectiles")
+require(sounds, '"javelin_ground_hit"',
+        "the supplied impact variants must be declared in sounds.json")
+require(source("gradle.properties"), "mod_version=0.24.6-server.1", "semantic version must be updated")
+require(controller, "0.24.6-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.6-server.1.jar", "build helper version must be updated")
 
-print("0.24.5-server.1 source contracts passed")
+print("0.24.6-server.1 source contracts passed")
