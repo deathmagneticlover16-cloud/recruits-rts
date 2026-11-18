@@ -968,6 +968,10 @@ require(controller, "public static List<FogVisionSource> fogVisionSources() {\n 
 forbid(ui_ids, "COMMAND_AGGRESSION", "the neutral/aggressive button must remain removed")
 require(thrown_weapon, "entityData.define(EMBEDDED, false)",
         "javelins need a synchronized embedded state")
+require(thrown_weapon, "public void addAdditionalSaveData(CompoundTag tag)",
+        "ThrowableItemProjectile save override must preserve its public access")
+require(thrown_weapon, "public void readAdditionalSaveData(CompoundTag tag)",
+        "ThrowableItemProjectile load override must preserve its public access")
 require(thrown_weapon, "EMBEDDED_LIFETIME_TICKS = 20 * 60",
         "embedded javelins need a bounded server lifetime")
 require(thrown_weapon, "RTSSounds.JAVELIN_GROUND_HIT.get()",

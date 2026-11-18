@@ -121,7 +121,7 @@ public final class ThrownRecruitWeaponEntity extends ThrowableItemProjectile {
     }
 
     @Override
-    protected void addAdditionalSaveData(CompoundTag tag) {
+    public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putFloat("RTSDamage", damage);
         tag.putBoolean("RTSEmbedded", isEmbedded());
@@ -130,7 +130,7 @@ public final class ThrownRecruitWeaponEntity extends ThrowableItemProjectile {
     }
 
     @Override
-    protected void readAdditionalSaveData(CompoundTag tag) {
+    public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         if (tag.contains("RTSDamage")) damage = Math.max(1.0F, tag.getFloat("RTSDamage"));
         embeddedTicks = Math.max(0, tag.getInt("RTSEmbeddedTicks"));
