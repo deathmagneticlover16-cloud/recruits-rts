@@ -18,5 +18,6 @@ public final class RTSClientModEvents {
                 RTSEntities.THROWN_RECRUIT_WEAPON.get(),
                 ThrownRecruitWeaponRenderer::new
         );
+        TrottingWagonsClientCompat.registerRenderer(event);
     }
 }

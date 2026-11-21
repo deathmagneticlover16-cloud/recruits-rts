@@ -1,3 +1,16 @@
+Recruits: RTS Camera 0.24.7-server.1
+Optional Trotting Wagons scythed chariot restoration
+
+- Added Trotting Wagons 1.0.4 as a soft dependency. RTS still loads normally on clients and dedicated servers when the wagon mod is absent.
+- Restored the unreleased GitHub Combat Wagon as `recruits_rts_camera:scythed_combat_wagon`, including its model, wheel animation and all dye-color textures. It appears beside Trotting Wagons' other vehicles in the Redstone creative tab and can also be obtained with `/give`.
+- The restored vehicle reuses Trotting Wagons' native horse hitching, steering, acceleration, damage, coloring and wagon sound through a cached reflection bridge. No Trotting Wagons or Geckolib class is linked directly from RTS bytecode.
+- Applied the upstream combat values: 0.23 speed per gear, five-second acceleration, four-degree turn rate, 80 health, two seats and a 1.5-block scythe reach.
+- Scythe damage scales by gear/speed up to 24 damage and strikes each body once per contact. Pulling horses and passengers are protected; every other living entity remains eligible, deliberately preserving friendly fire as the chariot's tactical counterweight.
+- Optional API discovery fails closed: if a future Trotting Wagons build changes its private vehicle layout, only the restored wagon is disabled and RTS continues loading.
+- This pass restores the chariot itself only. Recruit driving, convoy formations and supply-train behavior remain reserved for the dedicated integration pass.
+- Network protocol remains rts-camera-165; no custom packet registration or wire format changed.
+- Source version and packaging references are 0.24.7-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.6-server.1
 Javelin grounding, rapid throw cycles and disciplined shield response
 

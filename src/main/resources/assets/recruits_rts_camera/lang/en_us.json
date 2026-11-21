@@ -36,5 +36,7 @@
   "recruits_rts_camera.stat.ammunition": "Ammunition",
   "recruits_rts_camera.stat.ammunition.description": "Determines how much ammunition a soldier carries and has available for ranged combat.",
   "recruits_rts_camera.stat.rate_of_fire": "Rate of Fire",
-  "recruits_rts_camera.stat.rate_of_fire.description": "Determines how quickly a soldier can fire ranged weapons, affected by weapon type and potentially fatigue."
+  "recruits_rts_camera.stat.rate_of_fire.description": "Determines how quickly a soldier can fire ranged weapons, affected by weapon type and potentially fatigue.",
+  "item.recruits_rts_camera.scythed_combat_wagon": "Scythed Combat Wagon",
+  "entity.recruits_rts_camera.scythed_combat_wagon": "Scythed Combat Wagon"
 }

@@ -1,0 +1,10 @@
+Trotting Wagons combat-wagon artwork
+------------------------------------
+The optional Scythed Combat Wagon compatibility resources are derived from the
+Combat Wagon model, animation and color textures published in the Trotting Wagons
+source repository at commit 402b48908f4048602c87a1f77282ee76a484cbd3.
+
+Trotting Wagons is authored by Favouriteless and AbstractPortrait and is marked
+All Rights Reserved. These resources remain attributable to their original authors.
+They are loaded only as an optional compatibility restoration when Trotting Wagons
+is installed; Recruits: RTS Camera does not replace or bundle that mod's runtime.

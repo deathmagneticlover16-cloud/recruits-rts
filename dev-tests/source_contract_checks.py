@@ -92,6 +92,12 @@ shield_tactics = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/Sh
 shield_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/RecruitShieldMixin.java")
 projectile_awareness = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ProjectileAwarenessManager.java")
 sounds = source("src/main/resources/assets/recruits_rts_camera/sounds.json")
+trotting_compat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TrottingWagonsCompat.java")
+trotting_combat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TrottingWagonsCombatManager.java")
+trotting_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TrottingWagonsClientCompat.java")
+trotting_pick = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/TrottingArmoredWagonMixin.java")
+trotting_math = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/ScythedWagonMath.java")
+mods_toml = source("src/main/resources/META-INF/mods.toml")
 
 require(formation, "applyFormationFacing(recruit, mover,", "formation movement needs one facing owner")
 require(formation, "? memberHeading : headingTo(mover.position(), desired, memberHeading)",
@@ -994,8 +1000,44 @@ require(formation, "shieldThreat != null && !shieldThreat.overhead()",
         "settled shield ranks must face incoming horizontal projectiles")
 require(sounds, '"javelin_ground_hit"',
         "the supplied impact variants must be declared in sounds.json")
-require(source("gradle.properties"), "mod_version=0.24.6-server.1", "semantic version must be updated")
-require(controller, "0.24.6-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.6-server.1.jar", "build helper version must be updated")
+require(trotting_compat, 'MOD_ID = "trotting_wagons"',
+        "Trotting Wagons integration must remain explicitly optional")
+require(trotting_compat, "if (registered || modBus == null || !ModList.get().isLoaded(MOD_ID)) return;",
+        "optional wagon registration must be inert without Trotting Wagons")
+require(trotting_compat, "Class.forName(",
+        "Trotting Wagons runtime classes must be resolved reflectively")
+forbid(trotting_compat + trotting_combat + trotting_client,
+       "import net.favouriteless", "soft compatibility must not directly link Trotting Wagons classes")
+require(trotting_compat, 'ENTITY_PATH = "scythed_combat_wagon"',
+        "the restored wagon needs a stable RTS-owned registry id")
+require(trotting_compat, "BASE_SPEED = 0.23D", "the upstream combat wagon speed must be retained")
+require(trotting_compat, "MAX_HEALTH = 80", "the upstream combat wagon health must be retained")
+require(trotting_combat, "ScythedWagonMath.contactDamage(",
+        "scythe damage must scale with the chariot's current speed")
+require(trotting_math, "Math.min(3.0D, Math.abs(currentSpeed) / speedPerGear)",
+        "scythe damage must retain all three speed levels without exceeding them")
+require(trotting_combat, "Deliberately no owner, team or alliance test",
+        "scythe friendly fire must remain intentional")
+forbid(trotting_combat, "isAlliedTo", "scythed chariots must not silently gain ally immunity")
+require(trotting_combat, "previousContacts.retainAll(currentContacts)",
+        "a target must leave scythe range before another contact strike")
+require(trotting_client, "WagonRenderer", "the restored entity must reuse native wagon rendering")
+require(trotting_pick, "createItemStack(TrottingWagonsCompat.color(wagon))",
+        "middle-click and destruction must preserve the restored wagon and its dye")
+require(mods_toml, 'modId="trotting_wagons"', "mods.toml must declare the soft dependency")
+require(source("src/main/resources/recruits_rts_camera.mixins.json"), '"TrottingArmoredWagonMixin"',
+        "the optional pick/drop correction mixin must be registered")
+require(language, '"entity.recruits_rts_camera.scythed_combat_wagon"',
+        "the restored wagon needs a translated entity name")
+for asset in (
+        "src/main/resources/assets/recruits_rts_camera/geo/entity/rts_scythed_wagon.geo.json",
+        "src/main/resources/assets/recruits_rts_camera/animations/entity/rts_scythed_wagon.animation.json",
+        "src/main/resources/assets/recruits_rts_camera/models/item/scythed_combat_wagon.json",
+        "src/main/resources/assets/trotting_wagons/textures/entity/rts_scythed_wagon/white.png"):
+    if not (ROOT / asset).is_file():
+        raise AssertionError("restored combat-wagon asset is missing: " + asset)
+require(source("gradle.properties"), "mod_version=0.24.7-server.1", "semantic version must be updated")
+require(controller, "0.24.7-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.7-server.1.jar", "build helper version must be updated")
 
-print("0.24.6-server.1 source contracts passed")
+print("0.24.7-server.1 source contracts passed")

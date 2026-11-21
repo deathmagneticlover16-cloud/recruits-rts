@@ -7,6 +7,7 @@ import ee.lastpagans.recruitsrtscamera.registry.RTSSounds;
 import ee.lastpagans.recruitsrtscamera.registry.RTSParticles;
 import ee.lastpagans.recruitsrtscamera.config.RTSServerConfig;
 import ee.lastpagans.recruitsrtscamera.config.RTSClientConfig;
+import ee.lastpagans.recruitsrtscamera.compat.TrottingWagonsCompat;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -23,6 +24,7 @@ public final class RecruitsRTSCameraMod {
         RTSEntities.register(modBus);
         RTSSounds.register(modBus);
         RTSParticles.register(modBus);
+        TrottingWagonsCompat.register(modBus);
 
         ModLoadingContext.get().registerConfig(
                 ModConfig.Type.SERVER,
