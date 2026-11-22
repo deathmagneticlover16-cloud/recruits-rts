@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.24.10-server.1
+Recruit death voices with clustered-casualty staggering
+
+- Converted all fourteen supplied Recruit death recordings from MP3 to mono 48 kHz Vorbis OGG for positional Minecraft playback.
+- Added one randomized Recruit death sound event containing all normal and painful variants, with bounded 0.92–1.08 pitch variation.
+- Replaced Recruits' immediate native death voice with the RTS event so a casualty cannot play both sounds and produce a doubled chorus.
+- Simultaneous nearby casualties are distributed across the current and following server tick, adding up to 50 ms of engine-safe timing variation while prioritizing the locally least-crowded slot.
+- Death scheduling is server-authoritative, UUID-deduplicated, dimension-safe and fully cleared at server shutdown.
+- Network protocol remains rts-camera-165; no custom packet registration or wire format changed.
+- Source version and packaging references are 0.24.10-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.9-server.1
 Recruit-driven scythed chariots and safe vehicle formations
 

@@ -10,5 +10,21 @@
   "advisor_artillery_attacked": {"sounds": ["recruits_rts_camera:advisor/latin/latin_18"]},
   "cavalry_rumble": {"sounds": [{"name": "recruits_rts_camera:cavalry/horse_run_rumble", "stream": true, "attenuation_distance": 192}]},
   "cavalry_rumble_distant": {"sounds": [{"name": "recruits_rts_camera:cavalry/horse_run_rumble_distant", "stream": true, "attenuation_distance": 192}]},
-  "javelin_ground_hit": {"sounds": ["recruits_rts_camera:javelin/javelin_hit_1", "recruits_rts_camera:javelin/javelin_hit_2"]}
+  "javelin_ground_hit": {"sounds": ["recruits_rts_camera:javelin/javelin_hit_1", "recruits_rts_camera:javelin/javelin_hit_2"]},
+  "recruit_death": {"sounds": [
+    "recruits_rts_camera:recruits/death/death_00",
+    "recruits_rts_camera:recruits/death/death_01",
+    "recruits_rts_camera:recruits/death/death_02",
+    "recruits_rts_camera:recruits/death/death_03",
+    "recruits_rts_camera:recruits/death/death_04",
+    "recruits_rts_camera:recruits/death/death_05",
+    "recruits_rts_camera:recruits/death/painful_death_00",
+    "recruits_rts_camera:recruits/death/painful_death_01",
+    "recruits_rts_camera:recruits/death/painful_death_02",
+    "recruits_rts_camera:recruits/death/painful_death_03",
+    "recruits_rts_camera:recruits/death/painful_death_04",
+    "recruits_rts_camera:recruits/death/painful_death_05",
+    "recruits_rts_camera:recruits/death/painful_death_06",
+    "recruits_rts_camera:recruits/death/painful_death_07"
+  ]}
 }

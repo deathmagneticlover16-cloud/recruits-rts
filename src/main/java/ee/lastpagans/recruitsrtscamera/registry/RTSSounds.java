@@ -26,6 +26,7 @@ public final class RTSSounds {
     public static final RegistryObject<SoundEvent> CAVALRY_RUMBLE = register("cavalry_rumble");
     public static final RegistryObject<SoundEvent> CAVALRY_RUMBLE_DISTANT = register("cavalry_rumble_distant");
     public static final RegistryObject<SoundEvent> JAVELIN_GROUND_HIT = register("javelin_ground_hit");
+    public static final RegistryObject<SoundEvent> RECRUIT_DEATH = register("recruit_death");
 
     private RTSSounds() {
     }
