@@ -79,8 +79,9 @@ public final class TacticalCombatManager {
         AutomaticTarget lease = AUTOMATIC_TARGETS.get(recruit.getUUID());
         if (lease == null) return null;
         LivingEntity target = lease.target;
-        if (lease.expires < recruit.level().getGameTime() || target == null || !target.isAlive()
-                || target.isRemoved() || target.level() != recruit.level() || recruit.isAlliedTo(target)) {
+        if (lease.expires < recruit.level().getGameTime() || target == null
+                || target.level() != recruit.level()
+                || !RecruitTargetingRules.mayAutomaticallyTarget(recruit, target)) {
             AUTOMATIC_TARGETS.remove(recruit.getUUID(), lease);
             return null;
         }
@@ -136,6 +137,13 @@ public final class TacticalCombatManager {
                 maintainAutomaticTarget(recruit);
             } else if (!passiveFire || !stationary) {
                 clearAutomaticTarget(recruit);
+            }
+            // Native bow goals can animate a javelin but cannot create RTS' real throwable
+            // projectile. Once Fire At Will has a blacklist-safe lease, feed every stationary
+            // carrier into the same synchronized volley path used by explicit attack orders.
+            LivingEntity passiveTarget = passiveFire && stationary ? automaticTarget(recruit) : null;
+            if (passiveTarget != null && ThrowableWeaponManager.hasThrowable(recruit)) {
+                ThrowableWeaponManager.tryThrow(recruit, passiveTarget);
             }
         }
         var speed = recruit.getAttribute(Attributes.MOVEMENT_SPEED);
@@ -267,9 +275,8 @@ public final class TacticalCombatManager {
         double nearestDistance = range * range;
         for (LivingEntity candidate : level.getEntitiesOfClass(LivingEntity.class,
                 recruit.getBoundingBox().inflate(range, Math.min(12.0D, range), range), candidate ->
-                        candidate != recruit && candidate.isAlive() && !candidate.isRemoved()
-                                && candidate.isAttackable() && !recruit.isAlliedTo(candidate)
-                                && recruit.canAttack(candidate) && recruit.hasLineOfSight(candidate))) {
+                        RecruitTargetingRules.mayAutomaticallyTarget(recruit, candidate)
+                                && recruit.hasLineOfSight(candidate))) {
             double distance = recruit.distanceToSqr(candidate);
             if (distance < nearestDistance) {
                 nearestDistance = distance;

@@ -1,3 +1,15 @@
+Recruits: RTS Camera 0.24.8-server.1
+Disciplined targeting, complete javelin volleys and faction-safe scythe contact
+
+- Scythed chariot blades now use unattributed vehicle-contact damage. Recruits faction protection can no longer swallow allied blade collisions, while passengers and pulling horses remain protected.
+- New and previously-default groups begin with Fire At Will disabled. Explicit direct attacks and strategic fire remain available until Fire At Will is deliberately enabled.
+- RTS passive acquisition now checks both Recruits' native hostility rules and its configured TargetBlackList. Explicit RTS attacks also reject blacklisted entity types.
+- Expanded the synchronized javelin admission window to cover Recruits' staggered AI ticks, allowing the full eligible formation to join each volley instead of only its earliest few soldiers.
+- Javelin volleys now wait 3.5 seconds between releases, begin a bounded throw animation before spawning their projectile and use a visibly higher ballistic arc with less spread.
+- Black-powder haze now persists about twenty percent longer before fading, without extending the finite smoke emitter.
+- Network protocol remains rts-camera-165; no custom packet registration or wire format changed.
+- Source version and packaging references are 0.24.8-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.7-server.1
 Optional Trotting Wagons scythed chariot restoration
 

@@ -1013,7 +1013,8 @@ public final class RTSGroupAttackManager {
         // attack must therefore validate hostility and attackability directly instead of
         // consulting that temporary passive-AI state.
         return attacker != null && target != null && target != attacker && target.isAlive()
-                && !target.isRemoved() && target.isAttackable() && !attacker.isAlliedTo(target);
+                && !target.isRemoved() && target.isAttackable() && !attacker.isAlliedTo(target)
+                && !RecruitTargetingRules.isBlacklisted(target);
     }
 
     private static Vec3 averageControlledPosition(List<AbstractRecruitEntity> recruits) {

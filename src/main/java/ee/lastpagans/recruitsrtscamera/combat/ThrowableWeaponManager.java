@@ -42,8 +42,8 @@ public final class ThrowableWeaponManager {
     public static final double MAX_THROW_RANGE = 18.0D;
 
     /** A readable snap-throw followed by an actual reload, rather than one long wind-up. */
-    private static final int THROW_WINDUP_TICKS = 6;
-    private static final int THROW_COOLDOWN_TICKS = 28;
+    private static final int THROW_WINDUP_TICKS = 14;
+    private static final int THROW_COOLDOWN_TICKS = 70;
     private static final Map<UUID, Long> LAST_THROW = new ConcurrentHashMap<>();
     private static final Map<UUID, PendingThrow> PENDING = new ConcurrentHashMap<>();
     private static final Map<UUID, GroundOrder> GROUND_ORDERS = new ConcurrentHashMap<>();
@@ -126,8 +126,11 @@ public final class ThrowableWeaponManager {
             return false;
         }
 
-        int releaseDelay = Math.min(THROW_WINDUP_TICKS,
-                SeriousAnimationsCompat.spearThrowReleaseTick());
+        // Give the animation packet enough time to reach clients before the projectile exists.
+        // An authored release is still honored, but bounded so an addon cannot restore the old
+        // multi-second wind-up.
+        int releaseDelay = Math.max(THROW_WINDUP_TICKS,
+                Math.min(18, SeriousAnimationsCompat.spearThrowReleaseTick()));
         int duration = Math.min(20, SeriousAnimationsCompat.spearThrowDurationTicks());
         long sharedRelease = FormationVolleyManager.reserveJavelinRelease(
                 recruit, releaseDelay, THROW_COOLDOWN_TICKS);
@@ -245,15 +248,15 @@ public final class ThrowableWeaponManager {
                 recruit.getZ() + forward.z * 0.34D
         );
 
-        // Direct throws arrive at the upper torso; strategic throws arrive just above their
-        // assigned patch of ground. The lift keeps both from burying themselves immediately.
+        // A visibly ballistic lift replaces the almost-flat old trajectory. It remains bounded
+        // across the supported range, so strategic volleys still land on their assigned disk.
         Vec3 aim = new Vec3(
                 target.x - projectile.getX(),
                 target.y + 0.12D - projectile.getY(),
                 target.z - projectile.getZ()
         );
         double horizontal = Math.hypot(aim.x, aim.z);
-        projectile.shoot(aim.x, aim.y + horizontal * 0.085D, aim.z, 1.30F, 1.10F);
+        projectile.shoot(aim.x, aim.y + horizontal * 0.18D, aim.z, 1.20F, 0.80F);
         level.addFreshEntity(projectile);
 
         held.shrink(1);

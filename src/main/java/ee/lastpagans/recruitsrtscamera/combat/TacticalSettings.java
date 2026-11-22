@@ -4,7 +4,8 @@ package ee.lastpagans.recruitsrtscamera.combat;
 public record TacticalSettings(CombatMode combat, boolean skirmish, ShieldMode shield, boolean holdFire) {
     public enum CombatMode { NATIVE, RANGED, MELEE }
     public enum ShieldMode { NATIVE, FRONT, UP, AUTO }
-    public static final TacticalSettings DEFAULT = new TacticalSettings(CombatMode.NATIVE, false, ShieldMode.NATIVE, false);
+    /** New groups begin disciplined: ranged troops wait for an order or Fire At Will. */
+    public static final TacticalSettings DEFAULT = new TacticalSettings(CombatMode.NATIVE, false, ShieldMode.NATIVE, true);
     public TacticalSettings withCombat(CombatMode value) { return new TacticalSettings(value, skirmish, shield, holdFire); }
     public TacticalSettings withSkirmish(boolean value) { return new TacticalSettings(combat, value, shield, holdFire); }
     public TacticalSettings withShield(ShieldMode value) { return new TacticalSettings(combat, skirmish, value, holdFire); }

@@ -21,6 +21,7 @@ public final class FormationVolleyManager {
     private static final int BOW_DRAW_TICKS = 20;
     private static final int BOW_RELOAD_TICKS = 40;
     private static final int CROSSBOW_MAX_READY_WAIT = 12;
+    private static final int JAVELIN_JOIN_TICKS = 6;
     private static final int MAX_GROUP_CLOCKS = 1_024;
     private static final Map<UUID, VolleyState> GROUPS = new LinkedHashMap<>(128, 0.75F, true);
     private static long lastCleanupAt = Long.MIN_VALUE;
@@ -67,7 +68,11 @@ public final class FormationVolleyManager {
         if (now < state.nextJavelinVolley && now > state.javelinJoinUntil) return -1L;
         if (now >= state.nextJavelinVolley) {
             state.javelinRelease = now + Math.max(1, windupTicks);
-            state.javelinJoinUntil = now + 3L;
+            // Recruit AI ticks are staggered. A three-tick gate admitted only the first few
+            // soldiers and made the rest wait forever behind a constantly advancing clock.
+            // Six ticks admits the whole formation while the 14+ tick wind-up guarantees that
+            // every accepted thrower still begins animating before the shared release frame.
+            state.javelinJoinUntil = now + JAVELIN_JOIN_TICKS;
             state.nextJavelinVolley = state.javelinRelease + Math.max(1, reloadTicks);
         }
         return now <= state.javelinJoinUntil ? state.javelinRelease : -1L;

@@ -2,11 +2,9 @@ package ee.lastpagans.recruitsrtscamera.compat;
 
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
@@ -81,10 +79,10 @@ public final class TrottingWagonsCombatManager {
         for (LivingEntity target : nearby) {
             currentContacts.add(target.getUUID());
             if (damage <= 0 || previousContacts.contains(target.getUUID())) continue;
-            DamageSource source = controller instanceof Player player
-                    ? wagon.damageSources().playerAttack(player)
-                    : wagon.damageSources().mobAttack(controller);
-            target.hurt(source, damage);
+            // Recruits rejects allied mob/player attack sources before damage reaches the
+            // victim. Scythes are environmental vehicle contact, not the driver's melee hit;
+            // an unattributed source therefore preserves deliberate faction friendly fire.
+            target.hurt(wagon.damageSources().generic(), damage);
             previousContacts.add(target.getUUID());
             // Deliberately no owner, team or alliance test: poor chariot handling can cut
             // through friendly troops, preserving the intended counterweight to its damage.

@@ -29,7 +29,7 @@ public final class BlackPowderFogParticle extends TextureSheetParticle {
         this.xd = xSpeed * 0.20D + (random.nextDouble() - 0.5D) * 0.006D;
         this.yd = ySpeed * 0.20D + 0.0015D + random.nextDouble() * 0.002D;
         this.zd = zSpeed * 0.20D + (random.nextDouble() - 0.5D) * 0.006D;
-        this.lifetime = 150 + random.nextInt(100);
+        this.lifetime = 180 + random.nextInt(110);
         this.quadSize = (1.8F + random.nextFloat() * 1.4F) * sizeScale;
         // Light black-powder haze remains translucent after one volley while ordinary
         // alpha compositing makes repeated volleys progressively more opaque.

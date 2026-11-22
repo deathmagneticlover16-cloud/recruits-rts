@@ -954,6 +954,18 @@ require(tactical, "s.holdFire() && !explicitFireOrder(recruit)",
 require(tactical, "nearestAutomaticTarget", "Fire At Will must prefer the closest valid ranged target")
 require(tactical, "AUTOMATIC_TARGETS", "Fire At Will targets need a persistent passive lease")
 require(tactical, "recruit.tickCount % 20", "Fire At Will must refresh targets once per second")
+require(tactical, "ThrowableWeaponManager.tryThrow(recruit, passiveTarget)",
+        "Fire At Will javelin carriers must enter the real synchronized projectile path")
+targeting_rules = source(
+    "src/main/java/ee/lastpagans/recruitsrtscamera/combat/RecruitTargetingRules.java")
+require(targeting_rules, "RecruitsServerConfig.TargetBlackList.get()",
+        "RTS acquisition must consume Recruits' configured target blacklist")
+require(targeting_rules, "RecruitEvents.canAttack(recruit, target)",
+        "passive acquisition must retain Recruits' native hostility rules")
+require(attack, "!RecruitTargetingRules.isBlacklisted(target)",
+        "explicit RTS attacks must not bypass Recruits' target blacklist")
+require(source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/TacticalSettings.java"),
+        "ShieldMode.NATIVE, true", "new groups must begin with Fire At Will disabled")
 require(attack, "TacticalCombatManager.clearAutomaticTarget(recruit)",
         "direct attack orders must replace passive Fire At Will targeting")
 require(formation, "TacticalCombatManager.ownsControlledTarget(recruit)",
@@ -984,10 +996,14 @@ require(thrown_weapon, "RTSSounds.JAVELIN_GROUND_HIT.get()",
         "terrain impacts must play the supplied javelin sound event")
 require(thrown_weapon, "0.84F + random.nextFloat() * 0.32F",
         "javelin ground impacts need bounded pitch variation")
-require(throw_manager, "THROW_WINDUP_TICKS = 6",
-        "javelin throws need a short wind-up")
-require(throw_manager, "THROW_COOLDOWN_TICKS = 28",
-        "javelin throws need a separate bounded reload")
+require(throw_manager, "THROW_WINDUP_TICKS = 14",
+        "javelin projectiles must wait for the visible throw animation")
+require(throw_manager, "THROW_COOLDOWN_TICKS = 70",
+        "javelin formations need several seconds between volleys")
+require(throw_manager, "horizontal * 0.18D",
+        "javelins need a visible ballistic arc instead of flat direct fire")
+require(volley, "JAVELIN_JOIN_TICKS = 6",
+        "staggered recruit ticks must be able to join the same javelin volley")
 require(throw_manager, "relocateOffhandJavelin",
         "supported javelins must be removed safely from the defensive hand")
 require(shield_tactics, "stack.getItem() instanceof ShieldItem",
@@ -1018,6 +1034,8 @@ require(trotting_math, "Math.min(3.0D, Math.abs(currentSpeed) / speedPerGear)",
         "scythe damage must retain all three speed levels without exceeding them")
 require(trotting_combat, "Deliberately no owner, team or alliance test",
         "scythe friendly fire must remain intentional")
+require(trotting_combat, "wagon.damageSources().generic()",
+        "scythe contact must bypass Recruits' allied attacker-source rejection")
 forbid(trotting_combat, "isAlliedTo", "scythed chariots must not silently gain ally immunity")
 require(trotting_combat, "previousContacts.retainAll(currentContacts)",
         "a target must leave scythe range before another contact strike")
@@ -1036,8 +1054,10 @@ for asset in (
         "src/main/resources/assets/trotting_wagons/textures/entity/rts_scythed_wagon/white.png"):
     if not (ROOT / asset).is_file():
         raise AssertionError("restored combat-wagon asset is missing: " + asset)
-require(source("gradle.properties"), "mod_version=0.24.7-server.1", "semantic version must be updated")
-require(controller, "0.24.7-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.7-server.1.jar", "build helper version must be updated")
+require(source("src/main/java/ee/lastpagans/recruitsrtscamera/client/BlackPowderFogParticle.java"),
+        "lifetime = 180 + random.nextInt(110)", "black-powder haze lifetime must be slightly extended")
+require(source("gradle.properties"), "mod_version=0.24.8-server.1", "semantic version must be updated")
+require(controller, "0.24.8-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.8-server.1.jar", "build helper version must be updated")
 
-print("0.24.7-server.1 source contracts passed")
+print("0.24.8-server.1 source contracts passed")
