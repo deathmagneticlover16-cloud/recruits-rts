@@ -93,6 +93,7 @@ public final class TrottingWagonsCombatManager {
 
     private static boolean validTarget(Entity wagon, LivingEntity target) {
         if (!target.isAlive() || wagon.getPassengers().contains(target)) return false;
+        if (TrottingWagonsDrivingManager.protectedConvoyMember(wagon, target)) return false;
         Mob[] horses = TrottingWagonsCompat.pullingHorses(wagon);
         if (horses != null) {
             for (Mob horse : horses) {

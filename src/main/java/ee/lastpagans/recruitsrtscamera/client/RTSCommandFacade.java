@@ -125,6 +125,7 @@ public final class RTSCommandFacade {
                     sample != null && sample.rangedCapable(),
                     sample != null && sample.rangedMajority(),
                     sample != null && sample.cavalryMajority(),
+                    sample != null && sample.cavalryPresent(),
                     sample != null && sample.majorityMounted(),
                     sample != null && sample.majorityFireAtWill(),
                     sample == null ? Double.NaN : sample.centerX(),
@@ -427,10 +428,14 @@ public final class RTSCommandFacade {
         return unitCards().stream().anyMatch(view -> view.selected() && view.cavalryMajority());
     }
 
+    public static boolean selectedHasMountableCavalry() {
+        return unitCards().stream().anyMatch(view -> view.selected() && view.cavalryPresent());
+    }
+
     public static boolean selectedCavalryMounted() {
         boolean found = false;
         for (UnitCardView view : unitCards()) {
-            if (!view.selected() || !view.cavalryMajority()) continue;
+            if (!view.selected() || !view.cavalryPresent()) continue;
             found = true;
             if (!view.majorityMounted()) return false;
         }
@@ -464,7 +469,7 @@ public final class RTSCommandFacade {
     }
 
     public static void toggleMount() {
-        List<UUID> eligible = selectedGroups(UnitCardView::cavalryMajority);
+        List<UUID> eligible = selectedGroups(UnitCardView::cavalryPresent);
         if (eligible.isEmpty()) return;
         ClientTactics.send(eligible, selectedCavalryMounted()
                 ? ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action.DISMOUNT
@@ -595,6 +600,7 @@ public final class RTSCommandFacade {
             boolean rangedCapable,
             boolean rangedMajority,
             boolean cavalryMajority,
+            boolean cavalryPresent,
             boolean majorityMounted,
             boolean majorityFireAtWill,
             double centerX,
@@ -620,6 +626,7 @@ public final class RTSCommandFacade {
             boolean rangedCapable,
             boolean rangedMajority,
             boolean cavalryMajority,
+            boolean cavalryPresent,
             boolean majorityMounted,
             boolean majorityFireAtWill,
             double centerX,
@@ -725,6 +732,7 @@ public final class RTSCommandFacade {
                     rangedCapable > 0,
                     count > 0 && rangedCapable * 2 > count,
                     count > 0 && cavalry * 2 > count,
+                    cavalry > 0,
                     cavalry > 0 && mounted * 2 >= cavalry,
                     rangedCapable > 0 && fireAtWill * 2 >= rangedCapable,
                     count <= 0 ? Double.NaN : totalX / count,

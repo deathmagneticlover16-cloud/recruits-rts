@@ -2,6 +2,7 @@ package ee.lastpagans.recruitsrtscamera.network;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
+import ee.lastpagans.recruitsrtscamera.compat.TrottingWagonsDrivingManager;
 import ee.lastpagans.recruitsrtscamera.server.ServerPacketGuard;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
@@ -46,10 +47,13 @@ public record MovementPacePacket(List<UUID> groupIds, boolean running) {
         if (!ServerPacketGuard.allow(sender) || packet.groupIds.isEmpty()) return;
         Map<UUID, List<AbstractRecruitEntity>> groups = ServerGroupResolver.resolve(sender, packet.groupIds);
         for (Map.Entry<UUID, List<AbstractRecruitEntity>> entry : groups.entrySet()) {
+            TrottingWagonsDrivingManager.setPace(entry.getKey(), packet.running);
+            List<AbstractRecruitEntity> footAndMounted =
+                    TrottingWagonsDrivingManager.withoutCrews(entry.getValue());
             if (packet.running) {
-                RTSMovementBoostManager.registerHastyMove(sender, entry.getKey(), entry.getValue());
+                RTSMovementBoostManager.registerHastyMove(sender, entry.getKey(), footAndMounted);
             } else {
-                RTSMovementBoostManager.registerSlowMove(sender, entry.getKey(), entry.getValue());
+                RTSMovementBoostManager.registerSlowMove(sender, entry.getKey(), footAndMounted);
             }
         }
     }

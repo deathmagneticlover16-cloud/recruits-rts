@@ -1085,7 +1085,8 @@ public final class CommanderOverlay {
         boolean ranged = RTSCommandFacade.selectedHasRangedWeapons();
         boolean rangedMajority = RTSCommandFacade.selectedHasRangedMajority();
         boolean cavalryMajority = RTSCommandFacade.selectedHasCavalryMajority();
-        boolean mounted = cavalryMajority && RTSCommandFacade.selectedCavalryMounted();
+        boolean mountableCavalry = RTSCommandFacade.selectedHasMountableCavalry();
+        boolean mounted = mountableCavalry && RTSCommandFacade.selectedCavalryMounted();
         boolean fireAtWill = ranged && RTSCommandFacade.selectedFireAtWill();
         boolean skirmishing = rangedMajority && RTSCommandFacade.selectedSkirmishing();
         boolean canBodyguard = RTSCommandFacade.canToggleBodyguard();
@@ -1097,7 +1098,7 @@ public final class CommanderOverlay {
         recordUi(CommanderUiElementIds.COMMAND_FORMATION, layout.formationButton());
         recordUi(CommanderUiElementIds.COMMAND_SELECTION_GROUP, layout.selectionGroupButton());
         recordUi(CommanderUiElementIds.COMMAND_HALT, layout.haltButton());
-        if (cavalryMajority) recordUi(CommanderUiElementIds.COMMAND_MOUNT, layout.mountButton());
+        if (mountableCavalry) recordUi(CommanderUiElementIds.COMMAND_MOUNT, layout.mountButton());
         recordUi(CommanderUiElementIds.COMMAND_SPACING, layout.looseSpacingButton());
         if (ranged) recordUi(CommanderUiElementIds.COMMAND_FIRE_CONTROL, layout.fireControlButton());
         if (rangedMajority) recordUi(CommanderUiElementIds.COMMAND_SKIRMISH, layout.skirmishButton());
@@ -1111,7 +1112,7 @@ public final class CommanderOverlay {
         renderItemButton(graphics, layout.selectionGroupButton(), net.minecraft.world.item.Items.NAME_TAG, false);
         renderIconCommandButton(graphics, layout.haltButton(),
                 CommanderGuiTextures.COMMAND_HALT, hasSelection, false);
-        if (cavalryMajority) renderItemButton(graphics, layout.mountButton(),
+        if (mountableCavalry) renderItemButton(graphics, layout.mountButton(),
                 net.minecraft.world.item.Items.SADDLE, mounted);
         renderIconCommandButton(graphics, layout.looseSpacingButton(),
                 CommanderGuiTextures.COMMAND_LOOSE_SPACING, hasSelection, loose);
@@ -1142,10 +1143,10 @@ public final class CommanderOverlay {
                     "Creates a numbered Selection Group");
         } else if (layout.haltButton().contains(mx, my)) {
             renderHotkeyTooltip(graphics, RTSCameraKeyMappings.HALT, "Halts the selected group(s)");
-        } else if (cavalryMajority && layout.mountButton().contains(mx, my)) {
+        } else if (mountableCavalry && layout.mountButton().contains(mx, my)) {
             renderCommandTooltip(graphics, mounted ? "Dismount" : "Mount",
-                    mounted ? "Dismount the selected cavalry-majority groups."
-                            : "Mount the selected cavalry-majority groups.");
+                    mounted ? "Dismount the selected cavalry or chariot crews."
+                            : "Mount cavalry; Horsemen drive nearby hitched chariots and missile troops crew them.");
         } else if (layout.looseSpacingButton().contains(mx, my)) {
             renderCommandTooltip(graphics, loose ? "Loose Spacing: ON" : "Loose Spacing",
                     "Toggle wider spacing for preset formations.");

@@ -8,6 +8,7 @@ import com.talhanation.recruits.util.FormationUtils;
 import com.talhanation.recruits.util.RecruitCommanderUtil;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
+import ee.lastpagans.recruitsrtscamera.compat.TrottingWagonsDrivingManager;
 import ee.lastpagans.recruitsrtscamera.formation.FormationPreservationMath;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
@@ -129,6 +130,7 @@ public record MoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
         int customGroups = 0;
         int artilleryGuns = 0;
         int ships = 0;
+        int chariots = 0;
 
         for (int i = 0; i < ids.size(); i++) {
             UUID groupId = ids.get(i);
@@ -156,8 +158,12 @@ public record MoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
                     sender, recruits, groupTarget, facingYaw,
                     FormationService.activeKind(sender.serverLevel(), groupId), null
             );
+            int movedChariots = TrottingWagonsDrivingManager.commandFormation(
+                    sender, groupId, recruits, groupTarget, facingYaw,
+                    FormationService.activeKind(sender.serverLevel(), groupId), false);
             List<AbstractRecruitEntity> formationRecruits = SiegeWeaponsCompat.withoutAttachedArtillery(recruits);
             formationRecruits = SmallShipsCompat.withoutAttachedShips(formationRecruits);
+            formationRecruits = TrottingWagonsDrivingManager.withoutCrews(formationRecruits);
 
             boolean preserved = false;
             if (!formationRecruits.isEmpty()) {
@@ -183,6 +189,11 @@ public record MoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
                 FormationService.rememberFacing(sender.serverLevel(), groupId, facingYaw);
                 preserved = true;
             }
+            if (movedChariots > 0) {
+                chariots += movedChariots;
+                FormationService.rememberFacing(sender.serverLevel(), groupId, facingYaw);
+                preserved = true;
+            }
             if (preserved) {
                 preservedGroups++;
             }
@@ -205,6 +216,7 @@ public record MoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
         if (ships > 0) {
             suffix += " · " + ships + " ship(s) in fleet line";
         }
+        if (chariots > 0) suffix += " · " + chariots + " chariot(s) in safe line";
         // RouteManager reuses this executor for each internal waypoint. Those are
         // continuation steps, not new player-issued orders, so keep the action bar quiet.
         if (!routeStep) {

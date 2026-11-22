@@ -11,6 +11,7 @@ import com.talhanation.recruits.util.RecruitCommanderUtil;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
+import ee.lastpagans.recruitsrtscamera.compat.TrottingWagonsDrivingManager;
 import ee.lastpagans.recruitsrtscamera.server.ServerPacketGuard;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -68,6 +69,7 @@ public record HaltGroupsPacket(List<UUID> groupIds) {
         int stopped = 0;
         for (Map.Entry<UUID, List<AbstractRecruitEntity>> entry : groups.entrySet()) {
             FormationRuntime.haltFormation(entry.getKey());
+            TrottingWagonsDrivingManager.halt(entry.getKey());
             List<AbstractRecruitEntity> recruits = entry.getValue();
             RecruitCommanderUtil.setRecruitsClearTargets(recruits);
             for (AbstractRecruitEntity recruit : recruits) {

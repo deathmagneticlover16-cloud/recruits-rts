@@ -4,6 +4,7 @@ import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.util.RecruitCommanderUtil;
 import ee.lastpagans.recruitsrtscamera.formation.FormationRuntime;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
+import ee.lastpagans.recruitsrtscamera.compat.TrottingWagonsDrivingManager;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.network.RouteManager;
 import ee.lastpagans.recruitsrtscamera.network.TacticsControlPacket.Action;
@@ -31,10 +32,10 @@ public final class TacticalOrders {
             UUID id = entry.getKey();
             var members = entry.getValue();
             var s = data.settings(id);
-            boolean cavalryMajority = majority(members, recruit -> recruit instanceof HorsemanEntity
+            boolean cavalryPresent = members.stream().anyMatch(recruit -> recruit instanceof HorsemanEntity
                     || recruit instanceof NomadEntity);
             boolean rangedMajority = majority(members, RangedWeaponEligibility::hasRangedWeapon);
-            if ((action == Action.MOUNT || action == Action.DISMOUNT) && !cavalryMajority
+            if ((action == Action.MOUNT || action == Action.DISMOUNT) && !cavalryPresent
                     || (action == Action.SKIRMISH_ON || action == Action.SKIRMISH_OFF) && !rangedMajority) {
                 unavailable++;
                 continue;
@@ -44,8 +45,17 @@ public final class TacticalOrders {
                 case SKIRMISH_OFF -> s = s.withSkirmish(false);
                 case MOUNT, DISMOUNT -> {
                     cancelMovement(sender, id, members);
+                    TrottingWagonsDrivingManager.BoardingResult chariots = action == Action.MOUNT
+                            ? TrottingWagonsDrivingManager.boardNearby(sender, members)
+                            : new TrottingWagonsDrivingManager.BoardingResult(0, Set.of());
                     for (var recruit : members) {
                         if (action == Action.DISMOUNT) {
+                            if (TrottingWagonsDrivingManager.isChariotCrew(recruit)) {
+                                TrottingWagonsDrivingManager.dismount(recruit);
+                                recruit.getPersistentData().putBoolean(DISMOUNTED, true);
+                                changed++;
+                                continue;
+                            }
                             if (recruit.getVehicle() instanceof AbstractHorse horse) {
                                 recruit.getPersistentData().putUUID(REMEMBERED_MOUNT, horse.getUUID());
                                 RecruitCommanderUtil.setRecruitsDismount(List.of(recruit));
@@ -55,6 +65,12 @@ public final class TacticalOrders {
                             recruit.setShouldMount(false);
                             changed++;
                         } else {
+                            if (chariots.handled(recruit)) {
+                                recruit.getPersistentData().putBoolean(DISMOUNTED, false);
+                                changed++;
+                                continue;
+                            }
+                            if (!(recruit instanceof HorsemanEntity || recruit instanceof NomadEntity)) continue;
                             AbstractHorse horse = findMount(level, sender, recruit, reserved);
                             if (horse == null) { unavailable++; continue; }
                             reserved.add(horse.getUUID());

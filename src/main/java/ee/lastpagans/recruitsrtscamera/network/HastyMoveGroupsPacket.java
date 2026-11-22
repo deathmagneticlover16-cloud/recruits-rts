@@ -8,6 +8,7 @@ import com.talhanation.recruits.util.FormationUtils;
 import com.talhanation.recruits.util.RecruitCommanderUtil;
 import ee.lastpagans.recruitsrtscamera.compat.SiegeWeaponsCompat;
 import ee.lastpagans.recruitsrtscamera.compat.SmallShipsCompat;
+import ee.lastpagans.recruitsrtscamera.compat.TrottingWagonsDrivingManager;
 import ee.lastpagans.recruitsrtscamera.formation.FormationPreservationMath;
 import ee.lastpagans.recruitsrtscamera.formation.FormationService;
 import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
@@ -120,6 +121,7 @@ public record HastyMoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
         int preserved = 0;
         int artilleryGuns = 0;
         int ships = 0;
+        int chariots = 0;
         for (int i = 0; i < ids.size(); i++) {
             UUID groupId = ids.get(i);
             List<AbstractRecruitEntity> recruits = groups.get(groupId);
@@ -141,8 +143,12 @@ public record HastyMoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
                     sender, recruits, groupTarget, facingYaw,
                     FormationService.activeKind(sender.serverLevel(), groupId), null
             );
+            int movedChariots = TrottingWagonsDrivingManager.commandFormation(
+                    sender, groupId, recruits, groupTarget, facingYaw,
+                    FormationService.activeKind(sender.serverLevel(), groupId), true);
             List<AbstractRecruitEntity> formationRecruits = SiegeWeaponsCompat.withoutAttachedArtillery(recruits);
             formationRecruits = SmallShipsCompat.withoutAttachedShips(formationRecruits);
+            formationRecruits = TrottingWagonsDrivingManager.withoutCrews(formationRecruits);
 
             boolean groupPreserved = false;
             if (!formationRecruits.isEmpty()) {
@@ -163,6 +169,11 @@ public record HastyMoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
                 FormationService.rememberFacing(sender.serverLevel(), groupId, facingYaw);
                 groupPreserved = true;
             }
+            if (movedChariots > 0) {
+                chariots += movedChariots;
+                FormationService.rememberFacing(sender.serverLevel(), groupId, facingYaw);
+                groupPreserved = true;
+            }
             if (groupPreserved) {
                 preserved++;
             }
@@ -175,6 +186,7 @@ public record HastyMoveGroupsPacket(List<UUID> groupIds, Vec3 target) {
                         + (cavalry > 0 ? " · cavalry pace enabled" : "")
                         + (artilleryGuns > 0 ? " · artillery uses native battery movement" : "")
                         + (ships > 0 ? " · ships use native Captain sailing (no hasty boost)" : "")
+                        + (chariots > 0 ? " · " + chariots + " chariot(s) running" : "")
         ), true);
     }
 

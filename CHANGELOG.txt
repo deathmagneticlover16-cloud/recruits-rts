@@ -1,3 +1,16 @@
+Recruits: RTS Camera 0.24.9-server.1
+Recruit-driven scythed chariots and safe vehicle formations
+
+- The Mount command now assigns nearby fully hitched scythed chariots before ordinary horses: a Horseman takes the controlling seat and a nearby Bowman or Crossbowman takes the passenger seat.
+- Chariot drivers equip Trotting Wagons' real horse whip. A temporarily supplied whip preserves the recruit's former main-hand item and is removed again on dismount.
+- Recruit drivers now use Trotting Wagons' native WALK/RUN speed levels, acceleration, collision, steering and blocked reverse behavior. The integration follows Knightmare's Trotting Wagon Compat control boundary instead of introducing parallel vehicle physics.
+- Move, Walk, Run, pace-change and Halt orders control crewed chariots. Vehicles receive stable seven-block line-abreast slots, smooth native steering, bounded braking and final facing restoration without passing their crews through infantry formation movement.
+- Bowmen and Crossbowmen can occupy the second seat while retaining their ranged target logic; vehicle movement clears only their stale personal navigation orders.
+- Scythe contact protects passengers and the draft teams of other chariots in the same formation, preventing the vehicle line from destroying itself. Unrelated friendly troops remain vulnerable to deliberate friendly-fire collisions.
+- Trotting Wagons remains a soft dependency. Optional vehicle classes are referenced only by pseudo mixins and the existing reflection bridge, so RTS still loads without it.
+- Network protocol remains rts-camera-165; no custom packet registration or wire format changed.
+- Source version and packaging references are 0.24.9-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.8-server.1
 Disciplined targeting, complete javelin volleys and faction-safe scythe contact
 

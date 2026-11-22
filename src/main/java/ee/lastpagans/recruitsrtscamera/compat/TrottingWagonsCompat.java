@@ -129,6 +129,18 @@ public final class TrottingWagonsCompat {
         }
     }
 
+    /** Applies bounded server-side braking without replacing Trotting Wagons' movement physics. */
+    public static void brakeCurrentSpeed(Entity wagon, double amount) {
+        if (!isScythedWagon(wagon) || currentSpeedField == null || amount <= 0.0D) return;
+        try {
+            double current = currentSpeedField.getDouble(wagon);
+            double next = Math.copySign(Math.max(0.0D, Math.abs(current) - amount), current);
+            currentSpeedField.setDouble(wagon, next);
+        } catch (IllegalAccessException | RuntimeException ignored) {
+            // Optional internals changed: native wagon deceleration remains the safe fallback.
+        }
+    }
+
     public static Mob[] pullingHorses(Entity wagon) {
         if (!isScythedWagon(wagon) || horsesField == null) return new Mob[0];
         try {

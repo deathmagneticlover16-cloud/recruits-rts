@@ -95,6 +95,9 @@ sounds = source("src/main/resources/assets/recruits_rts_camera/sounds.json")
 trotting_compat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TrottingWagonsCompat.java")
 trotting_combat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TrottingWagonsCombatManager.java")
 trotting_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TrottingWagonsClientCompat.java")
+trotting_driving = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TrottingWagonsDrivingManager.java")
+trotting_driver_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/TrottingWagonRecruitDriverMixin.java")
+trotting_invoker = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/TrottingVehicleInvoker.java")
 trotting_pick = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/TrottingArmoredWagonMixin.java")
 trotting_math = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/ScythedWagonMath.java")
 mods_toml = source("src/main/resources/META-INF/mods.toml")
@@ -1039,6 +1042,24 @@ require(trotting_combat, "wagon.damageSources().generic()",
 forbid(trotting_combat, "isAlliedTo", "scythed chariots must not silently gain ally immunity")
 require(trotting_combat, "previousContacts.retainAll(currentContacts)",
         "a target must leave scythe range before another contact strike")
+require(trotting_driving, "driver.startRiding(wagon, true)",
+        "a Horseman must occupy the chariot's controlling seat before its gunner")
+require(trotting_driving, "gunner.startRiding(wagon, true)",
+        "Bowmen and Crossbowmen must be admitted to the passenger seat")
+require(trotting_driving, 'WHIP_ID = new ResourceLocation("trotting_wagons", "horse_whip")',
+        "Recruit chariot control must use Trotting Wagons' real whip item")
+require(trotting_driving, "ChariotFormationMath.lineSlots",
+        "crewed chariots must receive collision-safe formation slots")
+require(trotting_driving, "protectedConvoyMember",
+        "same-formation crews and draft teams need scythe protection")
+require(trotting_driver_mixin, 'target = "Lnet/favouriteless/trotting_wagons/common/entities/base/AbstractWagon;handleSteering()V"',
+        "Recruit control must enter at Trotting Wagons' native steering boundary")
+require(trotting_driver_mixin, "if (!TrottingWagonsDrivingManager.controls(wagon)) return;",
+        "RTS must not overwrite another addon's control of ordinary Recruit-driven wagons")
+require(trotting_invoker, '@Invoker("setSteeringImpulse")',
+        "Recruit driving must feed the native steering impulse")
+forbid(trotting_driving + trotting_driver_mixin + trotting_invoker,
+       "import net.favouriteless", "Recruit driving must retain soft linkage")
 require(trotting_client, "WagonRenderer", "the restored entity must reuse native wagon rendering")
 require(trotting_pick, "createItemStack(TrottingWagonsCompat.color(wagon))",
         "middle-click and destruction must preserve the restored wagon and its dye")
@@ -1056,8 +1077,8 @@ for asset in (
         raise AssertionError("restored combat-wagon asset is missing: " + asset)
 require(source("src/main/java/ee/lastpagans/recruitsrtscamera/client/BlackPowderFogParticle.java"),
         "lifetime = 180 + random.nextInt(110)", "black-powder haze lifetime must be slightly extended")
-require(source("gradle.properties"), "mod_version=0.24.8-server.1", "semantic version must be updated")
-require(controller, "0.24.8-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.8-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.9-server.1", "semantic version must be updated")
+require(controller, "0.24.9-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.9-server.1.jar", "build helper version must be updated")
 
-print("0.24.8-server.1 source contracts passed")
+print("0.24.9-server.1 source contracts passed")
