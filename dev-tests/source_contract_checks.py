@@ -1086,16 +1086,22 @@ require(death_sounds, "MAX_DELAY_TICKS = 1", "cluster staggering must stay subtl
 require(death_sounds, "leastCrowdedDelay", "nearby simultaneous deaths need anti-chorus distribution")
 require(death_sounds, "0.92F + level.random.nextFloat() * 0.16F",
         "Recruit death voices need bounded pitch variation")
-require(death_sounds, "QUEUED_RECRUITS.add(recruit.getUUID())",
-        "a single Recruit death must not enqueue its voice twice")
+require(death_sounds, "priority = EventPriority.HIGHEST",
+        "Corpsebound death voices must be sent before the ragdoll handoff")
+require(death_sounds, 'ModList.get().isLoaded("corpsebound")',
+        "pre-ragdoll timing must remain a soft mod-id compatibility path")
+forbid(death_sounds, "dev.ragdollcorpses", "RTS must not link or absorb Corpsebound classes")
+forbid(death_sounds, "com.raiiiden.cruor", "RTS must not link or absorb Cruor classes")
+require(death_sounds, "getBoolean(DEATH_VOICE_FIRED)",
+        "a single Recruit death must not fire its voice twice")
 for name in (
         "death_00", "death_01", "death_02", "death_03", "death_04", "death_05",
         "painful_death_00", "painful_death_01", "painful_death_02", "painful_death_03",
         "painful_death_04", "painful_death_05", "painful_death_06", "painful_death_07"):
     if not (ROOT / f"src/main/resources/assets/recruits_rts_camera/sounds/recruits/death/{name}.ogg").is_file():
         raise AssertionError("converted mono Recruit death sound is missing: " + name)
-require(source("gradle.properties"), "mod_version=0.24.10-server.1", "semantic version must be updated")
-require(controller, "0.24.10-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.10-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.11-server.1", "semantic version must be updated")
+require(controller, "0.24.11-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.11-server.1.jar", "build helper version must be updated")
 
-print("0.24.10-server.1 source contracts passed")
+print("0.24.11-server.1 source contracts passed")

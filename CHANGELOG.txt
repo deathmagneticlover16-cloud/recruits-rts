@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.24.11-server.1
+Pre-ragdoll death-voice timing for Corpsebound
+
+- Reviewed Last Pagans Assorted Fixes 1.2.3's Corpsebound/Cruor lifecycle and kept it entirely external; no ragdoll, corpse, wound, appearance or inventory implementation was copied into RTS.
+- Recruit death voices now subscribe at Forge's highest death-event priority. When Corpsebound is installed, RTS sends the positional sound immediately so its packet precedes Corpsebound's corpse/ragdoll handoff instead of beginning after the body has already collapsed.
+- Corpsebound compatibility is a soft mod-id check only. RTS does not load or reflect any Corpsebound, Cruor or Assorted Fixes class, and all three mods retain their existing ownership and failure boundaries.
+- Without Corpsebound, the previous locally least-crowded 0–50 ms anti-stacking scheduler remains active.
+- Per-Recruit persistent admission prevents duplicate firing without retaining dead entity UUIDs in a long-lived global set.
+- Network protocol remains rts-camera-165; no custom packet registration or wire format changed.
+- Source version and packaging references are 0.24.11-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.10-server.1
 Recruit death voices with clustered-casualty staggering
 

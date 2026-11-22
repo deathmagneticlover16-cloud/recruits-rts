@@ -11,38 +11,47 @@ import net.minecraft.world.level.Level;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.PriorityQueue;
-import java.util.Set;
-import java.util.UUID;
 
 /** Server-authoritative Recruit death voices with spatial anti-chorus staggering. */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RecruitDeathSoundManager {
     private static final int MAX_DELAY_TICKS = 1;
     private static final double CLUSTER_RADIUS_SQR = 12.0D * 12.0D;
+    private static final String DEATH_VOICE_FIRED = "RecruitsRTSDeathVoiceFired";
     private static final PriorityQueue<ScheduledSound> QUEUE = new PriorityQueue<>(
             Comparator.comparingLong(ScheduledSound::dueTick));
-    private static final Set<UUID> QUEUED_RECRUITS = new HashSet<>();
 
     private RecruitDeathSoundManager() { }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGHEST, receiveCanceled = false)
     public static void onRecruitDeath(LivingDeathEvent event) {
         if (!(event.getEntity() instanceof AbstractRecruitEntity recruit)
                 || !(recruit.level() instanceof ServerLevel level)
-                || !QUEUED_RECRUITS.add(recruit.getUUID())) return;
+                || recruit.getPersistentData().getBoolean(DEATH_VOICE_FIRED)) return;
+        recruit.getPersistentData().putBoolean(DEATH_VOICE_FIRED, true);
 
         MinecraftServer server = level.getServer();
         long now = server.getTickCount();
+        float pitch = 0.92F + level.random.nextFloat() * 0.16F;
+
+        // Corpsebound converts the death into a ragdoll later in the same Forge event.
+        // Send the positional sound packet now so it is ordered before the corpse packet.
+        // This is deliberately only a mod-id check: RTS never links Corpsebound or Cruor.
+        if (ModList.get().isLoaded("corpsebound")) {
+            play(level, recruit.getX(), recruit.getY(), recruit.getZ(), pitch);
+            return;
+        }
+
         int delay = leastCrowdedDelay(level.dimension(), recruit.getX(), recruit.getY(), recruit.getZ(), now,
                 level.random.nextInt(MAX_DELAY_TICKS + 1));
-        float pitch = 0.92F + level.random.nextFloat() * 0.16F;
-        QUEUE.add(new ScheduledSound(recruit.getUUID(), level.dimension(), now + delay,
+        QUEUE.add(new ScheduledSound(level.dimension(), now + delay,
                 recruit.getX(), recruit.getY(), recruit.getZ(), pitch));
     }
 
@@ -52,12 +61,15 @@ public final class RecruitDeathSoundManager {
         long now = event.getServer().getTickCount();
         while (!QUEUE.isEmpty() && QUEUE.peek().dueTick <= now) {
             ScheduledSound sound = QUEUE.poll();
-            QUEUED_RECRUITS.remove(sound.recruitId);
             ServerLevel level = event.getServer().getLevel(sound.dimension);
             if (level == null) continue;
-            level.playSound(null, sound.x, sound.y, sound.z, RTSSounds.RECRUIT_DEATH.get(),
-                    SoundSource.NEUTRAL, 1.0F, sound.pitch);
+            play(level, sound.x, sound.y, sound.z, sound.pitch);
         }
+    }
+
+    private static void play(ServerLevel level, double x, double y, double z, float pitch) {
+        level.playSound(null, x, y, z, RTSSounds.RECRUIT_DEATH.get(),
+                SoundSource.NEUTRAL, 1.0F, pitch);
     }
 
     private static int leastCrowdedDelay(ResourceKey<Level> dimension, double x, double y, double z,
@@ -82,9 +94,8 @@ public final class RecruitDeathSoundManager {
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         QUEUE.clear();
-        QUEUED_RECRUITS.clear();
     }
 
-    private record ScheduledSound(UUID recruitId, ResourceKey<Level> dimension, long dueTick,
+    private record ScheduledSound(ResourceKey<Level> dimension, long dueTick,
                                   double x, double y, double z, float pitch) { }
 }
