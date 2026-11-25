@@ -1100,8 +1100,8 @@ for name in (
         "painful_death_04", "painful_death_05", "painful_death_06", "painful_death_07"):
     if not (ROOT / f"src/main/resources/assets/recruits_rts_camera/sounds/recruits/death/{name}.ogg").is_file():
         raise AssertionError("converted mono Recruit death sound is missing: " + name)
-require(source("gradle.properties"), "mod_version=0.24.11-server.1", "semantic version must be updated")
-require(controller, "0.24.11-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.11-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.12-server.1", "semantic version must be updated")
+require(controller, "0.24.12-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.12-server.1.jar", "build helper version must be updated")
 
-print("0.24.11-server.1 source contracts passed")
+print("0.24.12-server.1 source contracts passed")

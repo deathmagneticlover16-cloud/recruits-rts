@@ -1,3 +1,13 @@
+Recruits: RTS Camera 0.24.12-server.1
+Soft heightmap-derived black-powder smoke texture
+
+- Replaced the ragged photographic smoke sprite with the user-approved smooth heightmap-derived cloud.
+- Regenerated the complete 256, 128, 64 and 32 pixel LOD chain from the same RGBA source, preserving one consistent silhouette at every smoke quality and viewing distance.
+- The source cloud retains a feathered transparent boundary and partial internal alpha. Combined with the existing 0.18–0.26 particle alpha, one puff stays translucent while sustained overlapping fire progressively obscures the battlefield.
+- Musket and cannon smoke continue sharing the same LOD sprite family; their existing scale, finite emitter, wind, lifetime, density and Colonial Cannons behavior are unchanged.
+- Network protocol remains rts-camera-165; no packet registration or wire format changed.
+- Source version and packaging references are 0.24.12-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.11-server.1
 Pre-ragdoll death-voice timing for Corpsebound
 
