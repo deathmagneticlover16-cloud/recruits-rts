@@ -3,10 +3,13 @@ package ee.lastpagans.recruitsrtscamera.navigation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeMetrics;
 
 import java.util.ArrayList;
@@ -33,6 +36,7 @@ public final class TacticalPathfinder {
     private static final double MAX_STEP_UP = 1.25D;
     private static final double MAX_DROP = 1.50D;
     private static final double FORMATION_SLOT_MAX_DROP = 1.25D;
+    private static final int MAX_SWIM_CELLS = 8;
     private static final long SEARCH_TIME_BUDGET_NANOS = 20_000_000L;
 
     private TacticalPathfinder() {
@@ -70,6 +74,8 @@ public final class TacticalPathfinder {
      * is preferred so the member routes around the opening.
      */
     public static Vec3 nearestFormationStandable(ServerLevel level, Mob mover, Vec3 desired) {
+        Cell water = swimmingCellAt(level, mover, BlockPos.containing(desired), 1);
+        if (water != null) return water.position;
         Cell best = null;
         double bestScore = Double.POSITIVE_INFINITY;
         BlockPos origin = BlockPos.containing(desired);
@@ -114,7 +120,44 @@ public final class TacticalPathfinder {
         if (climb != null && (best == null || climb.position.distanceToSqr(desired) < best.position.distanceToSqr(desired))) {
             best = climb;
         }
+        Cell water = swimmingCellAt(level, mover, origin, 1);
+        if (water != null && (best == null
+                || water.position.distanceToSqr(desired) < best.position.distanceToSqr(desired))) {
+            best = water;
+        }
         return best == null ? null : best.position;
+    }
+
+    public static boolean isWaterTarget(ServerLevel level, Vec3 target) {
+        return level != null && target != null
+                && level.getFluidState(BlockPos.containing(target)).is(FluidTags.WATER);
+    }
+
+    /** Nearest collision-backed bank used when an accidental swim cannot reach the order. */
+    public static Vec3 nearestShore(ServerLevel level, Mob mover, Vec3 origin, int radius) {
+        if (level == null || mover == null || origin == null) return null;
+        BlockPos center = BlockPos.containing(origin);
+        for (int ring = 1; ring <= Math.max(1, radius); ring++) {
+            Cell best = null;
+            double bestDistance = Double.POSITIVE_INFINITY;
+            for (int dx = -ring; dx <= ring; dx++) {
+                for (int dz = -ring; dz <= ring; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != ring) continue;
+                    for (int y = center.getY() - 3; y <= center.getY() + 2; y++) {
+                        Cell candidate = standingOn(level, mover,
+                                new BlockPos(center.getX() + dx, y, center.getZ() + dz));
+                        if (candidate == null) continue;
+                        double distance = horizontalDistanceSq(candidate.position, origin);
+                        if (distance < bestDistance) {
+                            best = candidate;
+                            bestDistance = distance;
+                        }
+                    }
+                }
+            }
+            if (best != null) return best.position;
+        }
+        return null;
     }
 
     /**
@@ -252,6 +295,14 @@ public final class TacticalPathfinder {
                             current.key.getZ() + dz));
             if (ladder != null) best = ladder;
         }
+        if (best == null) {
+            int nextRun = current.swimming ? current.swimRun + 1 : 1;
+            if (nextRun <= MAX_SWIM_CELLS) {
+                best = swimmingCellAt(level, mover,
+                        new BlockPos(current.key.getX() + dx,
+                                BlockPos.containing(current.position).getY(), current.key.getZ() + dz), nextRun);
+            }
+        }
         if (best == null) return;
         if (diagonal && (!columnPassable(level, mover, current, dx, 0)
                 || !columnPassable(level, mover, current, 0, dz))) return;
@@ -311,6 +362,16 @@ public final class TacticalPathfinder {
                         }
                     }
                     for (int y = origin.getY() - verticalRadius; y <= origin.getY() + verticalRadius; y++) {
+                        Cell water = swimmingCellAt(level, mover,
+                                new BlockPos(origin.getX() + dx, y, origin.getZ() + dz), 1);
+                        if (water == null) continue;
+                        double score = water.position.distanceToSqr(target) + 0.35D;
+                        if (score < bestScore) {
+                            best = water;
+                            bestScore = score;
+                        }
+                    }
+                    for (int y = origin.getY() - verticalRadius; y <= origin.getY() + verticalRadius; y++) {
                         Cell climb = climbableCell(level, mover, new BlockPos(origin.getX() + dx, y, origin.getZ() + dz));
                         if (climb == null) continue;
                         double score = climb.position.distanceToSqr(target) + 0.15D;
@@ -364,7 +425,7 @@ public final class TacticalPathfinder {
         if (!dryAt(level, mover, feet)) return null;
         if (!collisionFree(level, mover, feet)) return null;
         BlockPos key = new BlockPos(floor.getX(), (int) Math.floor(feet.y + 1.0E-4D), floor.getZ());
-        return new Cell(key, feet, false);
+        return new Cell(key, feet, false, false, 0);
     }
 
     private static Cell climbableCell(ServerLevel level, Mob mover, BlockPos position) {
@@ -372,11 +433,46 @@ public final class TacticalPathfinder {
         Vec3 feet = Vec3.atBottomCenterOf(position);
         AABB destination = destinationBox(mover, feet).deflate(0.04D);
         if (!level.noCollision(mover, destination)) return null;
-        return new Cell(position.immutable(), feet, true);
+        return new Cell(position.immutable(), feet, true, false, 0);
+    }
+
+    /** A bounded water node. Searches may cross a small river but never walk into a lake. */
+    private static Cell swimmingCellAt(ServerLevel level, Mob mover, BlockPos position, int swimRun) {
+        if (level == null || mover == null || position == null || swimRun > MAX_SWIM_CELLS
+                || !level.hasChunkAt(position)) return null;
+        BlockPos water = null;
+        for (int dy = 2; dy >= -2; dy--) {
+            BlockPos candidate = position.offset(0, dy, 0);
+            if (level.getFluidState(candidate).is(FluidTags.WATER)) {
+                water = candidate;
+                break;
+            }
+        }
+        if (water == null) return null;
+        // Keep the body inside the upper water cell with its head near the surface. Vanilla
+        // buoyancy and the local swim controller supply the small vertical correction.
+        Vec3 feet = new Vec3(water.getX() + 0.5D, water.getY() + 0.12D, water.getZ() + 0.5D);
+        if (!collisionFree(level, mover, feet)) return null;
+        return new Cell(water.immutable(), feet, false, true, swimRun);
     }
 
     private static boolean collisionFree(ServerLevel level, Mob mover, Vec3 feet) {
-        return level.noCollision(mover, destinationBox(mover, feet).deflate(0.025D));
+        AABB destination = destinationBox(mover, feet).deflate(0.025D);
+        BlockPos min = BlockPos.containing(destination.minX, destination.minY, destination.minZ);
+        BlockPos max = BlockPos.containing(destination.maxX - 1.0E-5D,
+                destination.maxY - 1.0E-5D, destination.maxZ - 1.0E-5D);
+        for (BlockPos position : BlockPos.betweenClosed(min, max)) {
+            BlockState state = level.getBlockState(position);
+            // Grass, flowers and modded decorative brush commonly mark themselves as
+            // replaceable while still exposing a tiny collision shape. They are not a wall
+            // and must not invalidate an entire tactical route.
+            if (state.canBeReplaced()) continue;
+            for (AABB local : state.getCollisionShape(level, position,
+                    CollisionContext.of(mover)).toAabbs()) {
+                if (local.move(position).intersects(destination)) return false;
+            }
+        }
+        return true;
     }
 
     private static boolean dryAt(ServerLevel level, Mob mover, Vec3 feet) {
@@ -415,11 +511,13 @@ public final class TacticalPathfinder {
         double dx = a.position.x - b.position.x;
         double dy = a.position.y - b.position.y;
         double dz = a.position.z - b.position.z;
-        double descentPenalty = !a.climbable && !b.climbable && dy > 0.60D ? 7.0D * dy : 0.0D;
+        double descentPenalty = !a.climbable && !b.climbable && !a.swimming && !b.swimming
+                && dy > 0.60D ? 7.0D * dy : 0.0D;
         // A supported one-block rise is an ordinary horse jump, not a reason to route
         // cavalry around an entire ledge. This changes only the cost of an already-safe
         // collision-backed transition; dry/support/drop checks remain unchanged.
-        double elevationCost = a.climbable || b.climbable ? 1.1D
+        double elevationCost = a.swimming || b.swimming ? 2.6D
+                : a.climbable || b.climbable ? 1.1D
                 : mover instanceof AbstractHorse && dy < -0.40D && dy >= -MAX_STEP_UP ? 0.65D
                 : 1.8D;
         // If both order endpoints are on the rim, descending into the canyon is almost
@@ -462,7 +560,8 @@ public final class TacticalPathfinder {
         return dx * dx + dz * dz;
     }
 
-    private record Cell(BlockPos key, Vec3 position, boolean climbable) {}
+    private record Cell(BlockPos key, Vec3 position, boolean climbable,
+                        boolean swimming, int swimRun) {}
     private record SearchNode(Cell cell, double score) {}
 
     /** Route reconstruction and line-of-sight smoothing retained across scheduler slices. */
@@ -536,7 +635,7 @@ public final class TacticalPathfinder {
             while (scanIndex < routeCells.size()) {
                 Cell cell = routeCells.get(scanIndex);
                 int clearance = openSides(level, mover, cell);
-                boolean narrow = cell.climbable;
+                boolean narrow = cell.climbable || cell.swimming;
                 boolean changingLevel = previous != null
                         && Math.abs(cell.position.y - previous.position.y) > 0.40D;
                 if (!changingLevel && scanIndex > 0 && scanIndex + 1 < routeCells.size() && clearance <= 2) {
@@ -638,7 +737,7 @@ public final class TacticalPathfinder {
             while (index <= samples) {
                 Vec3 probe = from.lerp(to, index / (double) samples);
                 Cell cell = nearestCell(level, mover, probe, 0, 2);
-                if (cell == null || cell.climbable) return false;
+                if (cell == null || cell.climbable || cell.swimming) return false;
                 double change = cell.position.y - previousY;
                 if (change > MAX_STEP_UP || change < -0.60D) return false;
                 previousY = cell.position.y;
@@ -668,7 +767,8 @@ public final class TacticalPathfinder {
         private double closestDistance;
         private int visited;
         private long searchNanos;
-        private long terrainEpoch;
+        private long startTerrainRevision;
+        private long goalTerrainRevision;
         private boolean initialized;
         private boolean finished;
         private RouteBuildSession routeBuild;
@@ -685,7 +785,8 @@ public final class TacticalPathfinder {
         public boolean advance(long deadlineNanos) {
             if (finished) return true;
             RecruitRuntimeMetrics.PATH_SLICES.increment();
-            if (initialized && TacticalTerrainRevisions.epoch(level) != terrainEpoch) {
+            if (initialized && (TacticalTerrainRevisions.revisionAt(level, startPosition) != startTerrainRevision
+                    || TacticalTerrainRevisions.revisionAt(level, destination) != goalTerrainRevision)) {
                 cancelForTerrainChange();
                 return true;
             }
@@ -704,7 +805,9 @@ public final class TacticalPathfinder {
                 Cell current = search.cell;
                 if (!closed.add(current.key)) continue;
                 double remaining = heuristic(current, goal);
-                if (remaining < closestDistance) {
+                // An incomplete search must finish on land. Otherwise the best partial
+                // result of a lake search orders the unit into open water with no shore.
+                if (!current.swimming && remaining < closestDistance) {
                     closestDistance = remaining;
                     closest = current;
                 }
@@ -749,7 +852,8 @@ public final class TacticalPathfinder {
             open.add(new SearchNode(start, heuristic(start, goal)));
             closest = start;
             closestDistance = heuristic(start, goal);
-            terrainEpoch = TacticalTerrainRevisions.epoch(level);
+            startTerrainRevision = TacticalTerrainRevisions.revisionAt(level, startPosition);
+            goalTerrainRevision = TacticalTerrainRevisions.revisionAt(level, destination);
             return true;
         }
 

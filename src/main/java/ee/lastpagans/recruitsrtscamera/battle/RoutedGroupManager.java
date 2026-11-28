@@ -23,8 +23,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.ai.goal.GoalSelector;
-import net.minecraft.world.entity.ai.goal.WrappedGoal;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
@@ -49,7 +47,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/** A routed group permanently loses command; its soldiers remain vulnerable while escaping. */
+/** Routed groups retreat, then either rally under friendly numerical support or desert. */
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class RoutedGroupManager {
     private static final String KEY = "RecruitsRTSCameraRout";
@@ -68,6 +66,13 @@ public final class RoutedGroupManager {
     public static boolean isGroupRouting(UUID id) {
         var server = ServerLifecycleHooks.getCurrentServer();
         return id != null && server != null && RTSRoutingSavedData.get(server.overworld()).containsGroup(id);
+    }
+
+    public static boolean isGroupRallying(UUID id) {
+        var server = ServerLifecycleHooks.getCurrentServer();
+        if (id == null || server == null) return false;
+        RTSRoutingSavedData.Rout rout = RTSRoutingSavedData.get(server.overworld()).group(id);
+        return rout != null && rout.rallying;
     }
 
     public static void begin(ServerLevel level, UUID groupId, UUID ownerId,
@@ -109,6 +114,18 @@ public final class RoutedGroupManager {
     private static void enforce(AbstractRecruitEntity recruit) {
         if (!recruit.isAlive() || !(recruit.level() instanceof ServerLevel level)) return;
         var record = RTSRoutingSavedData.get(level).member(recruit.getUUID());
+        if (record == null && recruit.getPersistentData().contains(KEY)) {
+            // The authoritative group was already finished while this entity's chunk was
+            // unloading. Never leave a stale entity in permanent local routing state.
+            CompoundTag stale = recruit.getPersistentData().getCompound(KEY);
+            if (stale.hasUUID("group")) recruit.setGroupUUID(stale.getUUID("group"));
+            recruit.getPersistentData().remove(KEY);
+            EscapeGoal staleGoal = ACTIVE.remove(recruit.getUUID());
+            if (staleGoal != null) ((MobGoalAccess) recruit).rts$getGoals().removeGoal(staleGoal);
+            recruit.setListen(true);
+            recruit.setFleeing(false);
+            return;
+        }
         if (!recruit.getPersistentData().contains(KEY)) {
             if (record == null) return;
             CompoundTag rout = new CompoundTag();
@@ -121,17 +138,29 @@ public final class RoutedGroupManager {
             rout.putDouble("dz", record.direction.z);
             recruit.getPersistentData().put(KEY, rout);
         }
+        CompoundTag routData = recruit.getPersistentData().getCompound(KEY);
+        if (record != null && record.rallying && !routData.getBoolean("rallying")) {
+            routData.putBoolean("rallying", true);
+            routData.putDouble("sx", record.rallyCenter.x);
+            routData.putDouble("sy", record.rallyCenter.y);
+            routData.putDouble("sz", record.rallyCenter.z);
+            routData.putInt("rallyTicks", 0);
+        }
         if (!ACTIVE.containsKey(recruit.getUUID())) {
             MobGoalAccess goals = (MobGoalAccess) recruit;
-            clearGoals(goals.rts$getGoals());
-            clearGoals(goals.rts$getTargets());
+            // Keep native goals installed. The all-flags escape goal suppresses them while
+            // routing and can be removed intact if the unit rallies later.
             recruit.getNavigation().stop();
             EscapeGoal escape = new EscapeGoal(recruit);
             goals.rts$getGoals().addGoal(-100, escape);
             ACTIVE.put(recruit.getUUID(), escape);
             ThrowableWeaponManager.cleanup(recruit.getUUID());
         }
-        recruit.setGroupUUID(null);
+        if (record != null && record.rallying) {
+            prepareRallyMember(recruit, record.groupId);
+        } else {
+            recruit.setGroupUUID(null);
+        }
         recruit.needsGroupUpdate = false;
         recruit.setListen(false);
         recruit.setAggroState(3); // Native passive state, reinforced by the target/command gates.
@@ -148,17 +177,12 @@ public final class RoutedGroupManager {
         recruit.clearHoldPos();
         recruit.holdFormation = false;
         recruit.isInFormation = false;
-        recruit.setFleeing(true);
+        recruit.setFleeing(record == null || !record.rallying);
         recruit.setTarget(null);
         recruit.setLastHurtByMob(null);
         recruit.stopUsingItem();
         if (recruit instanceof IStrategicFire strategic) strategic.setShouldStrategicFire(false);
         CommanderAnimationHints.offer(recruit, CommanderAnimationHints.Hint.ROUTING, 12);
-    }
-
-    private static void clearGoals(GoalSelector selector) {
-        List<Goal> goals = selector.getAvailableGoals().stream().map(WrappedGoal::getGoal).toList();
-        for (Goal goal : goals) selector.removeGoal(goal);
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -188,10 +212,15 @@ public final class RoutedGroupManager {
         if (event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)
                 || level.getGameTime() % 20 != 0) return;
         Map<UUID, List<AbstractRecruitEntity>> escaped = new HashMap<>();
+        Map<UUID, List<AbstractRecruitEntity>> assembling = new HashMap<>();
         for (EscapeGoal goal : List.copyOf(ACTIVE.values())) {
             AbstractRecruitEntity recruit = goal.recruit;
             if (recruit.level() != level || !recruit.isAlive() || recruit.isRemoved()) continue;
             CompoundTag rout = recruit.getPersistentData().getCompound(KEY);
+            if (rout.hasUUID("group") && rout.getBoolean("rallying")) {
+                assembling.computeIfAbsent(rout.getUUID("group"), ignored -> new ArrayList<>()).add(recruit);
+                continue;
+            }
             if (!rout.hasUUID("group") || rout.getInt("ticks") < 80) continue;
             Entity mover = controlled(recruit);
             if (Math.hypot(mover.getX() - rout.getDouble("x"), mover.getZ() - rout.getDouble("z")) < 30.0D) continue;
@@ -206,7 +235,98 @@ public final class RoutedGroupManager {
             }
             if (safe) escaped.computeIfAbsent(rout.getUUID("group"), ignored -> new ArrayList<>()).add(recruit);
         }
-        for (var entry : escaped.entrySet()) removeEscaped(level, entry.getKey(), entry.getValue());
+        for (var entry : escaped.entrySet()) {
+            if (numbersSupportRally(level, entry.getValue())) startRally(level, entry.getKey());
+            else removeEscaped(level, entry.getKey(), entry.getValue());
+        }
+        for (var entry : assembling.entrySet()) finishRallyIfReady(level, entry.getKey(), entry.getValue());
+    }
+
+    private static boolean numbersSupportRally(ServerLevel level, List<AbstractRecruitEntity> survivors) {
+        if (survivors == null || survivors.size() < 3) return false;
+        AbstractRecruitEntity sample = survivors.get(0);
+        Entity center = controlled(sample);
+        int friendly = survivors.size();
+        int hostile = 0;
+        for (LivingEntity entity : level.getEntitiesOfClass(LivingEntity.class,
+                center.getBoundingBox().inflate(72.0D, 28.0D, 72.0D))) {
+            if (entity instanceof AbstractRecruitEntity recruit && recruit.isAlive()
+                    && sample.getOwnerUUID() != null && sample.getOwnerUUID().equals(recruit.getOwnerUUID())
+                    && !isRouting(recruit)) friendly++;
+            else if (isThreat(sample, entity)) hostile++;
+        }
+        return friendly >= hostile;
+    }
+
+    private static void startRally(ServerLevel level, UUID groupId) {
+        List<AbstractRecruitEntity> members = ACTIVE.values().stream().map(goal -> goal.recruit)
+                .filter(recruit -> recruit.level() == level && recruit.isAlive())
+                .filter(recruit -> {
+                    CompoundTag tag = recruit.getPersistentData().getCompound(KEY);
+                    return tag.hasUUID("group") && groupId.equals(tag.getUUID("group"));
+                }).sorted((a, b) -> a.getUUID().compareTo(b.getUUID())).toList();
+        if (members.isEmpty()) return;
+        Vec3 center = Vec3.ZERO;
+        for (AbstractRecruitEntity member : members) center = center.add(controlled(member).position());
+        center = center.scale(1.0D / members.size());
+        RTSRoutingSavedData.get(level).beginRally(groupId, center, level.getGameTime());
+        int columns = Math.max(1, (int) Math.ceil(members.size() / 3.0D));
+        for (int i = 0; i < members.size(); i++) {
+            AbstractRecruitEntity recruit = members.get(i);
+            int rank = i / columns;
+            int column = i % columns;
+            Vec3 slot = center.add((column - (columns - 1) * 0.5D) * 1.35D, 0.0D, rank * 1.35D);
+            CompoundTag tag = recruit.getPersistentData().getCompound(KEY);
+            tag.putBoolean("rallying", true);
+            tag.putDouble("sx", slot.x);
+            tag.putDouble("sy", slot.y);
+            tag.putDouble("sz", slot.z);
+            tag.putInt("rallyTicks", 0);
+            prepareRallyMember(recruit, groupId);
+        }
+    }
+
+    private static void prepareRallyMember(AbstractRecruitEntity recruit, UUID groupId) {
+        recruit.setGroupUUID(groupId);
+        recruit.setFleeing(false);
+        recruit.setTarget(null);
+        recruit.setShouldMovePos(false);
+        recruit.setShouldFollow(false);
+        recruit.stopUsingItem();
+    }
+
+    private static void finishRallyIfReady(ServerLevel level, UUID groupId,
+                                           List<AbstractRecruitEntity> members) {
+        RTSRoutingSavedData.Rout record = RTSRoutingSavedData.get(level).group(groupId);
+        if (record == null || !record.rallying || members.isEmpty()) return;
+        if (members.size() < record.members().size()) return;
+        boolean assembled = true;
+        for (AbstractRecruitEntity member : members) {
+            CompoundTag tag = member.getPersistentData().getCompound(KEY);
+            Vec3 slot = new Vec3(tag.getDouble("sx"), tag.getDouble("sy"), tag.getDouble("sz"));
+            if (horizontal(controlled(member).position().subtract(slot)).lengthSqr() > 0.85D * 0.85D) {
+                assembled = false;
+            }
+        }
+        if (!assembled) return;
+        RTSRoutingSavedData.get(level).finishGroup(groupId);
+        for (AbstractRecruitEntity recruit : members) {
+            EscapeGoal goal = ACTIVE.remove(recruit.getUUID());
+            if (goal != null) ((MobGoalAccess) recruit).rts$getGoals().removeGoal(goal);
+            CompoundTag tag = recruit.getPersistentData().getCompound(KEY);
+            Vec3 slot = new Vec3(tag.getDouble("sx"), tag.getDouble("sy"), tag.getDouble("sz"));
+            recruit.getPersistentData().remove(KEY);
+            recruit.setGroupUUID(groupId);
+            recruit.setListen(true);
+            recruit.setAggroState(2);
+            recruit.setFollowState(3);
+            recruit.setFleeing(false);
+            recruit.setHoldPos(slot);
+            recruit.setShouldHoldPos(true);
+            recruit.holdFormation = true;
+            recruit.isInFormation = true;
+        }
+        BattleMechanicsManager.onGroupRallied(level, groupId, members);
     }
 
     private static void removeEscaped(ServerLevel level, UUID groupId, List<AbstractRecruitEntity> survivors) {
@@ -305,13 +425,23 @@ public final class RoutedGroupManager {
 
         @Override public void tick() {
             Entity mover = controlled(recruit);
+            CompoundTag rout = recruit.getPersistentData().getCompound(KEY);
+            if (rout.getBoolean("rallying")) {
+                rout.putInt("rallyTicks", rout.getInt("rallyTicks") + 1);
+                if (++repath % 5 == 1) {
+                    Vec3 slot = new Vec3(rout.getDouble("sx"), rout.getDouble("sy"), rout.getDouble("sz"));
+                    BlockPos surface = FormationUtils.getPositionOrSurface((ServerLevel) recruit.level(),
+                            BlockPos.containing(slot));
+                    recruit.getNavigation().moveTo(slot.x, surface.getY(), slot.z, 0.90D);
+                }
+                return;
+            }
             // Routing is a retreat, not a forced march. The old 1.6 value made foot
             // soldiers sprint faster than ordinary recruits, and also leaked into mounted
             // navigation. Keep the native/default pace for both cases.
             recruit.setSprinting(false);
             recruit.moveSpeed = (float) ESCAPE_SPEED;
             if (++repath % ESCAPE_REPATH_TICKS != 1) return;
-            CompoundTag rout = recruit.getPersistentData().getCompound(KEY);
             Vec3 direction = new Vec3(rout.getDouble("dx"), 0.0D, rout.getDouble("dz"));
             if (direction.lengthSqr() < 0.001D) direction = new Vec3(1.0D, 0.0D, 0.0D);
             direction = direction.normalize();

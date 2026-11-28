@@ -41,10 +41,12 @@ public final class MountedFormationMotion {
             double lateralCurrentX = currentX - travelX * alongCurrent;
             double lateralCurrentZ = currentZ - travelZ * alongCurrent;
             double along = formationSpeed + clamp(alongError * 0.10D, -0.07D, 0.11D);
-            double lateralX = lateralErrorX * 0.075D - lateralCurrentX * 0.45D;
-            double lateralZ = lateralErrorZ * 0.075D - lateralCurrentZ * 0.45D;
+            // Slot recovery may bend the forward trajectory, but must not become a visible
+            // sideways slide. The former cap was almost half walking pace.
+            double lateralX = lateralErrorX * 0.040D - lateralCurrentX * 0.32D;
+            double lateralZ = lateralErrorZ * 0.040D - lateralCurrentZ * 0.32D;
             double lateralLength = Math.hypot(lateralX, lateralZ);
-            double lateralLimit = slotDistance > 1.5D ? 0.065D : 0.032D;
+            double lateralLimit = slotDistance > 1.5D ? 0.026D : 0.014D;
             if (lateralLength > lateralLimit) {
                 lateralX *= lateralLimit / lateralLength;
                 lateralZ *= lateralLimit / lateralLength;

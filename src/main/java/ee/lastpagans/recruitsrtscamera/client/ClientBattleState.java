@@ -2,12 +2,11 @@ package ee.lastpagans.recruitsrtscamera.client;
 
 import ee.lastpagans.recruitsrtscamera.battle.GroupBattleSnapshot;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
 public final class ClientBattleState {
-    private static final Map<UUID, GroupBattleSnapshot> GROUPS = new HashMap<>();
+    private static final Map<UUID, GroupBattleSnapshot> GROUPS = new java.util.HashMap<>();
 
     private ClientBattleState() {
     }
@@ -17,18 +16,11 @@ public final class ClientBattleState {
     }
 
     public static void replace(Map<UUID, GroupBattleSnapshot> states) {
-        Map<UUID, GroupBattleSnapshot> routed = new HashMap<>();
-        GROUPS.forEach((id, state) -> {
-            if (state != null && state.moraleState() >= 2) routed.put(id, state);
-        });
         GROUPS.clear();
         if (states != null) GROUPS.putAll(states);
-        // Routed members leave the ordinary runtime sample immediately, but their native group
-        // card remains until escape. Preserve the authoritative ROUTING badge during that gap.
-        routed.forEach(GROUPS::putIfAbsent);
-
-        // Routing changes command authority, not Commander visibility. Keep the routed card,
-        // selection and open command panels intact while the server rejects orders for it.
+        // Routing is now represented by authoritative persisted server snapshots through
+        // retreat and rally. If the server omits a routed UUID, it is genuinely gone; keeping
+        // the previous client row made destroyed/despawned units haunt the card layout forever.
         RTSCommandFacade.invalidateCards();
     }
 

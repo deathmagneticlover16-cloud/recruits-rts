@@ -243,9 +243,11 @@ public final class BlackPowderSmokeManager {
         // Long-distance packets keep smoke visible beyond simulation distance; client
         // resolution/LOD then bounds its render cost by camera distance.
         for (ServerPlayer player : level.players()) {
-            double dx = player.getX() - position.x;
-            double dy = player.getY() - position.y;
-            double dz = player.getZ() - position.z;
+            Vec3 observer = ee.lastpagans.recruitsrtscamera.server.RTSObserverManager.position(player);
+            Vec3 listener = observer == null ? player.position() : observer;
+            double dx = listener.x - position.x;
+            double dy = listener.y - position.y;
+            double dz = listener.z - position.z;
             double distanceSq = dx * dx + dy * dy + dz * dz;
             if (distanceSq > 512.0D * 512.0D) continue;
             double lod = distanceSq <= 32.0D * 32.0D ? 1.0D

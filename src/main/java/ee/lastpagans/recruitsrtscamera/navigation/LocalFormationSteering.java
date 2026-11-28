@@ -32,6 +32,9 @@ public final class LocalFormationSteering {
                 ? Vec3.ZERO : new Vec3(slotVelocity.x, 0.0D, slotVelocity.z);
         double slotDistance = Math.hypot(error.x, error.z);
         double safeScale = Math.max(1.0D, Math.min(1.25D, catchUpScale));
+        if (mover.isInWater() || TacticalPathfinder.isWaterTarget(level, desired)) {
+            return steerSwimming(mover, error, current, safeScale);
+        }
         if (recruit.getVehicle() == mover) {
             return steerMounted(level, mover, desired, position, error, current,
                     formationVelocity, safeScale);
@@ -67,6 +70,23 @@ public final class LocalFormationSteering {
         }
         mover.getMoveControl().setWantedPosition(target.x, target.y, target.z,
                 moveControlPace * safeScale);
+        return true;
+    }
+
+    /** Genuine forward swimming for short tactical crossings; no helpless surface bobbing. */
+    private static boolean steerSwimming(Mob mover, Vec3 error, Vec3 current, double safeScale) {
+        double horizontal = Math.hypot(error.x, error.z);
+        double pace = Math.min(0.115D * safeScale, horizontal * 0.18D);
+        double requestedX = horizontal > 1.0E-5D ? error.x / horizontal * pace : 0.0D;
+        double requestedZ = horizontal > 1.0E-5D ? error.z / horizontal * pace : 0.0D;
+        double requestedY = Math.max(0.035D, Math.min(0.10D, error.y * 0.16D + 0.045D));
+        mover.getNavigation().stop();
+        mover.getMoveControl().setWantedPosition(mover.getX(), mover.getY(), mover.getZ(), 0.0D);
+        mover.setSwimming(true);
+        mover.setDeltaMovement(current.x * 0.35D + requestedX * 0.65D,
+                Math.max(current.y * 0.35D, requestedY),
+                current.z * 0.35D + requestedZ * 0.65D);
+        mover.hasImpulse = true;
         return true;
     }
 

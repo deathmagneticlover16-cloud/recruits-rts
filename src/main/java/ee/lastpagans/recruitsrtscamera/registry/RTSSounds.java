@@ -8,6 +8,9 @@ import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class RTSSounds {
     private static final DeferredRegister<SoundEvent> SOUNDS = DeferredRegister.create(
             ForgeRegistries.SOUND_EVENTS,
@@ -27,6 +30,7 @@ public final class RTSSounds {
     public static final RegistryObject<SoundEvent> CAVALRY_RUMBLE_DISTANT = register("cavalry_rumble_distant");
     public static final RegistryObject<SoundEvent> JAVELIN_GROUND_HIT = register("javelin_ground_hit");
     public static final RegistryObject<SoundEvent> RECRUIT_DEATH = register("recruit_death");
+    public static final List<RegistryObject<SoundEvent>> RECRUIT_DEATH_VARIANTS = deathVariants();
 
     private RTSSounds() {
     }
@@ -34,6 +38,14 @@ public final class RTSSounds {
     private static RegistryObject<SoundEvent> register(String path) {
         ResourceLocation id = new ResourceLocation(RecruitsRTSCameraMod.MOD_ID, path);
         return SOUNDS.register(path, () -> SoundEvent.createVariableRangeEvent(id));
+    }
+
+    private static List<RegistryObject<SoundEvent>> deathVariants() {
+        List<RegistryObject<SoundEvent>> result = new ArrayList<>(14);
+        for (int i = 0; i < 14; i++) {
+            result.add(register(String.format("recruit_death_%02d", i)));
+        }
+        return List.copyOf(result);
     }
 
     public static void register(IEventBus bus) {

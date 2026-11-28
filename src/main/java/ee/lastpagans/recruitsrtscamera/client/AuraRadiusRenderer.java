@@ -14,7 +14,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 
-/** Hold-Space, hover-only visualization of real commander and standard effect radii. */
+/** Hover-only visualization of real commander and standard effect radii. */
 public final class AuraRadiusRenderer {
     private static final Minecraft MC = Minecraft.getInstance();
     private static final int SEGMENTS = 96;

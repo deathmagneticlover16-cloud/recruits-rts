@@ -41,7 +41,11 @@ final class TacticalTerrainCache {
             return cached;
         }
         BlockState state = level.getBlockState(floor);
-        VoxelShape shape = state.getCollisionShape(level, floor, CollisionContext.of(mover));
+        // Decorative grass/brush is body-space, never a support surface. Treating its tiny
+        // shape as the floor made the route climb onto foliage and then invalidate itself.
+        VoxelShape shape = state.canBeReplaced()
+                ? net.minecraft.world.phys.shapes.Shapes.empty()
+                : state.getCollisionShape(level, floor, CollisionContext.of(mover));
         List<AABB> result = shape.isEmpty() ? List.of() : List.copyOf(shape.toAabbs());
         cache.surfaces.put(key, result);
         RecruitRuntimeMetrics.TERRAIN_CACHE_MISSES.increment();

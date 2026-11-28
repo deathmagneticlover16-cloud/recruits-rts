@@ -20,10 +20,15 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraft.client.Minecraft;
+import ee.lastpagans.recruitsrtscamera.network.CameraObserverPacket;
+import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
 
 @Mod.EventBusSubscriber(modid = RecruitsRTSCameraMod.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class RTSCameraClientEvents {
     private static boolean fadingRecruit;
+    private static int observerSyncTicks;
+    private static boolean observerWasActive;
     private RTSCameraClientEvents() {
     }
 
@@ -34,6 +39,23 @@ public final class RTSCameraClientEvents {
         InputGate.suppressDisallowedKeyMappings();
         if (event.phase == TickEvent.Phase.END) {
             RTSCameraController.clientTick();
+            if (RTSCameraController.isActive()) {
+                observerWasActive = true;
+                // SoundEngine normally follows the player entity. Refresh it after Freecam has
+                // moved so spatial attenuation/panning follows the actual RTS viewpoint.
+                Minecraft mc = Minecraft.getInstance();
+                mc.getSoundManager().updateSource(mc.gameRenderer.getMainCamera());
+                if (++observerSyncTicks >= 5) {
+                    observerSyncTicks = 0;
+                    var position = mc.gameRenderer.getMainCamera().getPosition();
+                    RTSCameraNetwork.CHANNEL.sendToServer(new CameraObserverPacket(true,
+                            position.x, position.y, position.z));
+                }
+            } else if (observerWasActive) {
+                observerSyncTicks = 0;
+                observerWasActive = false;
+                RTSCameraNetwork.CHANNEL.sendToServer(new CameraObserverPacket(false, 0.0D, 0.0D, 0.0D));
+            }
             MountedFacingClient.tick();
             ClientEnemyVisibilityState.tick();
             CavalryRumbleClient.tick();

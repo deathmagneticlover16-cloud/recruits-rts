@@ -252,8 +252,9 @@ public final class RTSCameraController {
     }
 
     static AuraPreview commanderAuraPreview() {
-        if (!active || hoveredAuraEntity == null
-                || !(capturedShowOrdersDown || RTSCameraKeyMappings.SHOW_PLANNED_ORDERS.isDown())) return null;
+        // Aura geometry is informative but visually large: expose it only for the entity
+        // under the RTS cursor. Space remains dedicated to planned-order previews.
+        if (!active || hoveredAuraEntity == null) return null;
         double radius;
         if (hoveredAuraEntity == MC.player) {
             radius = ee.lastpagans.recruitsrtscamera.battle.BattleMechanicsManager.COMMANDER_AURA_RADIUS;
@@ -2620,7 +2621,7 @@ public final class RTSCameraController {
         int textX = panelX + 9;
         int textWidth = panelWidth - 16;
         int y = panelY + 7;
-        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.12-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
+        drawHudLine(graphics, "RECRUITS: RTS CAMERA · 0.24.13-server.1 · DEBUG COMMAND MENU", textX, y, textWidth, 0xFFFFD98A);
         y += lineHeight;
         drawHudLine(graphics,
                 (commandCursor ? "COMMAND" : "CAMERA LOOK") + " · " + SELECTED_GROUPS.size()

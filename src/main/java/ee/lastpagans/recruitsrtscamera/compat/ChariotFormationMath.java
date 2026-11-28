@@ -5,7 +5,8 @@ import java.util.List;
 
 /** Forge-free geometry for safe, stable chariot slots. */
 public final class ChariotFormationMath {
-    public static final double MIN_SPACING = 7.0D;
+    /** Wagon body, two draft horses, turning envelope and the scythes all need clearance. */
+    public static final double MIN_SPACING = 11.0D;
 
     private ChariotFormationMath() { }
 

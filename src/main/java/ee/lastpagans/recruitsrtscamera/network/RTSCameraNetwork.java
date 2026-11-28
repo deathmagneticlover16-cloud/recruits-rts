@@ -6,7 +6,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class RTSCameraNetwork {
-    private static final String PROTOCOL = "rts-camera-165";
+    private static final String PROTOCOL = "rts-camera-166";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(RecruitsRTSCameraMod.MOD_ID, "main"),
@@ -72,6 +72,14 @@ public final class RTSCameraNetwork {
         CHANNEL.registerMessage(id++, MoraleItemsSyncPacket.class,
                 MoraleItemsSyncPacket::encode, MoraleItemsSyncPacket::decode,
                 MoraleItemsSyncPacket::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
+        CHANNEL.registerMessage(id++, CameraObserverPacket.class,
+                CameraObserverPacket::encode, CameraObserverPacket::decode,
+                CameraObserverPacket::handle,
+                java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_SERVER));
+        CHANNEL.registerMessage(id++, CameraSoundPacket.class,
+                CameraSoundPacket::encode, CameraSoundPacket::decode,
+                CameraSoundPacket::handle,
                 java.util.Optional.of(net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT));
         CHANNEL.registerMessage(id, LancePoseSyncPacket.class,
                 LancePoseSyncPacket::encode, LancePoseSyncPacket::decode,

@@ -1,3 +1,14 @@
+Recruits: RTS Camera 0.24.13-server.1
+
+- Reworked formation terrain authority: one transient Recruit goal can no longer cancel a whole group, one-block rises/descents retain per-member paths across mixed Y levels, replaceable grass/brush no longer behaves like a wall, and incomplete routes cannot finish in open water.
+- Added bounded small-river swimming with active forward motion/buoyancy and nearest-shore recovery when a crossing is too wide.
+- Removed cavalry's large lateral slot velocity and aligned each rider/mount pair to its actual travel vector, eliminating the characteristic angled drift without replacing the stable formation controller.
+- Routed groups may now rally without Settlements when at least three survivors reach safety and local friendly numbers support them. Cards are solid white while routing, flash white while assembling a short rally line, and disappear authoritatively after the group despawns.
+- Hovering a player commander, Recruit commander, or morale-item bearer now shows its real blue aura without requiring Space. Embedded Recruit commanders provide a stronger formation morale aura; their death applies group shock and reports `[name] has fallen!` in text.
+- Detached RTS cameras now drive the client audio listener and synchronize a bounded server observer position. Recruit death voices and RTS black-powder smoke are delivered relative to the camera; the fourteen death samples use least-recently-used selection plus existing pitch and anti-chorus timing.
+- Bodyguard commander movement now uses formation-scale correction and travel-facing instead of large robotic slot steps. Chariot spacing is 11 blocks, driven formations use bounded draft-horse tactical routes, and large turns keep slow throttle so Trotting Wagons can steer rather than deadlock at zero speed.
+- Network protocol is 166 for detached camera observer/audio packets. Source version and packaging references are 0.24.13-server.1. The Forge build remains for the packager by request.
+
 Recruits: RTS Camera 0.24.12-server.1
 Soft heightmap-derived black-powder smoke texture
 

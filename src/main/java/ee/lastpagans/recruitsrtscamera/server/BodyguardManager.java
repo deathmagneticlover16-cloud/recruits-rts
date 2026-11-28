@@ -31,10 +31,10 @@ public final class BodyguardManager {
     private static final String FOLLOW_KEY = "RecruitsRTSCameraBodyguardFollowPlayer";
     private static final double ASSIGN_RANGE_SQ = 32.0D * 32.0D;
     private static final double REATTACH_RANGE = 6.0D;
-    private static final double NORMAL_SLOT_STEP = 0.44D;
-    private static final double CATCHUP_SLOT_STEP = 0.72D;
-    private static final double CATCHUP_DISTANCE = 1.75D;
-    private static final double HARD_RECOVERY_DISTANCE = 10.0D;
+    private static final double NORMAL_SLOT_STEP = 0.22D;
+    private static final double CATCHUP_SLOT_STEP = 0.34D;
+    private static final double CATCHUP_DISTANCE = 2.75D;
+    private static final double HARD_RECOVERY_DISTANCE = 24.0D;
     private static final double SLOT_EPSILON = 0.08D;
     private static final int FOLLOW_REPLAN_TICKS = 7;
 
@@ -193,9 +193,13 @@ public final class BodyguardManager {
 
         Float heading = FormationRuntime.formationHeading(groupId);
         if (heading != null && Float.isFinite(heading)) {
-            player.setYRot(heading);
-            player.setYHeadRot(heading);
-            player.setYBodyRot(heading);
+            Vec3 travelled = player.position().subtract(before);
+            float targetHeading = travelled.x * travelled.x + travelled.z * travelled.z > 1.0E-5D
+                    ? (float) Math.toDegrees(Math.atan2(-travelled.x, travelled.z)) : heading;
+            float smoothHeading = Mth.approachDegrees(player.getYRot(), targetHeading, 12.0F);
+            player.setYRot(smoothHeading);
+            player.setYHeadRot(smoothHeading);
+            player.setYBodyRot(smoothHeading);
         }
 
         if (player.position().distanceToSqr(before) > 1.0E-7D || heading != null) syncCarry(player);

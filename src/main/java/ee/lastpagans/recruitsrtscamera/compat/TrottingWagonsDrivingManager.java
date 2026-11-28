@@ -6,6 +6,8 @@ import com.talhanation.recruits.entities.CrossBowmanEntity;
 import com.talhanation.recruits.entities.HorsemanEntity;
 import ee.lastpagans.recruitsrtscamera.RecruitsRTSCameraMod;
 import ee.lastpagans.recruitsrtscamera.formation.FormationKind;
+import ee.lastpagans.recruitsrtscamera.navigation.TacticalPathfinder;
+import ee.lastpagans.recruitsrtscamera.runtime.RecruitAIScheduler;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -145,6 +147,7 @@ public final class TrottingWagonsDrivingManager {
             ChariotFormationMath.Point slot = slots.get(i);
             ORDERS.put(wagon.getUUID(), new DriveOrder(new WeakReference<>(wagon), groupId,
                     new Vec3(slot.x(), center.y, slot.z()), finalFacing, running ? 2 : 1));
+            planRoute(wagon, ORDERS.get(wagon.getUUID()));
             clearCrewMovement(wagon);
         }
         return wagons.size();
@@ -224,6 +227,19 @@ public final class TrottingWagonsDrivingManager {
     }
 
     private static void tickOrder(Entity wagon, DriveOrder order) {
+        if (order.routePending) {
+            order.effectiveSpeedLevel = 0;
+            return;
+        }
+        if (order.routeFailed) {
+            order.effectiveSpeedLevel = 0;
+            return;
+        }
+        advanceRoute(wagon, order);
+        if (order.routePending) {
+            order.effectiveSpeedLevel = 0;
+            return;
+        }
         double dx = order.target.x - wagon.getX();
         double dz = order.target.z - wagon.getZ();
         double distance = Math.hypot(dx, dz);
@@ -245,14 +261,61 @@ public final class TrottingWagonsDrivingManager {
         double brakingDistance = speed * speed / Math.max(0.0001D, 2.0D * nativeDeceleration * 3.0D)
                 + ARRIVAL_DISTANCE;
         int desired = distance <= brakingDistance ? 0 : order.requestedSpeedLevel;
-        if (error > 70.0F) desired = 0;
-        else if (error > 28.0F) desired = Math.min(desired, 1);
+        // Trotting Wagons steers through forward motion; setting throttle to zero for a
+        // large yaw error creates a permanent deadlock because a wagon cannot pivot in
+        // place. Take the corner slowly instead, exactly like the reference compatibility.
+        if (error > 28.0F && desired > 0) desired = 1;
         if (desired == 0) {
             // Native deceleration supplies the first third. This extra bounded reduction gives
             // formation driving a useful stopping distance without teleporting or zeroing motion.
             TrottingWagonsCompat.brakeCurrentSpeed(wagon, nativeDeceleration * 2.0D);
         }
         order.effectiveSpeedLevel = desired;
+    }
+
+    private static void planRoute(Entity wagon, DriveOrder order) {
+        if (!(wagon.level() instanceof ServerLevel level) || order == null) return;
+        Mob[] horses = TrottingWagonsCompat.pullingHorses(wagon);
+        Mob pathingHorse = horses.length == 0 ? null : horses[0];
+        if (pathingHorse == null) return;
+        TacticalPathfinder.SearchSession search = TacticalPathfinder.begin(
+                level, pathingHorse, wagon.position(), order.destination, 12_000);
+        order.routePending = RecruitAIScheduler.submitIncremental(
+                RecruitAIScheduler.Priority.HIGH,
+                RecruitAIScheduler.WorkType.FORMATION_PATH,
+                wagon.getUUID(),
+                deadline -> {
+                    if (wagon.isRemoved() || !wagon.isAlive() || ORDERS.get(wagon.getUUID()) != order) {
+                        order.routePending = false;
+                        return true;
+                    }
+                    if (!search.advance(deadline)) return false;
+                    TacticalPathfinder.Route route = search.result();
+                    order.route = route.points();
+                    order.routeFailed = route.points().isEmpty();
+                    order.routeIndex = 0;
+                    order.routeComplete = route.complete();
+                    order.routePending = false;
+                    advanceRoute(wagon, order);
+                    return true;
+                });
+    }
+
+    private static void advanceRoute(Entity wagon, DriveOrder order) {
+        while (order.routeIndex < order.route.size()) {
+            Vec3 point = order.route.get(order.routeIndex);
+            if (horizontalDistanceSq(wagon.position(), point) > 2.25D * 2.25D) {
+                order.target = point;
+                return;
+            }
+            order.routeIndex++;
+        }
+        order.target = order.destination;
+        if (!order.routeComplete && !order.route.isEmpty() && !order.routePending
+                && horizontalDistanceSq(wagon.position(), order.destination) > 3.0D * 3.0D) {
+            order.route = List.of();
+            planRoute(wagon, order);
+        }
     }
 
     private static List<Entity> drivenWagons(List<AbstractRecruitEntity> recruits) {
@@ -292,6 +355,12 @@ public final class TrottingWagonsDrivingManager {
     private static double nearestDistance(Entity wagon, List<HorsemanEntity> drivers) {
         return drivers.stream().mapToDouble(driver -> driver.distanceToSqr(wagon)).min()
                 .orElse(Double.POSITIVE_INFINITY);
+    }
+
+    private static double horizontalDistanceSq(Vec3 a, Vec3 b) {
+        double dx = a.x - b.x;
+        double dz = a.z - b.z;
+        return dx * dx + dz * dz;
     }
 
     private static boolean hasDraftTeam(Entity wagon) {
@@ -358,16 +427,23 @@ public final class TrottingWagonsDrivingManager {
         final WeakReference<Entity> wagon;
         final UUID groupId;
         Vec3 target;
+        final Vec3 destination;
         final float finalFacing;
         int requestedSpeedLevel;
         int effectiveSpeedLevel;
         float travelYaw;
+        List<Vec3> route = List.of();
+        int routeIndex;
+        boolean routeComplete;
+        boolean routePending;
+        boolean routeFailed;
 
         DriveOrder(WeakReference<Entity> wagon, UUID groupId, Vec3 target,
                    float finalFacing, int requestedSpeedLevel) {
             this.wagon = wagon;
             this.groupId = groupId;
             this.target = target;
+            this.destination = target;
             this.finalFacing = finalFacing;
             this.requestedSpeedLevel = requestedSpeedLevel;
             this.travelYaw = finalFacing;

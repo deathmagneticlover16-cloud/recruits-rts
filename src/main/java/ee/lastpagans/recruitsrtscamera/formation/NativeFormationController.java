@@ -383,8 +383,7 @@ public final class NativeFormationController {
         // A normal Recruits move/follow order takes ownership back immediately.  Check
         // before claim() clears the move flag so the formation controller cannot swallow
         // an order issued by another Recruits command path or another compatible mod.
-        boolean externalOrder = members.stream().anyMatch(member -> member.getFollowState() != 3
-                || member.getShouldMovePos() || member.getShouldFollow());
+        boolean externalOrder = coherentExternalOrder(members);
         if (externalOrder) {
             if (STATES.remove(state.groupId, state)) releaseMembers(server, state, false);
             return;
@@ -578,6 +577,14 @@ public final class NativeFormationController {
                 Entity targetBody = combatTarget.getVehicle() == null
                         ? combatTarget : combatTarget.getVehicle();
                 controlledHeading = headingTo(mover.position(), targetBody.position(), memberHeading);
+            } else if (mover != recruit && (travelling || !arrived)) {
+                // The mounted body and rider look exactly where the pair is translating.
+                // Facing the anchor while slot recovery added sideways velocity produced
+                // the visible fifteen-degree cavalry drift on otherwise straight routes.
+                Vec3 motion = mover.getDeltaMovement();
+                controlledHeading = motion.x * motion.x + motion.z * motion.z > 1.0E-5D
+                        ? (float) Math.toDegrees(Math.atan2(-motion.x, motion.z))
+                        : state.travelHeading;
             } else if (!arrived && agent.steeringTarget != null
                     && slotError > (mountedMember ? 0.85D * 0.85D : 1.55D * 1.55D)) {
                 // A rejoining soldier faces his own safe route tangent. Locking every
@@ -585,10 +592,6 @@ public final class NativeFormationController {
                 float personalHeading = headingTo(mover.position(), agent.steeringTarget, mover.getYRot());
                 controlledHeading = approachHeading(mover.getYRot(), personalHeading,
                         mountedMember ? 6.0F : 8.0F);
-            } else if (mover != recruit && (travelling || !arrived)) {
-                // Every rider/mount pair receives the same group-owned travel yaw. Per-member
-                // easing allowed tiny differences to survive after repeated angled orders.
-                controlledHeading = state.travelHeading;
             } else if (travelling) {
                 controlledHeading = state.travelHeading;
             } else {
@@ -610,6 +613,24 @@ public final class NativeFormationController {
         state.laggards = laggards;
         if (!travelling) RTSMovementBoostManager.completeMovement(state.groupId);
         syncRoute(server, state, travelling);
+    }
+
+    /**
+     * Ambient native goals can briefly raise movement flags on one Recruit. Treating that
+     * transient bit as a group command let a single rider cancel an otherwise healthy RTS
+     * formation. A real command handoff is group-wide, so require a clear majority.
+     */
+    private static boolean coherentExternalOrder(List<AbstractRecruitEntity> members) {
+        if (members == null || members.isEmpty()) return false;
+        int signalled = 0;
+        for (AbstractRecruitEntity member : members) {
+            if (member.getFollowState() != 3 || member.getShouldMovePos() || member.getShouldFollow()) {
+                signalled++;
+            }
+        }
+        int required = members.size() == 1 ? 1
+                : Math.max(2, (int) Math.ceil(members.size() * 0.60D));
+        return signalled >= required;
     }
 
     private static void syncRoute(MinecraftServer server, State state, boolean travelling) {
@@ -848,6 +869,21 @@ public final class NativeFormationController {
                 agent.steeringTarget = desired;
                 return false;
             }
+            if (mover.isInWater()) {
+                if (agent.waterRecoveryTarget == null || now >= agent.nextWaterRecoveryProbe) {
+                    agent.waterRecoveryTarget = TacticalPathfinder.nearestShore(
+                            level, mover, mover.position(), 10);
+                    agent.nextWaterRecoveryProbe = now + 20L;
+                }
+                Vec3 shore = agent.waterRecoveryTarget;
+                if (shore != null) {
+                    agent.beginManual(mover);
+                    agent.steeringTarget = shore;
+                    LocalFormationSteering.steer(level, recruit, mover, shore,
+                            RecruitRuntimeRegistry.brain(recruit).desiredVelocity(), catchUpScale);
+                    return false;
+                }
+            }
             // Use Minecraft's navigator only when a completed bounded tactical search
             // found no route. Keep the fallback on the assigned grounded slot so it can
             // never become a permanent centre target.
@@ -875,6 +911,11 @@ public final class NativeFormationController {
                 || TacticalPathfinder.isClimbable(level, waypointBlock);
         agent.steeringTarget = waypoint;
         agent.beginManual(mover);
+        if (mover.isInWater() || TacticalPathfinder.isWaterTarget(level, waypoint)) {
+            LocalFormationSteering.steer(level, recruit, mover, waypoint,
+                    RecruitRuntimeRegistry.brain(recruit).desiredVelocity(), catchUpScale);
+            return false;
+        }
         if (climbing && waypoint.y > mover.getY() + 0.15D) {
             double dx = waypoint.x - mover.getX();
             double dz = waypoint.z - mover.getZ();
@@ -1411,6 +1452,8 @@ public final class NativeFormationController {
         Vec3 steeringTarget;
         long groundingRevision = Long.MIN_VALUE;
         long directBlockedUntil;
+        Vec3 waterRecoveryTarget;
+        long nextWaterRecoveryProbe;
 
         Agent(UUID recruitId) {
             steeringPhase = Math.floorMod(recruitId.hashCode(), 10);

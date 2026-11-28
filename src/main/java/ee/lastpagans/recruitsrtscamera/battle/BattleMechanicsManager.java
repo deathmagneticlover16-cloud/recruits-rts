@@ -2,6 +2,7 @@ package ee.lastpagans.recruitsrtscamera.battle;
 
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.entities.HorsemanEntity;
+import com.talhanation.recruits.entities.CommanderEntity;
 import com.talhanation.recruits.entities.SiegeEngineerEntity;
 import com.talhanation.recruits.world.RecruitsGroup;
 import com.talhanation.recruits.world.RecruitsGroupsSaveData;
@@ -15,6 +16,7 @@ import ee.lastpagans.recruitsrtscamera.movement.RTSMovementBoostManager;
 import ee.lastpagans.recruitsrtscamera.network.AdvisorEventPacket;
 import ee.lastpagans.recruitsrtscamera.network.BattleStateSyncPacket;
 import ee.lastpagans.recruitsrtscamera.network.RTSCameraNetwork;
+import ee.lastpagans.recruitsrtscamera.persistence.RTSRoutingSavedData;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitRuntimeRegistry;
 import ee.lastpagans.recruitsrtscamera.runtime.RecruitSpatialIndex;
 import ee.lastpagans.recruitsrtscamera.server.BodyguardManager;
@@ -24,6 +26,7 @@ import ee.lastpagans.recruitsrtscamera.troops.TroopStatRegistry;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatService;
 import ee.lastpagans.recruitsrtscamera.troops.TroopStatistic;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -158,6 +161,16 @@ public final class BattleMechanicsManager {
                 // a permanent aura penalty. The ordinary 20% resistance disappears naturally
                 // because the dead bearer no longer counts as a living morale-item carrier.
                 adjustGroupMorale(level, recruit.getGroup(), STANDARD_FALLEN_SHOCK);
+            }
+            if (recruit instanceof CommanderEntity && recruit.getGroup() != null
+                    && recruit.level() instanceof ServerLevel level) {
+                adjustGroupMorale(level, recruit.getGroup(), -22.0F);
+                ServerPlayer owner = recruit.getOwnerUUID() == null ? null
+                        : level.getServer().getPlayerList().getPlayer(recruit.getOwnerUUID());
+                if (owner != null) {
+                    owner.displayClientMessage(Component.literal("[" + recruit.getName().getString()
+                            + "] has fallen!"), true);
+                }
             }
             return;
         }
@@ -418,10 +431,31 @@ public final class BattleMechanicsManager {
         ServerPlayer owner = server.getPlayerList().getPlayer(group.ownerId);
         if (owner == null || !owner.isAlive() || owner.level() != group.level) return;
         double radiusSq = COMMANDER_AURA_RADIUS * COMMANDER_AURA_RADIUS;
+        List<AbstractRecruitEntity> formationCommanders = group.members.stream()
+                .filter(CommanderEntity.class::isInstance).toList();
+        List<AbstractRecruitEntity> standards = group.members.stream()
+                .filter(BattleMechanicsManager::carriesMoraleItem).toList();
         for (AbstractRecruitEntity recruit : group.members) {
-            if (recruit == null || !recruit.isAlive() || recruit.distanceToSqr(owner) > radiusSq) continue;
-            if (recruit.getMorale() < 100.0F) {
-                recruit.setMoral(Math.min(100.0F, recruit.getMorale() + COMMANDER_AURA_RECOVERY_PER_SAMPLE));
+            if (recruit == null || !recruit.isAlive()) continue;
+            float recovery = recruit.distanceToSqr(owner) <= radiusSq
+                    ? COMMANDER_AURA_RECOVERY_PER_SAMPLE : 0.0F;
+            for (AbstractRecruitEntity commander : formationCommanders) {
+                if (commander != recruit && commander.distanceToSqr(recruit) <= radiusSq) {
+                    // An officer physically embedded in the group is a stronger, local
+                    // influence than the remote player-general aura.
+                    recovery = Math.max(recovery, 0.24F);
+                    break;
+                }
+            }
+            double standardRadiusSq = STANDARD_GUARD_RADIUS * STANDARD_GUARD_RADIUS;
+            for (AbstractRecruitEntity bearer : standards) {
+                if (bearer.distanceToSqr(recruit) <= standardRadiusSq) {
+                    recovery = Math.max(recovery, 0.12F);
+                    break;
+                }
+            }
+            if (recovery > 0.0F && recruit.getMorale() < 100.0F) {
+                recruit.setMoral(Math.min(100.0F, recruit.getMorale() + recovery));
             }
         }
     }
@@ -443,6 +477,23 @@ public final class BattleMechanicsManager {
         return RoutedGroupManager.isGroupRouting(groupId) || (state != null && state.routedThisBattle);
     }
 
+    /** Releases the battle-session rout latch after survivors finish their rally line. */
+    public static void onGroupRallied(ServerLevel level, UUID groupId,
+                                      List<AbstractRecruitEntity> members) {
+        if (groupId == null || members == null || members.isEmpty()) return;
+        CombatState state = COMBAT.get(groupId);
+        if (state != null) {
+            state.routedThisBattle = false;
+            state.moraleState = 0;
+            state.routAdvisorTriggered = false;
+            state.lastCombatTick = level == null ? 0L : level.getGameTime();
+            state.lastCount = members.size();
+        }
+        for (AbstractRecruitEntity recruit : members) {
+            recruit.setMoral(Math.max(36.0F, recruit.getMorale()));
+        }
+    }
+
     private static void syncPlayers(MinecraftServer server, Map<UUID, GroupRuntime> runtime) {
         Map<UUID, Map<UUID, GroupBattleSnapshot>> byOwner = new HashMap<>();
         Map<UUID, TroopStatProfile> liveStatistics = new HashMap<>();
@@ -461,6 +512,17 @@ public final class BattleMechanicsManager {
                             combat == null ? 0 : combat.baseline, persistentCount,
                             combat != null && combat.routedThisBattle,
                             statistics, group.averageWeight(), group.averageCapacity(), group.averageFood())
+            );
+        }
+        // Routed members deliberately leave the ordinary runtime sample. Still publish
+        // their persistent group so Commander can show permanent ROUTING white and the
+        // flashing white reassembly phase instead of dropping the card state.
+        for (RTSRoutingSavedData.Rout rout : RTSRoutingSavedData.get(server.overworld()).groups()) {
+            byOwner.computeIfAbsent(rout.ownerId, ignored -> new HashMap<>()).putIfAbsent(
+                    rout.groupId,
+                    new GroupBattleSnapshot(0.0F, rout.rallying ? 36.0F : 0.0F,
+                            rout.rallying ? 3 : 2, rout.members().size(), rout.members().size(),
+                            true, TroopStatProfile.NEUTRAL, 0.0F, 0.0F, 0.0F)
             );
         }
         TroopStatRegistry.replace(liveStatistics);

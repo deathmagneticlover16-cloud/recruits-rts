@@ -27,6 +27,8 @@ public final class RTSRoutingSavedData extends SavedData {
 
     public Rout member(UUID id) { return members.get(id); }
     public boolean containsGroup(UUID id) { return groups.containsKey(id); }
+    public Rout group(UUID id) { return groups.get(id); }
+    public Collection<Rout> groups() { return Set.copyOf(groups.values()); }
 
     public Rout begin(UUID groupId, UUID ownerId, Collection<UUID> ids, Vec3 direction) {
         Rout rout = groups.computeIfAbsent(groupId, id -> new Rout(id, ownerId, direction));
@@ -47,6 +49,23 @@ public final class RTSRoutingSavedData extends SavedData {
         setDirty();
     }
 
+    public void beginRally(UUID groupId, Vec3 center, long gameTime) {
+        Rout rout = groups.get(groupId);
+        if (rout == null) return;
+        rout.rallying = true;
+        rout.rallyCenter = center;
+        rout.rallyStarted = gameTime;
+        setDirty();
+    }
+
+    public Set<UUID> finishGroup(UUID groupId) {
+        Rout rout = groups.remove(groupId);
+        if (rout == null) return Set.of();
+        for (UUID member : rout.members) members.remove(member, rout);
+        setDirty();
+        return Set.copyOf(rout.members);
+    }
+
     public static RTSRoutingSavedData load(CompoundTag root) {
         RTSRoutingSavedData data = new RTSRoutingSavedData();
         for (Tag tag : root.getList("groups", Tag.TAG_COMPOUND)) {
@@ -57,8 +76,13 @@ public final class RTSRoutingSavedData extends SavedData {
                 CompoundTag member = (CompoundTag) entry;
                 if (member.hasUUID("id")) ids.add(member.getUUID("id"));
             }
-            if (!ids.isEmpty()) data.begin(row.getUUID("group"), row.getUUID("owner"), ids,
-                    new Vec3(row.getDouble("dx"), 0.0D, row.getDouble("dz")));
+            if (!ids.isEmpty()) {
+                Rout rout = data.begin(row.getUUID("group"), row.getUUID("owner"), ids,
+                        new Vec3(row.getDouble("dx"), 0.0D, row.getDouble("dz")));
+                rout.rallying = row.getBoolean("rallying");
+                rout.rallyCenter = new Vec3(row.getDouble("rx"), row.getDouble("ry"), row.getDouble("rz"));
+                rout.rallyStarted = row.getLong("rallyStarted");
+            }
         }
         return data;
     }
@@ -72,6 +96,11 @@ public final class RTSRoutingSavedData extends SavedData {
             row.putUUID("owner", rout.ownerId);
             row.putDouble("dx", rout.direction.x);
             row.putDouble("dz", rout.direction.z);
+            row.putBoolean("rallying", rout.rallying);
+            row.putDouble("rx", rout.rallyCenter.x);
+            row.putDouble("ry", rout.rallyCenter.y);
+            row.putDouble("rz", rout.rallyCenter.z);
+            row.putLong("rallyStarted", rout.rallyStarted);
             ListTag ids = new ListTag();
             for (UUID id : rout.members) {
                 CompoundTag member = new CompoundTag();
@@ -90,6 +119,11 @@ public final class RTSRoutingSavedData extends SavedData {
         public final UUID ownerId;
         public final Vec3 direction;
         private final Set<UUID> members = new LinkedHashSet<>();
+        public boolean rallying;
+        public Vec3 rallyCenter = Vec3.ZERO;
+        public long rallyStarted;
+
+        public Set<UUID> members() { return Set.copyOf(members); }
 
         private Rout(UUID groupId, UUID ownerId, Vec3 direction) {
             this.groupId = groupId;

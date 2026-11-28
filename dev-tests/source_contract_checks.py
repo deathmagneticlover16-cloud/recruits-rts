@@ -93,11 +93,18 @@ shield_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/Recru
 projectile_awareness = source("src/main/java/ee/lastpagans/recruitsrtscamera/combat/ProjectileAwarenessManager.java")
 sounds = source("src/main/resources/assets/recruits_rts_camera/sounds.json")
 death_sounds = source("src/main/java/ee/lastpagans/recruitsrtscamera/audio/RecruitDeathSoundManager.java")
+observer_packet = source("src/main/java/ee/lastpagans/recruitsrtscamera/network/CameraObserverPacket.java")
+observer_manager = source("src/main/java/ee/lastpagans/recruitsrtscamera/server/RTSObserverManager.java")
+observer_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/ServerLevelObserverMixin.java")
+smoke_manager = source("src/main/java/ee/lastpagans/recruitsrtscamera/effects/BlackPowderSmokeManager.java")
+client_events = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/RTSCameraClientEvents.java")
+routing_data = source("src/main/java/ee/lastpagans/recruitsrtscamera/persistence/RTSRoutingSavedData.java")
 death_sound_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/RecruitDeathSoundMixin.java")
 trotting_compat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TrottingWagonsCompat.java")
 trotting_combat = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TrottingWagonsCombatManager.java")
 trotting_client = source("src/main/java/ee/lastpagans/recruitsrtscamera/client/TrottingWagonsClientCompat.java")
 trotting_driving = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/TrottingWagonsDrivingManager.java")
+chariot_math = source("src/main/java/ee/lastpagans/recruitsrtscamera/compat/ChariotFormationMath.java")
 trotting_driver_mixin = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/TrottingWagonRecruitDriverMixin.java")
 trotting_invoker = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/TrottingVehicleInvoker.java")
 trotting_pick = source("src/main/java/ee/lastpagans/recruitsrtscamera/mixin/TrottingArmoredWagonMixin.java")
@@ -217,13 +224,24 @@ require(steering, "if (recruit.getVehicle() == mover)",
         "mounted steering must branch before foot separation is applied")
 require(mounted_motion, "formationX / formationSpeed",
         "mounted velocity must follow the continuous shared formation vector")
-require(mounted_motion, "lateralCurrentX * 0.45D",
+require(mounted_motion, "lateralCurrentX * 0.32D",
         "mounted slot correction must damp lateral overshoot")
-require(mounted_motion, "slotDistance > 1.5D ? 0.065D : 0.032D",
+require(mounted_motion, "slotDistance > 1.5D ? 0.026D : 0.014D",
         "mounted lateral authority must remain bounded relative to walking speed")
+require(formation, "coherentExternalOrder(members)",
+        "one transient Recruit flag must not cancel a whole formation")
+require(formation, "Math.ceil(members.size() * 0.60D)",
+        "native order handoff must require a coherent group majority")
+require(formation, "Math.atan2(-motion.x, motion.z)",
+        "mounted facing must follow the body's real travel vector")
 require(formation, "recruit.getVehicle() == mover && mover.onGround()",
         "mounted tactical waypoints must actively jump a safe rise")
 require(pathfinder, "if (!dryAt(level, mover, feet)) return null;", "fluid rejection must remain")
+require(pathfinder, "MAX_SWIM_CELLS = 8", "small-river swimming must have a hard range bound")
+require(pathfinder, "if (!current.swimming && remaining < closestDistance)",
+        "an incomplete route must never terminate in open water")
+require(pathfinder, "state.canBeReplaced()", "replaceable brush must not become a tactical wall")
+require(steering, "steerSwimming", "RTS recruits need active forward swimming and buoyancy")
 require(terrain_cache, "shape.isEmpty() ? List.of()", "unsupported terrain rejection must remain")
 require(pathfinder, "new SegmentProbe(", "safe open routes must be straightened incrementally")
 require(pathfinder, "requiredAnchors.contains", "route smoothing must preserve constrained terrain anchors")
@@ -612,8 +630,8 @@ forbid(battle, "ARCHER_MELEE_MORALE_LOSS_PER_SAMPLE",
         "merely having a nearby melee target must not passively drain archer morale")
 require(routing, "removeNativeGroupIfRoutFinished",
         "native group deletion must wait until the visible rout has actually finished")
-require(client_battle, "routed.forEach(GROUPS::putIfAbsent)",
-        "the ROUTING card badge must survive omission from ordinary runtime samples")
+forbid(client_battle, "routed.forEach(GROUPS::putIfAbsent)",
+       "authoritative routing snapshots must not leave stale cards after despawn")
 
 require(group_flag_command, 'Commands.literal("setflag")', "group flags need the requested setflag command")
 require(group_flag_command, "StringArgumentType.greedyString()",
@@ -721,7 +739,7 @@ require(cavalry_combat, "equippedMeleeDamage", "cavalry impact must include its 
 require(cavalry_combat, "state.lastSpeed", "cavalry impact must scale from measured travel speed")
 require(tactical, "Math.expm1", "charge acceleration must grow exponentially for the shared infantry/cavalry system")
 require(stat_service, "movementPenalty /= 1.75D", "mounted carried weight impact must be 1.75x lower")
-require(network, 'PROTOCOL = "rts-camera-165"', "exact movement cursor packets require protocol 165")
+require(network, 'PROTOCOL = "rts-camera-166"', "camera observer packets require protocol 166")
 require(pathfinder, "supportedRiseAhead", "mounted movement needs an early collision-backed rise probe")
 require(steering, "Math.max(current.y, 0.52D)",
         "local mounted steering must actively lift over a verified one-block rise")
@@ -1052,6 +1070,12 @@ require(trotting_driving, 'WHIP_ID = new ResourceLocation("trotting_wagons", "ho
         "Recruit chariot control must use Trotting Wagons' real whip item")
 require(trotting_driving, "ChariotFormationMath.lineSlots",
         "crewed chariots must receive collision-safe formation slots")
+require(trotting_driving, "TacticalPathfinder.begin(",
+        "driven chariot formations must use bounded obstacle-aware routes")
+require(trotting_driving, "if (error > 28.0F && desired > 0) desired = 1;",
+        "large wagon turns must keep enough throttle for native steering")
+require(chariot_math, "MIN_SPACING = 11.0D",
+        "chariot slots need a wide draft-team and scythe envelope")
 require(trotting_driving, "protectedConvoyMember",
         "same-formation crews and draft teams need scythe protection")
 require(trotting_driver_mixin, 'target = "Lnet/favouriteless/trotting_wagons/common/entities/base/AbstractWagon;handleSteering()V"',
@@ -1084,6 +1108,7 @@ require(death_sound_mixin, "result.setReturnValue(null)",
         "the native Recruit death voice must be silenced to prevent doubled playback")
 require(death_sounds, "MAX_DELAY_TICKS = 1", "cluster staggering must stay subtle and bounded to 50 ms")
 require(death_sounds, "leastCrowdedDelay", "nearby simultaneous deaths need anti-chorus distribution")
+require(death_sounds, "leastRecentlyUsed", "limited death samples must use LRU selection")
 require(death_sounds, "0.92F + level.random.nextFloat() * 0.16F",
         "Recruit death voices need bounded pitch variation")
 require(death_sounds, "priority = EventPriority.HIGHEST",
@@ -1094,14 +1119,33 @@ forbid(death_sounds, "dev.ragdollcorpses", "RTS must not link or absorb Corpsebo
 forbid(death_sounds, "com.raiiiden.cruor", "RTS must not link or absorb Cruor classes")
 require(death_sounds, "getBoolean(DEATH_VOICE_FIRED)",
         "a single Recruit death must not fire its voice twice")
+require(routing, "numbersSupportRally", "routed survivors need an independent numerical rally test")
+require(routing, "finishRallyIfReady", "command must return only after the rally line assembles")
+require(routing_data, "finishGroup", "finished routed groups must leave persistent card state")
+forbid(client_battle, "routed.forEach(GROUPS::putIfAbsent)",
+       "destroyed routed groups must not be retained forever by the client")
+require(overlay, "view.moraleState() == 3", "rally assembly cards must flash independently")
+require(controller, "if (!active || hoveredAuraEntity == null) return null;",
+        "morale auras must remain hover-only")
+require(client_events, "updateSource(mc.gameRenderer.getMainCamera())",
+        "spatial audio must follow the detached RTS camera")
+require(observer_packet, "CameraObserverPacket", "the server needs the detached camera position")
+require(smoke_manager, "RTSObserverManager.position(player)",
+        "black-powder smoke delivery must use the RTS observer position")
+require(observer_manager, "1_024.0D * 1_024.0D", "camera observer reports need a server abuse bound")
+require(observer_mixin, 'path.contains("smoke") || path.contains("fog") || path.contains("powder")',
+        "detached cameras must receive smoke particles emitted by compatible external mods")
+require(observer_mixin, "CameraSoundPacket", "detached cameras must receive positional server sounds")
+require(source("src/main/resources/recruits_rts_camera.mixins.json"), '"ServerLevelObserverMixin"',
+        "the generic camera observer relay must be registered")
 for name in (
         "death_00", "death_01", "death_02", "death_03", "death_04", "death_05",
         "painful_death_00", "painful_death_01", "painful_death_02", "painful_death_03",
         "painful_death_04", "painful_death_05", "painful_death_06", "painful_death_07"):
     if not (ROOT / f"src/main/resources/assets/recruits_rts_camera/sounds/recruits/death/{name}.ogg").is_file():
         raise AssertionError("converted mono Recruit death sound is missing: " + name)
-require(source("gradle.properties"), "mod_version=0.24.12-server.1", "semantic version must be updated")
-require(controller, "0.24.12-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
-require(source("BUILD.bat"), "recruits-rts-camera-0.24.12-server.1.jar", "build helper version must be updated")
+require(source("gradle.properties"), "mod_version=0.24.13-server.1", "semantic version must be updated")
+require(controller, "0.24.13-server.1 · DEBUG COMMAND MENU", "debug UI version must be updated")
+require(source("BUILD.bat"), "recruits-rts-camera-0.24.13-server.1.jar", "build helper version must be updated")
 
-print("0.24.12-server.1 source contracts passed")
+print("0.24.13-server.1 source contracts passed")

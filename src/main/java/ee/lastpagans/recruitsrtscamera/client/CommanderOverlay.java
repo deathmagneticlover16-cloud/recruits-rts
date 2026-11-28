@@ -477,7 +477,11 @@ public final class CommanderOverlay {
                 renderFatigueBar(graphics, b.x1() + 5, b.y2() + 4,
                         CARD_WIDTH - 10, view.averageFatigue());
             }
-            if (view.moraleState() >= 2) {
+            if (view.moraleState() == 3) {
+                double phase = (MC.level.getGameTime() + MC.getFrameTime()) * 0.44D;
+                int alpha = 36 + (int) Math.round((Math.sin(phase) * 0.5D + 0.5D) * 92.0D);
+                graphics.fill(b.x1(), b.y1(), b.x2(), b.y2(), alpha << 24 | 0x00FFFFFF);
+            } else if (view.moraleState() >= 2) {
                 graphics.fill(b.x1(), b.y1(), b.x2(), b.y2(), 0x66FFFFFF);
             } else if (view.moraleState() == 1) {
                 double phase = (MC.level.getGameTime() + MC.getFrameTime()) * 0.32D;

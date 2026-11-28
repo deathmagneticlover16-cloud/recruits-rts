@@ -26,5 +26,19 @@
     "recruits_rts_camera:recruits/death/painful_death_05",
     "recruits_rts_camera:recruits/death/painful_death_06",
     "recruits_rts_camera:recruits/death/painful_death_07"
-  ]}
+  ]},
+  "recruit_death_00": {"sounds": ["recruits_rts_camera:recruits/death/death_00"]},
+  "recruit_death_01": {"sounds": ["recruits_rts_camera:recruits/death/death_01"]},
+  "recruit_death_02": {"sounds": ["recruits_rts_camera:recruits/death/death_02"]},
+  "recruit_death_03": {"sounds": ["recruits_rts_camera:recruits/death/death_03"]},
+  "recruit_death_04": {"sounds": ["recruits_rts_camera:recruits/death/death_04"]},
+  "recruit_death_05": {"sounds": ["recruits_rts_camera:recruits/death/death_05"]},
+  "recruit_death_06": {"sounds": ["recruits_rts_camera:recruits/death/painful_death_00"]},
+  "recruit_death_07": {"sounds": ["recruits_rts_camera:recruits/death/painful_death_01"]},
+  "recruit_death_08": {"sounds": ["recruits_rts_camera:recruits/death/painful_death_02"]},
+  "recruit_death_09": {"sounds": ["recruits_rts_camera:recruits/death/painful_death_03"]},
+  "recruit_death_10": {"sounds": ["recruits_rts_camera:recruits/death/painful_death_04"]},
+  "recruit_death_11": {"sounds": ["recruits_rts_camera:recruits/death/painful_death_05"]},
+  "recruit_death_12": {"sounds": ["recruits_rts_camera:recruits/death/painful_death_06"]},
+  "recruit_death_13": {"sounds": ["recruits_rts_camera:recruits/death/painful_death_07"]}
 }
